@@ -1,0 +1,93 @@
+name: release-smil-importer
+
+# Publishes a GitHub release of the Blender add-on whenever the version tuple
+# in 3D_model_prep/smil_importer/__init__.py changes on master. Every push
+# touching the add-on runs the job; the tag-existence guard makes it a no-op
+# unless bl_info["version"] maps to a tag that does not exist yet.
+#
+# Mirrors the manually published v2.0.0 release: tag smil_importer-v<X.Y.Z>,
+# asset smil_importer.zip containing a top-level smil_importer/ folder, i.e.
+# directly installable via Blender's Edit > Preferences > Add-ons > Install.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '3D_model_prep/smil_importer/**'
+      - '.github/workflows/release-smil-importer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Never cancel a half-published release; queue instead.
+concurrency:
+  group: release-smil-importer
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: build + publish add-on zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read add-on version from bl_info
+        id: version
+        run: |
+          VERSION=$(python3 - <<'EOF'
+          import ast, re
+          src = open("3D_model_prep/smil_importer/__init__.py", encoding="utf-8").read()
+          match = re.search(r'"version"\s*:\s*(\([^)]*\))', src)
+          print(".".join(str(part) for part in ast.literal_eval(match.group(1))))
+          EOF
+          )
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=smil_importer-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version is already released
+        id: guard
+        run: |
+          TAG='${{ steps.version.outputs.tag }}'
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists - nothing to do."
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG does not exist yet - publishing."
+          fi
+
+      - name: Build smil_importer.zip
+        if: steps.guard.outputs.released == 'false'
+        run: |
+          cd 3D_model_prep
+          zip -r "$RUNNER_TEMP/smil_importer.zip" smil_importer \
+            -x "smil_importer/__pycache__/*" -x "*.pyc"
+          unzip -l "$RUNNER_TEMP/smil_importer.zip"
+
+      - name: Publish release
+        if: steps.guard.outputs.released == 'false'
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Automated release of the SMIL Blender add-on, built from
+          \`3D_model_prep/smil_importer/\` at ${GITHUB_SHA}.
+
+          **Install:** Blender > Edit > Preferences > Add-ons > Install... >
+          select \`smil_importer.zip\`, then enable **SMIL Model Importer**.
+          Use the add-on preferences to install scipy / scikit-learn.
+
+          **Recommended Blender version: 4.2 LTS** for export work - models
+          exported from numpy >= 2 Blenders (4.5+/5.x) currently cannot be
+          loaded by the SMILify pipeline. See the
+          [add-on README](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/3D_model_prep/smil_importer/README.md).
+          EOF
+          gh release create '${{ steps.version.outputs.tag }}' \
+            "$RUNNER_TEMP/smil_importer.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'SMIL Model Importer v${{ steps.version.outputs.version }}' \
+            --notes-file "$RUNNER_TEMP/notes.md"
