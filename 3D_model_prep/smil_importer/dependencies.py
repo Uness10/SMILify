@@ -94,6 +94,16 @@ def install_dependencies():
 
     # Install into the user-writable target so we never touch Program Files and
     # never need administrator privileges.
+    #
+    # numpy is pinned to the exact version Blender bundles: pip --target always
+    # installs the full dependency tree, and at the next startup Blender puts
+    # the user modules directory at sys.path[0] — ahead of the bundled
+    # site-packages. An unpinned resolve would drop the newest numpy there and
+    # shadow the bundled numpy for every add-on; an identical copy makes the
+    # shadowing harmless. scipy/scikit-learn stay unpinned so pip can resolve
+    # versions compatible with whatever numpy the running Blender ships.
+    import numpy
+
     _run(
         [
             python_exe,
@@ -104,6 +114,7 @@ def install_dependencies():
             target,
             "--upgrade",
             *[pip_name for _, pip_name in DEPENDENCIES],
+            f"numpy=={numpy.__version__}",
         ],
         env,
     )
