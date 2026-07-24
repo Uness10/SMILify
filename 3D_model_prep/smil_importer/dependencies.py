@@ -59,6 +59,49 @@ def get_missing():
     return [pip_name for mod, pip_name in DEPENDENCIES if importlib.util.find_spec(mod) is None]
 
 
+def require_scipy_kdtree():
+    """Return scipy's ``KDTree``, resolving the import lazily at call time.
+
+    Binding scipy/sklearn once at add-on registration froze them to ``None`` for
+    the whole session: right after "Install dependencies", ``find_spec`` reports
+    the package as present (so the operator gates pass) while the frozen module
+    binding is still ``None`` -> opaque ``TypeError: 'NoneType' object is not
+    callable`` (issue #92-16). Resolving here retries once after refreshing the
+    import caches, then raises a clean, actionable message instead.
+    """
+    try:
+        from scipy.spatial import KDTree
+    except ImportError:
+        user_modules_dir()
+        importlib.invalidate_caches()
+        try:
+            from scipy.spatial import KDTree
+        except ImportError:
+            raise RuntimeError(MISSING_MESSAGE)
+    return KDTree
+
+
+def require_sklearn():
+    """Return ``(PCA, EmpiricalCovariance)`` from scikit-learn, imported lazily.
+
+    Same import-then-retry-once pattern as :func:`require_scipy_kdtree`, so the
+    PCA features work in the same session after installing dependencies without a
+    Blender restart.
+    """
+    try:
+        from sklearn.decomposition import PCA
+        from sklearn.covariance import EmpiricalCovariance
+    except ImportError:
+        user_modules_dir()
+        importlib.invalidate_caches()
+        try:
+            from sklearn.decomposition import PCA
+            from sklearn.covariance import EmpiricalCovariance
+        except ImportError:
+            raise RuntimeError(MISSING_MESSAGE)
+    return PCA, EmpiricalCovariance
+
+
 def _python_executable():
     """Path to the Python interpreter bundled with Blender.
 
