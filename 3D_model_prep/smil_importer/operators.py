@@ -9,11 +9,6 @@ import bpy
 import numpy as np
 from mathutils import Vector
 
-try:
-    from sklearn.decomposition import PCA
-except ImportError:  # pragma: no cover
-    PCA = None
-
 from . import state
 from . import dependencies
 from .core_mesh import apply_updated_joint_positions, cleanup_mesh, export_J_regressor_to_npy, make_symmetrical
@@ -884,6 +879,8 @@ class SMPL_OT_LoadAllUnposedMeshes(bpy.types.Operator):
                 requested_components = int(getattr(smpl_tool, "number_of_PC", 1))
                 n_components = max(1, min(requested_components, X.shape[0], X.shape[1]))
 
+                # scikit-learn resolved lazily — issue #92-16.
+                PCA, _ = dependencies.require_sklearn()
                 pca = PCA(n_components=n_components)
                 pca.fit(X)
                 components = pca.components_  # (k, num_joints*6)
@@ -1435,21 +1432,13 @@ class SMPL_OT_ApplyPoseCorrectivesOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        # Only enable if we have an active mesh object with an armature
+        # Enable only for a posed mesh whose embedded SMPL data carries posedirs.
+        # Gate on the cheap ``has_posedirs`` flag written by store_smpl_data rather
+        # than unpickling the whole blob on every redraw (issue #24 / #92-15). The
+        # old ``smpl_data_path`` requirement was never set by the embedded store, so
+        # the operator stayed permanently disabled for newly imported models.
         obj = context.active_object
-        if not (
-            obj and obj.type == "MESH" and obj.find_armature() and "has_smpl_data" in obj and "smpl_data_path" in obj
-        ):
-            return False
-
-        # Check if posedirs exists and is not empty
-        data = get_smpl_data(context)
-        if not data or "posedirs" not in data:
-            return False
-
-        # Check if posedirs is not empty (has actual data)
-        posedirs = data["posedirs"]
-        return isinstance(posedirs, np.ndarray) and posedirs.size > 0
+        return bool(obj and obj.type == "MESH" and obj.find_armature() and obj.get("has_posedirs"))
 
     def execute(self, context):
         obj = context.active_object
