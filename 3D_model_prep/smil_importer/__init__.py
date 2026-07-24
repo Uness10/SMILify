@@ -23,7 +23,7 @@ when they are missing; the preferences panel then offers to install them.
 bl_info = {
     "name": "SMIL Model Importer",
     "author": "Fabian Plum",
-    "version": (2, 0, 0),
+    "version": (2, 1, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar (N) > SMIL",
     "description": "Import, configure, and export SMPL / SMIL models",
