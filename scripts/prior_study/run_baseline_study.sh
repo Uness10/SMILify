@@ -19,6 +19,13 @@
 #   bash scripts/prior_study/run_baseline_study.sh
 #   CHECKPOINT=my.pth DATASET=my.h5 LABEL=unconstrained bash scripts/prior_study/run_baseline_study.sh
 #
+# Multi-GPU / throughput knobs (all optional):
+#   NUM_GPUS=4       spread the inference step across 4 GPUs (DDP; needs --gres=gpu:4)
+#   BATCH_SIZE=16    benchmark eval batch size (raise until a GPU is saturated)
+#   NUM_WORKERS=8    benchmark DataLoader workers (match --cpus-per-task)
+#   e.g.  NUM_GPUS=4 BATCH_SIZE=16 NUM_WORKERS=8 bash scripts/prior_study/run_baseline_study.sh
+# NOTE: only the inference step is multi-GPU; benchmark + analysis are single-GPU by design.
+#
 # Prereqs: conda env `pytorch3d` active; run from repo root.
 set -euo pipefail
 
@@ -34,6 +41,9 @@ ORIG_W="${ORIG_W:-1530}"
 ORIG_H="${ORIG_H:-1530}"
 MAX_FRAMES="${MAX_FRAMES:-0}"        # 0 = all frames for the export; set e.g. 300 for a quick pass
 LIMITS="${LIMITS:-}"                 # optional authored-limits .npy/.json to enable violation table
+NUM_GPUS="${NUM_GPUS:-1}"            # GPUs for the inference step (DDP via mp.spawn); benchmark+analysis stay single-GPU
+BATCH_SIZE="${BATCH_SIZE:-}"         # benchmark eval batch size (empty = checkpoint/config default)
+NUM_WORKERS="${NUM_WORKERS:-}"       # benchmark DataLoader workers (empty = default 4); match to --cpus-per-task
 OUT_DIR="${OUT_DIR:-prior_study_results/${LABEL}}"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
@@ -46,6 +56,8 @@ echo " checkpoint : $CHECKPOINT"
 echo " dataset    : $DATASET"
 echo " smal file  : $SMAL_FILE"
 echo " out dir    : $OUT_DIR"
+echo " infer gpus : $NUM_GPUS   (benchmark + analysis are single-GPU regardless)"
+echo " bench batch: ${BATCH_SIZE:-default}   workers: ${NUM_WORKERS:-default}"
 echo "=================================================================="
 
 # -- sanity: required inputs exist -------------------------------------------
@@ -67,11 +79,17 @@ fi
 
 # ---------------------------------------------------------- 1. benchmark -----
 echo; echo "[1/3] Benchmarking (accuracy: MPJPE mm + PCK)..."
+# benchmark_model has no DDP: it always runs on a single GPU (config.GPU_IDS, default "0").
+# Throughput here is tuned via batch size / workers, not GPU count.
+BENCH_EXTRA=()
+[[ -n "$BATCH_SIZE" ]]  && BENCH_EXTRA+=(--batch_size "$BATCH_SIZE")
+[[ -n "$NUM_WORKERS" ]] && BENCH_EXTRA+=(--num_workers "$NUM_WORKERS")
 python -m smal_fitter.neuralSMIL.benchmark_model \
     --checkpoint "$CHECKPOINT" \
     --dataset_path "$DATASET" \
     --smal-file "$SMAL_FILE" \
     --orig_width "$ORIG_W" --orig_height "$ORIG_H" \
+    "${BENCH_EXTRA[@]}" \
     2>&1 | tee "$OUT_DIR/benchmark_console_${STAMP}.log"
 
 # benchmark_model writes benchmark_multiview_<ckpt>_on_<dataset>/ next to CWD.
@@ -88,14 +106,26 @@ else
 fi
 
 # ------------------------------------------------ 2. inference + export ------
-echo; echo "[2/3] Inference + exporting scene parameters..."
+echo; echo "[2/3] Inference + exporting scene parameters (num_gpus=$NUM_GPUS)..."
 MF_ARG=()
 if [[ "$MAX_FRAMES" -gt 0 ]]; then MF_ARG=(--max_frames "$MAX_FRAMES"); fi
+# run_multiview_inference spreads frames across GPUs via DDP (mp.spawn) when --num_gpus > 1
+# and gathers the exported params to rank 0. It does NOT pin CUDA_VISIBLE_DEVICES, so all
+# GPUs SLURM exposed (e.g. --gres=gpu:4 -> "0,1,2,3") are used. Sanity-check the request:
+if [[ "$NUM_GPUS" -gt 1 ]]; then
+  VIS="${CUDA_VISIBLE_DEVICES:-}"
+  N_VIS=$(python -c "import torch;print(torch.cuda.device_count())" 2>/dev/null || echo "?")
+  echo "  multi-GPU inference: requested $NUM_GPUS | CUDA_VISIBLE_DEVICES='${VIS:-<unset>}' | torch sees $N_VIS"
+  if [[ "$N_VIS" != "?" && "$N_VIS" -lt "$NUM_GPUS" ]]; then
+    echo "  [warn] only $N_VIS GPU(s) visible but NUM_GPUS=$NUM_GPUS — allocate more (--gres=gpu:$NUM_GPUS) or lower NUM_GPUS." >&2
+  fi
+fi
 python -m smal_fitter.neuralSMIL.run_multiview_inference \
     --dataset "$DATASET" \
     --checkpoint "$CHECKPOINT" \
     --smal_file "$SMAL_FILE" \
     --export_animation "$EXPORT_STEM" \
+    --num_gpus "$NUM_GPUS" \
     "${MF_ARG[@]}" \
     2>&1 | tee "$OUT_DIR/inference_console_${STAMP}.log"
 

@@ -20,6 +20,12 @@
 # Override paths/label at submit time, e.g.:
 #     LABEL=unconstrained sbatch --export=ALL,LABEL scripts/prior_study/submit_baseline.sbatch
 #
+# For multi-GPU inference also bump the GPU count in BOTH places:
+#     edit  #SBATCH --gres=gpu:4  above, then submit with
+#     NUM_GPUS=4 BATCH_SIZE=16 NUM_WORKERS=8 \
+#       sbatch --export=ALL,NUM_GPUS,BATCH_SIZE,NUM_WORKERS submit_baseline.sbatch
+# (baseline is single-clip; multi-GPU rarely moves wall-clock much — profile first.)
+#
 # NOTE: intentionally no set -u. Conda activate hooks (libblas_mkl_activate.sh)
 # reference unset vars like MKL_INTERFACE_LAYER and abort under set -u.
 set -eo pipefail
