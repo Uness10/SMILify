@@ -101,6 +101,9 @@ class SMPLProperties(bpy.types.PropertyGroup):
     )
 
     # Issue #56: export user-defined per-joint rotation limits.
+    # Deliberately opt-out (default=True): authored constraints always land in
+    # the .pkl, and unconstrained rigs get the wide-open default range, which
+    # keeps the limit prior inactive - so the key is harmless when unused.
     export_joint_limits: bpy.props.BoolProperty(
         name="Export Joint Limits",
         description=(

@@ -3,8 +3,7 @@
 These exercise ``smil_importer.axis_remap`` directly. That module is deliberately
 free of any ``bpy`` import, and we load it by file path here so the test needs
 neither Blender nor the rest of the add-on (whose package ``__init__`` imports
-``bpy``). The Blender-side end-to-end check lives in
-``diagnostics/probe_joint_limits_axis_remap.py``.
+``bpy``).
 """
 
 import importlib.util

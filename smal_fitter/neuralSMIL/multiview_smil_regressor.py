@@ -885,42 +885,15 @@ class MultiViewSMILImageRegressor(SMILImageRegressor):
             loss_components["joint_angle_regularization"] = joint_angle_reg
             total_loss = total_loss + loss_weights["joint_angle_regularization"] * joint_angle_reg
 
-        # Joint-limit regularization (issue #56): hinge penalty against the per-joint
-        # rotation limits authored in the model .pkl (config.dd['joint_limits']). Uses
-        # exactly the same flat + linear-past-the-limit formulation as the optimisation
-        # fitter's limit loss. Off by default (weight 0.0); wrapped in try/except so an
-        # ill-shaped or missing limit set can never break training.
-        if loss_weights.get("joint_limit_regularization", 0) > 0:
-            try:
-                if not hasattr(self, "_joint_limit_bounds"):
-                    from smal_fitter.priors.joint_limits_prior import LimitPrior
-
-                    _lp = LimitPrior()
-                    _n = config.N_POSE
-                    _min = np.asarray(_lp.min_values[3:], dtype=np.float32).reshape(_n, 3)
-                    _max = np.asarray(_lp.max_values[3:], dtype=np.float32).reshape(_n, 3)
-                    # Cache as (N_POSE, 3) tensors; broadcast over the batch below.
-                    self._joint_limit_bounds = (
-                        torch.tensor(_min, device=self.device),
-                        torch.tensor(_max, device=self.device),
-                    )
-                min_lim, max_lim = self._joint_limit_bounds
-
-                joint_rot_pred = predicted_params["joint_rot"]  # (batch, N_POSE, 6 or 3)
-                if self.rotation_representation == "6d":
-                    joint_rot_aa = rotation_6d_to_axis_angle(joint_rot_pred)  # (batch, N_POSE, 3)
-                else:
-                    joint_rot_aa = joint_rot_pred
-
-                zeros = torch.zeros_like(joint_rot_aa)
-                over = torch.maximum(joint_rot_aa - max_lim, zeros)
-                under = torch.maximum(min_lim - joint_rot_aa, zeros)
-                joint_limit_reg = torch.mean(over + under)
-
-                loss_components["joint_limit_regularization"] = joint_limit_reg
-                total_loss = total_loss + loss_weights["joint_limit_regularization"] * joint_limit_reg
-            except Exception as e:
-                print(f"Warning: joint_limit_regularization skipped ({e})")
+        # Joint-limit regularization (issue #56): see SMILImageRegressor._joint_limit_penalty.
+        # Multi-view batches carry no per-sample validity mask (every sample in
+        # target_data is valid by construction), so the penalty applies to the whole
+        # batch; the single-view path masks invalid samples first. Raises if enabled
+        # but the limit set is unusable.
+        if loss_weights.get("joint_limit_regularization", 0) > 0 and "joint_rot" in predicted_params:
+            joint_limit_reg = self._joint_limit_penalty(predicted_params["joint_rot"])
+            loss_components["joint_limit_regularization"] = joint_limit_reg
+            total_loss = total_loss + loss_weights["joint_limit_regularization"] * joint_limit_reg
 
         # Betas loss
         if body_targets.get("betas") is not None and loss_weights.get("betas", 0) > 0:

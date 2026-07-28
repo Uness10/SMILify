@@ -5,6 +5,8 @@ register even when scipy is absent. Operators that need it are gated on
 dependencies.dependencies_installed().
 """
 
+import warnings
+
 import bpy
 import numpy as np
 from mathutils import Vector
@@ -189,8 +191,10 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
 
     For each bone the per-axis limits are read, in priority order, from:
 
-    1. a ``LIMIT_ROTATION`` pose-bone constraint (``use_limit_x/y/z`` with
-       ``min_x``/``max_x`` etc.), or
+    1. an enabled (non-muted) ``LIMIT_ROTATION`` pose-bone constraint with
+       ``owner_space == 'LOCAL'`` (``use_limit_x/y/z`` with ``min_x``/``max_x``
+       etc.) - muted or non-local-space constraints are skipped (the latter
+       with a warning), or
     2. the bone's IK rotation limits and locks (``lock_ik_x`` -> pinned to 0,
        ``use_ik_limit_x`` -> ``ik_min_x``/``ik_max_x``).
 
@@ -223,7 +227,25 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
 
         pbone = pose_bones.get(bone.name)
         if pbone is not None:
-            limit_con = next((c for c in pbone.constraints if c.type == "LIMIT_ROTATION"), None)
+            # A muted constraint is not authoritative: skip it so the IK
+            # fallback below still applies. This matches the viewport
+            # visualizer (3D_model_prep/joint_rot_limit_vis.py), which also
+            # ignores muted constraints.
+            limit_con = next(
+                (c for c in pbone.constraints if c.type == "LIMIT_ROTATION" and not c.mute),
+                None,
+            )
+            if limit_con is not None and limit_con.owner_space != "LOCAL":
+                # The remap assumes bone-local authoring (Blender's default).
+                # A WORLD/CUSTOM-space constraint would be remapped silently
+                # wrong, so it is ignored in favour of the IK/default fallback.
+                warnings.warn(
+                    f"Joint-limit export: bone '{bone.name}' has a Limit Rotation "
+                    f"constraint with owner_space='{limit_con.owner_space}'; only "
+                    "'LOCAL' is supported. Constraint ignored - falling back to "
+                    "IK limits / default range."
+                )
+                limit_con = None
             if limit_con is not None:
                 if limit_con.use_limit_x:
                     lo[0], hi[0] = limit_con.min_x, limit_con.max_x
