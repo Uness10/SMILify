@@ -2,6 +2,8 @@
 
 import bpy
 
+from . import visualization
+
 
 class SMPLProperties(bpy.types.PropertyGroup):
     pkl_filepath: bpy.props.StringProperty(
@@ -115,6 +117,20 @@ class SMPLProperties(bpy.types.PropertyGroup):
             "below; the root bone is fixed."
         ),
         default=True,
+    )
+
+    # Visualization section (SMIL panel > Visualization).
+    show_joint_limit_overlay: bpy.props.BoolProperty(
+        name="Show Joint Limit Overlay",
+        description=(
+            "Draw a translucent wedge in the viewport for each enabled axis of every "
+            "bone's Limit Rotation constraint (X red, Y green, Z blue). Reads exactly "
+            "the constraint fields the exporter reads, so the preview matches what "
+            "'Export Joint Limits' will write. Muted and non-local-space constraints "
+            "are skipped; the IK fallback and default range are not shown"
+        ),
+        default=False,
+        update=visualization.toggle_overlay_update,
     )
 
     joint_limit_default_range: bpy.props.FloatProperty(

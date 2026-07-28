@@ -15,6 +15,7 @@ script. Functionality is split into focused modules:
     properties    add-on PropertyGroup
     operators     import / export / generate / animation operators
     ui            N-panel UI
+    visualization viewport overlays (joint-limit wedges)
 
 scipy and scikit-learn are imported lazily, so the add-on always registers even
 when they are missing; the preferences panel then offers to install them.
@@ -39,6 +40,7 @@ from . import dependencies
 from . import properties
 from . import operators
 from . import ui
+from . import visualization
 
 # Registration order: dependency-installer + preferences first, then UI panels,
 # operators, and finally the PropertyGroup that Scene.smpl_tool points at.
@@ -46,6 +48,7 @@ classes = (
     dependencies.SMIL_OT_InstallDependencies,
     dependencies.SMILAddonPreferences,
     ui.SMIL_PT_Panel,
+    ui.SMIL_PT_VisualizationPanel,
     ui.SMIL_PT_MorphometryPanel,
     operators.SMPL_OT_ImportModel,
     operators.SMPL_OT_GenerateFromUnposed,
@@ -70,6 +73,9 @@ def register():
 
 
 def unregister():
+    # Remove any active viewport overlay before classes disappear.
+    visualization.disable_overlay()
+
     # Clean up temporary files written by operators.
     for obj in bpy.data.objects:
         if "smpl_data_path" in obj:

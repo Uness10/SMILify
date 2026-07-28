@@ -79,6 +79,28 @@ class SMIL_PT_Panel(bpy.types.Panel):
         layout.operator("smpl.export_animation_gltf", text="Export animated model as glTF")
 
 
+class SMIL_PT_VisualizationPanel(bpy.types.Panel):
+    """Viewport overlays. Kept as its own sub-panel so further visualization
+    options can be added here over time."""
+
+    bl_label = "Visualization"
+    bl_idname = "SMIL_PT_VisualizationPanel"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "SMIL"
+    bl_parent_id = "SMIL_PT_Panel"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        smpl_tool = context.scene.smpl_tool
+
+        box = layout.box()
+        box.prop(smpl_tool, "show_joint_limit_overlay")
+        if smpl_tool.show_joint_limit_overlay:
+            box.label(text="Only explicit Limit Rotation constraints are shown.", icon="INFO")
+
+
 class SMIL_PT_MorphometryPanel(bpy.types.Panel):
     bl_label = "SMIL Morphometry"
     bl_idname = "SMIL_PT_MorphometryPanel"
