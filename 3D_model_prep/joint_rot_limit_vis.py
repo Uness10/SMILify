@@ -36,7 +36,7 @@ COLOUR = {
     2: (0.20, 0.45, 0.90, 0.30),  # Z blue
 }
 
-shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+shader = gpu.shader.from_builtin("UNIFORM_COLOR")
 
 
 def limit_frame(obj, pb):
@@ -63,18 +63,14 @@ def wedge(centre, ref, sweep, a0, a1, r):
 
 
 def draw():
-    gpu.state.blend_set('ALPHA')
-    gpu.state.depth_test_set('NONE')  # always on top
+    gpu.state.blend_set("ALPHA")
+    gpu.state.depth_test_set("NONE")  # always on top
     for obj in bpy.context.scene.objects:
-        if obj.type != 'ARMATURE':
+        if obj.type != "ARMATURE":
             continue
         for pb in obj.pose.bones:
             con = next(
-                (
-                    c
-                    for c in pb.constraints
-                    if c.type == 'LIMIT_ROTATION' and not c.mute and c.owner_space == 'LOCAL'
-                ),
+                (c for c in pb.constraints if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space == "LOCAL"),
                 None,
             )
             if con is None:
@@ -95,24 +91,22 @@ def draw():
                 jobs.append((1, con.min_y, con.max_y, x, -z, head, r * 0.6))
 
             for axis, a0, a1, ref, sweep, centre, rr in jobs:
-                batch = batch_for_shader(
-                    shader, 'TRIS', {"pos": wedge(centre, ref, sweep, a0, a1, rr)})
+                batch = batch_for_shader(shader, "TRIS", {"pos": wedge(centre, ref, sweep, a0, a1, rr)})
                 shader.bind()
                 shader.uniform_float("color", COLOUR[axis])
                 batch.draw(shader)
-    gpu.state.blend_set('NONE')
+    gpu.state.blend_set("NONE")
 
 
 # Swap out any handler left by a previous run, then register a fresh one.
 ns = bpy.app.driver_namespace
 old = ns.get("_bone_limit_handle")
 if old is not None:
-    bpy.types.SpaceView3D.draw_handler_remove(old, 'WINDOW')
-ns["_bone_limit_handle"] = bpy.types.SpaceView3D.draw_handler_add(
-    draw, (), 'WINDOW', 'POST_VIEW')
+    bpy.types.SpaceView3D.draw_handler_remove(old, "WINDOW")
+ns["_bone_limit_handle"] = bpy.types.SpaceView3D.draw_handler_add(draw, (), "WINDOW", "POST_VIEW")
 
 for area in bpy.context.screen.areas:
-    if area.type == 'VIEW_3D':
+    if area.type == "VIEW_3D":
         area.tag_redraw()
 
 print("Bone limit overlay active. Re-run to refresh, restart Blender to clear.")

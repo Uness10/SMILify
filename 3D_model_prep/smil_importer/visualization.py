@@ -42,7 +42,7 @@ _shader = None
 def _get_shader():
     global _shader
     if _shader is None:
-        _shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+        _shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     return _shader
 
 
@@ -71,20 +71,16 @@ def _wedge(centre, ref, sweep, a0, a1, r):
 
 def _draw():
     shader = _get_shader()
-    gpu.state.blend_set('ALPHA')
-    gpu.state.depth_test_set('NONE')  # always on top
+    gpu.state.blend_set("ALPHA")
+    gpu.state.depth_test_set("NONE")  # always on top
     for obj in bpy.context.scene.objects:
-        if obj.type != 'ARMATURE':
+        if obj.type != "ARMATURE":
             continue
         for pb in obj.pose.bones:
             # Same selection rule as the exporter: first enabled (non-muted),
             # local-space Limit Rotation constraint.
             con = next(
-                (
-                    c
-                    for c in pb.constraints
-                    if c.type == 'LIMIT_ROTATION' and not c.mute and c.owner_space == 'LOCAL'
-                ),
+                (c for c in pb.constraints if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space == "LOCAL"),
                 None,
             )
             if con is None:
@@ -105,12 +101,11 @@ def _draw():
                 jobs.append((1, con.min_y, con.max_y, x, -z, head, r * 0.6))
 
             for axis, a0, a1, ref, sweep, centre, rr in jobs:
-                batch = batch_for_shader(
-                    shader, 'TRIS', {"pos": _wedge(centre, ref, sweep, a0, a1, rr)})
+                batch = batch_for_shader(shader, "TRIS", {"pos": _wedge(centre, ref, sweep, a0, a1, rr)})
                 shader.bind()
                 shader.uniform_float("color", COLOUR[axis])
                 batch.draw(shader)
-    gpu.state.blend_set('NONE')
+    gpu.state.blend_set("NONE")
 
 
 def _tag_redraw_all_view3d():
@@ -119,7 +114,7 @@ def _tag_redraw_all_view3d():
         return
     for window in wm.windows:
         for area in window.screen.areas:
-            if area.type == 'VIEW_3D':
+            if area.type == "VIEW_3D":
                 area.tag_redraw()
 
 
@@ -127,14 +122,14 @@ def enable_overlay():
     global _handle
     if _handle is not None:
         return
-    _handle = bpy.types.SpaceView3D.draw_handler_add(_draw, (), 'WINDOW', 'POST_VIEW')
+    _handle = bpy.types.SpaceView3D.draw_handler_add(_draw, (), "WINDOW", "POST_VIEW")
     _tag_redraw_all_view3d()
 
 
 def disable_overlay():
     global _handle
     if _handle is not None:
-        bpy.types.SpaceView3D.draw_handler_remove(_handle, 'WINDOW')
+        bpy.types.SpaceView3D.draw_handler_remove(_handle, "WINDOW")
         _handle = None
         _tag_redraw_all_view3d()
 

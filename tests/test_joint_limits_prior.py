@@ -63,9 +63,7 @@ def _fitter_limit_tensors(lp):
 def _hinge(joint_rotations, min_limits, max_limits):
     """The fitter's limit loss: flat inside the range, linear past it."""
     zeros = torch.zeros_like(joint_rotations)
-    return torch.mean(
-        torch.max(joint_rotations - max_limits, zeros) + torch.max(min_limits - joint_rotations, zeros)
-    )
+    return torch.mean(torch.max(joint_rotations - max_limits, zeros) + torch.max(min_limits - joint_rotations, zeros))
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +202,4 @@ def test_neural_penalty_off_by_default():
 
     for mod in (smil_image_regressor, multiview_smil_regressor):
         src = inspect.getsource(mod)
-        assert '"joint_limit_regularization": 0.0' in src, (
-            f"{mod.__name__} does not default the weight to 0.0"
-        )
+        assert '"joint_limit_regularization": 0.0' in src, f"{mod.__name__} does not default the weight to 0.0"
