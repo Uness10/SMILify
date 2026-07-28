@@ -95,11 +95,11 @@ Enable via `"joint_limit_regularization": <weight>` (start small, e.g. `1e-3`) i
 | `smal_fitter/neuralSMIL/multiview_smil_regressor.py` | optional limit penalty |
 | `smal_fitter/neuralSMIL/smil_image_regressor.py` | optional limit penalty |
 | `tests/test_axis_remap.py` | **new** — pytest suite for the remap (no Blender needed) |
-| `diagnostics/check_remap_math.py` | randomized membership-equivalence property check |
-| `diagnostics/probe_issue56.py` | Phase-0 ground-truth probe |
-| `diagnostics/test_issue56.py` | consumer unit tests |
-| `diagnostics/test_fitter_limit_loss.py` | fitter loss behaviour |
-| `diagnostics/test_neural_limit_penalty.py` | neural penalty behaviour |
+| `tests/test_joint_limits_prior.py` | **new** — consumer tests: LimitPrior read path, fallback, validation, fitter hinge, neural penalty |
+
+The one-off diagnostic scripts referenced in the results table below (`diagnostics/*`)
+were development-time artifacts; their durable assertions now live in the two pytest
+modules above, and their recorded results are preserved here.
 
 ---
 
