@@ -23,9 +23,9 @@ when they are missing; the preferences panel then offers to install them.
 bl_info = {
     "name": "SMIL Model Importer",
     "author": "Fabian Plum",
-    "version": (2, 0, 0),
+    "version": (2, 1, 0),
     "blender": (4, 2, 0),
-    "location": "View3D > Sidebar (N) > SMPL",
+    "location": "View3D > Sidebar (N) > SMIL",
     "description": "Import, configure, and export SMPL / SMIL models",
     "warning": "Requires scipy and scikit-learn (installable from add-on preferences)",
     "category": "Import-Export",
@@ -45,8 +45,8 @@ from . import ui
 classes = (
     dependencies.SMIL_OT_InstallDependencies,
     dependencies.SMILAddonPreferences,
-    ui.SMPL_PT_Panel,
-    ui.SMPL_PT_MorphometryPanel,
+    ui.SMIL_PT_Panel,
+    ui.SMIL_PT_MorphometryPanel,
     operators.SMPL_OT_ImportModel,
     operators.SMPL_OT_GenerateFromUnposed,
     operators.SMPL_OT_ExportModel,

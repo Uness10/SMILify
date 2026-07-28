@@ -5,12 +5,7 @@ import csv
 
 import numpy as np
 
-try:
-    from sklearn.decomposition import PCA
-    from sklearn.covariance import EmpiricalCovariance
-except ImportError:  # pragma: no cover
-    PCA = None
-    EmpiricalCovariance = None
+from .dependencies import require_sklearn
 
 
 def apply_pca_and_create_shapekeys(
@@ -26,7 +21,8 @@ def apply_pca_and_create_shapekeys(
     # Reshape the scans into (n, v*3)
     scans_reshaped = scans.reshape(n, v * 3)
 
-    # Perform PCA
+    # Perform PCA (scikit-learn resolved lazily — issue #92-16).
+    PCA, EmpiricalCovariance = require_sklearn()
     pca = PCA(n_components=num_components)
     pca.fit(scans_reshaped)
 
@@ -231,7 +227,8 @@ def apply_entangled_pca_and_create_shapekeys(
     print(f"Combined features range: {np.min(combined_features):.6f} to {np.max(combined_features):.6f}")
     print("Skipping normalization - feature magnitudes are similar")
 
-    # Perform PCA on normalized features
+    # Perform PCA on normalized features (scikit-learn resolved lazily — #92-16).
+    PCA, EmpiricalCovariance = require_sklearn()
     pca = PCA(n_components=num_components)
     pca.fit(combined_features)
 

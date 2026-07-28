@@ -59,6 +59,49 @@ def get_missing():
     return [pip_name for mod, pip_name in DEPENDENCIES if importlib.util.find_spec(mod) is None]
 
 
+def require_scipy_kdtree():
+    """Return scipy's ``KDTree``, resolving the import lazily at call time.
+
+    Binding scipy/sklearn once at add-on registration froze them to ``None`` for
+    the whole session: right after "Install dependencies", ``find_spec`` reports
+    the package as present (so the operator gates pass) while the frozen module
+    binding is still ``None`` -> opaque ``TypeError: 'NoneType' object is not
+    callable`` (issue #92-16). Resolving here retries once after refreshing the
+    import caches, then raises a clean, actionable message instead.
+    """
+    try:
+        from scipy.spatial import KDTree
+    except ImportError:
+        user_modules_dir()
+        importlib.invalidate_caches()
+        try:
+            from scipy.spatial import KDTree
+        except ImportError:
+            raise RuntimeError(MISSING_MESSAGE)
+    return KDTree
+
+
+def require_sklearn():
+    """Return ``(PCA, EmpiricalCovariance)`` from scikit-learn, imported lazily.
+
+    Same import-then-retry-once pattern as :func:`require_scipy_kdtree`, so the
+    PCA features work in the same session after installing dependencies without a
+    Blender restart.
+    """
+    try:
+        from sklearn.decomposition import PCA
+        from sklearn.covariance import EmpiricalCovariance
+    except ImportError:
+        user_modules_dir()
+        importlib.invalidate_caches()
+        try:
+            from sklearn.decomposition import PCA
+            from sklearn.covariance import EmpiricalCovariance
+        except ImportError:
+            raise RuntimeError(MISSING_MESSAGE)
+    return PCA, EmpiricalCovariance
+
+
 def _python_executable():
     """Path to the Python interpreter bundled with Blender.
 
@@ -94,6 +137,16 @@ def install_dependencies():
 
     # Install into the user-writable target so we never touch Program Files and
     # never need administrator privileges.
+    #
+    # numpy is pinned to the exact version Blender bundles: pip --target always
+    # installs the full dependency tree, and at the next startup Blender puts
+    # the user modules directory at sys.path[0] — ahead of the bundled
+    # site-packages. An unpinned resolve would drop the newest numpy there and
+    # shadow the bundled numpy for every add-on; an identical copy makes the
+    # shadowing harmless. scipy/scikit-learn stay unpinned so pip can resolve
+    # versions compatible with whatever numpy the running Blender ships.
+    import numpy
+
     _run(
         [
             python_exe,
@@ -104,6 +157,7 @@ def install_dependencies():
             target,
             "--upgrade",
             *[pip_name for _, pip_name in DEPENDENCIES],
+            f"numpy=={numpy.__version__}",
         ],
         env,
     )

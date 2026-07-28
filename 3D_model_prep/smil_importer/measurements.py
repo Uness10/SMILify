@@ -42,6 +42,10 @@ def store_smpl_data(context, data, obj=None):
     try:
         obj[SMPL_DATA_PROP] = _encode_smpl_data(data)
         obj["has_smpl_data"] = True
+        # Cheap flag so the "Apply Pose Correctives" poll can gate the operator
+        # without unpickling the whole blob on every UI redraw (issue #24 / #92-15).
+        posedirs = data.get("posedirs")
+        obj["has_posedirs"] = bool(isinstance(posedirs, np.ndarray) and posedirs.size > 0)
         context.scene.smpl_tool.has_smpl_data = True
     except Exception as e:
         print(f"Failed to embed SMPL data on {obj.name!r}: {e}")

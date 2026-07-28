@@ -1,4 +1,4 @@
-"""N-panel UI (View3D > SMPL / Morphometry)."""
+"""N-panel UI (View3D > SMIL / Morphometry)."""
 
 import bpy
 
@@ -6,12 +6,12 @@ from .measurements import get_reference_measurements
 from .state import get_morph_pca_status
 
 
-class SMPL_PT_Panel(bpy.types.Panel):
+class SMIL_PT_Panel(bpy.types.Panel):
     bl_label = "SMIL Model Importer"
-    bl_idname = "SMPL_PT_Panel"
+    bl_idname = "SMIL_PT_Panel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "SMPL"
+    bl_category = "SMIL"
 
     def draw(self, context):
         layout = self.layout
@@ -79,12 +79,12 @@ class SMPL_PT_Panel(bpy.types.Panel):
         layout.operator("smpl.export_animation_gltf", text="Export animated model as glTF")
 
 
-class SMPL_PT_MorphometryPanel(bpy.types.Panel):
+class SMIL_PT_MorphometryPanel(bpy.types.Panel):
     bl_label = "SMIL Morphometry"
-    bl_idname = "SMPL_PT_MorphometryPanel"
+    bl_idname = "SMIL_PT_MorphometryPanel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "SMPL"
+    bl_category = "SMIL"
 
     def draw(self, context):
         layout = self.layout

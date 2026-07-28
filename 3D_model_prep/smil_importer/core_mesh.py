@@ -11,17 +11,13 @@ from mathutils import Vector
 
 # Bone-local -> model-frame limit remap (issue #56). Kept in a bpy-free module so
 # it can be unit tested without Blender (tests/test_axis_remap.py). Aliased to the
-# previous private names for backward compatibility with existing importers
-# (e.g. diagnostics/probe_joint_limits_axis_remap.py).
+# previous private names for backward compatibility.
 from .axis_remap import (
     rot3 as _rot3,
     remap_bounds_to_model_frame as _remap_bounds_to_model_frame,
 )
 
-try:
-    from scipy.spatial import KDTree
-except ImportError:  # pragma: no cover
-    KDTree = None
+from .dependencies import require_scipy_kdtree
 
 
 def ensure_mesh(func):
@@ -657,7 +653,9 @@ def compute_symmetric_pairs(vertices, axis="y", tolerance=0.01):
     reflected_vertices = vertices.copy()
     reflected_vertices[:, sym_axis_idx] *= -1
 
-    # Build KDTree for the reflected vertices
+    # Build KDTree for the reflected vertices (scipy resolved lazily; raises a
+    # clean missing-deps message if scipy is unavailable — issue #92-16).
+    KDTree = require_scipy_kdtree()
     tree = KDTree(reflected_vertices)
 
     # Find symmetric pairs within the tolerance
