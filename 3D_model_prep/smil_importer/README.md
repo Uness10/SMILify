@@ -48,6 +48,29 @@ it finishes. The panel shows a green check once both packages are importable.
 Open the 3D viewport sidebar (press **N**) and use the **SMIL** and
 **Morphometry** tabs.
 
+## Export options
+
+The export section of the **SMIL** panel exposes, among others:
+
+- **Export Joint Limits** (default: on) — reads per-bone rotation limits and
+  stores them in the exported `.pkl` under the `joint_limits` key
+  (shape `(J, 3, 2)`, radians, model frame). For each bone the limits come
+  from an enabled (non-muted), local-space **Limit Rotation** bone constraint
+  if present, otherwise from the bone's IK rotation limits/locks. See the
+  [Joint Limits User Guide](../../docs/joint_limits_user_guide.md).
+- **Default Joint Limit Range (rad)** — half-range used for axes with no
+  explicit limit; such axes export as `[-value, +value]`. The default (pi)
+  is effectively unconstrained, so the fitter's limit prior stays inactive
+  until real limits are authored.
+
+## Visualization
+
+The **Visualization** box of the SMIL panel has a **Show Joint Limit
+Overlay** toggle that draws a translucent wedge per constrained axis of each
+bone's Limit Rotation constraint — a faithful preview of what will be
+exported. Also available as a standalone script:
+`3D_model_prep/joint_rot_limit_vis.py`.
+
 ## Recommended Blender version
 
 Export `.pkl` files with **Blender 4.2 LTS**. Blender versions that bundle

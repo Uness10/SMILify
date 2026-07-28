@@ -24,11 +24,11 @@ Every joint can rotate around three axes — **X, Y, Z** — and each axis gets 
 
 **Which direction is "positive"?** That depends on the bone's own local axes — every bone carries its own little XYZ frame. Before typing numbers, always *look* at the bone's axes and *test-rotate* it (§4). Never guess the sign.
 
-![PHOTO: Blender viewport, one bone selected in Pose Mode with its local axes displayed (colored X/Y/Z axis lines visible on the bone). Annotate which color is which axis.](images/joint_limits/01_bone_local_axes.png)
+![PHOTO: Blender viewport, one bone selected in Pose Mode with its local axes displayed (colored X/Y/Z axis lines visible on the bone). Annotate which color is which axis.](design/images/1.png)
 
 To display bone axes: select the armature → **Object Data Properties** (green stick-figure tab) → **Viewport Display** → tick **Axes**.
 
-![PHOTO: Properties editor, Object Data Properties tab, Viewport Display panel with the "Axes" checkbox ticked, highlighted with a box or arrow.](images/joint_limits/02_enable_axes_display.png)
+![PHOTO: Properties editor, Object Data Properties tab, Viewport Display panel with the "Axes" checkbox ticked, highlighted with a box or arrow.](design/images/joint_limits/02_enable_axes_display.png)
 
 ## 3. Setup (once)
 
@@ -40,9 +40,11 @@ To display bone axes: select the armature → **Object Data Properties** (green 
    ```
 
    In Blender: **Edit → Preferences → Add-ons → Install…**, pick `smil_importer.zip`, enable it.
-2. Open your rigged model and **save the `.blend` file to a normal, writable folder**. An unsaved file makes the exporter fail with "Permission denied" (pitfall #1).
+2. Open your rigged model (or import a `.pkl` model via the add-on), then **save the `.blend` file to a normal, writable folder**. An unsaved file makes the exporter fail with "Permission denied" (pitfall #1).
 
-![PHOTO: Blender Preferences > Add-ons window with the SMIL importer add-on installed and its checkbox enabled.](images/joint_limits/03_addon_enabled.png)
+![PHOTO: Blender Preferences > Add-ons window with the SMIL importer add-on installed and its checkbox enabled.](design/images/3.png)
+![](design/images/4.png)
+![](design/images/5.png)
 
 ## 4. Find the right axis and sign (the sign-posting step)
 
@@ -54,7 +56,7 @@ For the joint you want to limit:
 4. Note the direction: the way it swings when you move toward *positive* angles is your **Max** direction; the opposite is **Min**. Press `Esc` to cancel the rotation without keeping it.
 5. Repeat for `R Y Y` and `R Z Z` until you know what each axis does for this bone.
 
-![PHOTO: Pose Mode, a leg bone mid-rotation using R Z Z, with the rotation angle readout visible in the viewport header/corner. Caption: "R, Z, Z — rotating around the bone's LOCAL Z; the header shows the current angle and its sign."](images/joint_limits/04_test_rotate_local_axis.png)
+![PHOTO: Pose Mode, a leg bone mid-rotation using R Z Z, with the rotation angle readout visible in the viewport header/corner. Caption: "R, Z, Z — rotating around the bone's LOCAL Z; the header shows the current angle and its sign."](design/images/2.png)
 
 Tip: the angle readout in the viewport corner shows the current angle *with its sign* while you rotate — this tells you directly whether "knee bends forward" is positive or negative on that axis.
 
@@ -83,23 +85,40 @@ At the bottom of the Limit Rotation panel there's an **Owner** dropdown. It's th
 
 **Set Owner = Local Space.** The exporter reads the raw Min/Max values and treats them as bone-local, then converts them into the model frame itself. Local Space is what makes "tick Z, −30/+45" mean "this bone rotates around *its own* Z", which matches the test-rotate step in §4 (`R Z Z` uses the bone's local axis). Any other Owner space measures against different axes, so your exported limits will fence off the wrong rotations.
 
-![PHOTO: The Limit Rotation constraint panel scrolled to the bottom, "Owner" dropdown open with "Local Space" highlighted/selected. Add a note: "Owner = Local Space (NOT the default World Space)".](images/joint_limits/09_owner_local_space.png)
+![PHOTO: The Limit Rotation constraint panel scrolled to the bottom, "Owner" dropdown open with "Local Space" highlighted/selected. Add a note: "Owner = Local Space (NOT the default World Space)".](design/images/joint_limits/09_owner_local_space.png)
 
-![PHOTO: Properties editor with BOTH constraint tabs visible; the correct "Bone Constraint" tab (bone+wrench icon) circled in green, the wrong "Object Constraint" tab crossed out in red.](images/joint_limits/05_bone_vs_object_constraint_tab.png)
+![PHOTO: Properties editor with BOTH constraint tabs visible; the correct "Bone Constraint" tab (bone+wrench icon) circled in green, the wrong "Object Constraint" tab crossed out in red.](design/images/joint_limits/05_bone_vs_object_constraint_tab.png)
 
-![PHOTO: An added Limit Rotation constraint panel: "Limit Z" ticked with Min = -30°, Max = 45°, X and Y unticked. Arrows pointing at the tick-box and the Min/Max fields.](images/joint_limits/06_limit_rotation_panel.png)
+![PHOTO: An added Limit Rotation constraint panel: "Limit Z" ticked with Min = -30°, Max = 45°, X and Y unticked. Arrows pointing at the tick-box and the Min/Max fields.](design/images/joint_limits/06_limit_rotation_panel.png)
 
 Sanity check: with the constraint in place, test-rotate the bone again (`R Z Z`) — it should now visibly stop at your limits. If it stops in the wrong place, your sign is flipped: swap and negate (e.g. wrong `[-45, 30]` → right `[-30, 45]`).
 
-![PHOTO: Two side-by-side viewport shots of the same leg: left at the Min limit (-30°), right at the Max limit (+45°), showing the bone stopping at each end.](images/joint_limits/07_limit_stops_min_max.png)
+![PHOTO: Two side-by-side viewport shots of the same leg: left at the Min limit (-30°), right at the Max limit (+45°), showing the bone stopping at each end.](design/images/joint_limits/07_limit_stops_min_max.png)
 
-## 6. Export
+## 6. Visualize your authored limits (optional)
+
+Before exporting you can preview every authored limit directly in the viewport: for each enabled axis of each bone's Limit Rotation constraint, a translucent wedge is drawn showing the allowed range (X = red, Y = green, Z = blue; the Y/twist wedge is an approximation by nature). The preview reads exactly the constraint fields the exporter reads, so what you see is what will land in `joint_limits`.
+
+Two ways to enable it:
+
+1. **Add-on panel (recommended):** in the SMIL panel, open the **Visualization** box and tick **Show Joint Limit Overlay**. Untick to remove the overlay.
+2. **Standalone script:** open `3D_model_prep/joint_rot_limit_vis.py` in Blender's Text Editor and press **Run**. Re-run to refresh after editing constraints; restart Blender to clear.
+
+![PHOTO: Viewport in Pose Mode showing a leg bone with a red translucent wedge spanning -30 deg to +45 deg around its local X axis, plus the SMIL panel's Visualization box with "Show Joint Limit Overlay" ticked.](design/images/joint_limits/10_limit_overlay.png)
+
+Caveats:
+
+- Only explicit, enabled (non-muted) **Limit Rotation** constraints are drawn. Muted constraints are skipped - and the exporter skips them too, so preview and export agree.
+- The IK-limit fallback and the wide-open default range are **not** visualized; a bone with no wedge simply has no explicit constraint.
+- If a wedge points the wrong way, your sign is flipped - fix it now, before export (swap and negate, see §5).
+
+## 7. Export
 
 1. Select the **mesh object** (not the armature — pitfall #6).
 2. In the SMIL panel, keep **Export Joint Limits** ticked (default), set the **Output Filename**, click **Export SMIL Model**.
 3. Your limits are now stored inside the `.pkl` under the `joint_limits` key.
 
-![PHOTO: The SMIL add-on panel in the sidebar with "Export Joint Limits" ticked, the "Default Joint Limit Range" field below it, the output filename field, and the "Export SMIL Model" button. Highlight the toggle.](images/joint_limits/08_export_panel.png)
+![PHOTO: The SMIL add-on panel in the sidebar with "Export Joint Limits" ticked, the "Default Joint Limit Range" field below it, the output filename field, and the "Export SMIL Model" button. Highlight the toggle.](design/images/6.png)
 
 You do **not** need to worry about the bone's rest orientation: the exporter automatically converts your bone-local limits into the model's frame (for standard axis-aligned rigs the conversion is exact; a tilted, mixed-axis bone prints a warning and exports the numbers as-is).
 
@@ -118,12 +137,12 @@ print(jl[0])                             # root -> all zeros
 
 The `.pkl` stores **radians**: −30° appears as `-0.5236`, +45° as `0.7854`. That's expected, not a bug (pitfall #4).
 
-## 7. Use the limits
+## 8. Use the limits
 
 - **Optimisation fitter:** point `config.SMAL_FILE` at your exported `.pkl` and run with the limit weight on (`w_limit > 0`). Nothing else to configure.
 - **Neural training (optional):** add `"joint_limit_regularization": 1e-3` (start small) to `loss_weights` in your training config. Default is `0.0` = off.
 
-## 8. Common pitfalls (all seen in real testing)
+## 9. Common pitfalls (all seen in real testing)
 
 1. **Unsaved `.blend`** → "Permission denied" on export. Save to a writable folder first.
 2. **Object constraint instead of Bone constraint** → limit silently ignored. Use the bone+wrench tab.

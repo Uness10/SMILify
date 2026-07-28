@@ -394,7 +394,7 @@ ____________________________________
 - [X] The code is poorly tested. That needs to be fixed. Write integration tests for main functionality.
 
 ## Functionality / broader project TODOs
-- [ ] Allow to add user-defined joint limits in the Blender addon. ([#56](https://github.com/FabianPlum/SMILify/issues/56))
+- [X] Allow to add user-defined joint limits in the Blender addon. ([#56](https://github.com/FabianPlum/SMILify/issues/56)) See the [Joint Limits User Guide](docs/joint_limits_user_guide.md).
 - [X] Finish cleaning antscan dataset and prepare models for fitting.
 - [ ] Create SMIL model from massive antscan dataset. (future todo for _SMILify Gen2_) ([#57](https://github.com/FabianPlum/SMILify/issues/57))
 - [X] Add configurable mouse SMIL model.
