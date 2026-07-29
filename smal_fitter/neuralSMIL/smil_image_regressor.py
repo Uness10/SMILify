@@ -1332,9 +1332,7 @@ class SMILImageRegressor(SMALFitter):
             joint_rot_aa = joint_rot_pred
 
         zeros = torch.zeros_like(joint_rot_aa)
-        return torch.mean(
-            torch.maximum(joint_rot_aa - max_lim, zeros) + torch.maximum(min_lim - joint_rot_aa, zeros)
-        )
+        return torch.mean(torch.maximum(joint_rot_aa - max_lim, zeros) + torch.maximum(min_lim - joint_rot_aa, zeros))
 
     def compute_batch_loss(
         self,

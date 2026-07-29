@@ -77,8 +77,11 @@ def load_animation(npz_path: Path, json_path: Optional[Path]) -> Dict:
         parents = side.get("parents")
         rep = side.get("rotation_representation", "axis_angle")
         if rep != "axis_angle":
-            print(f"[warn] sidecar rotation_representation='{rep}', expected 'axis_angle'. "
-                  "Per-axis limit comparison assumes axis-angle.", file=sys.stderr)
+            print(
+                f"[warn] sidecar rotation_representation='{rep}', expected 'axis_angle'. "
+                "Per-axis limit comparison assumes axis-angle.",
+                file=sys.stderr,
+            )
     if joint_names is None:
         joint_names = [f"joint_{i}" for i in range(poses.shape[1])]
     if len(joint_names) != poses.shape[1]:
@@ -148,19 +151,21 @@ def per_axis_stats(poses: np.ndarray, joint_names: List[str]) -> List[Dict]:
     for j in range(1, poses.shape[1]):  # skip root
         for a in range(3):
             v = poses[:, j, a]
-            rows.append({
-                "joint": joint_names[j],
-                "joint_idx": j,
-                "axis": AXES[a],
-                "min_rad": float(np.min(v)),
-                "max_rad": float(np.max(v)),
-                "mean_rad": float(np.mean(v)),
-                "std_rad": float(np.std(v)),
-                "rom_rad": float(np.max(v) - np.min(v)),
-                "min_deg": float(np.min(v) * RAD2DEG),
-                "max_deg": float(np.max(v) * RAD2DEG),
-                "rom_deg": float((np.max(v) - np.min(v)) * RAD2DEG),
-            })
+            rows.append(
+                {
+                    "joint": joint_names[j],
+                    "joint_idx": j,
+                    "axis": AXES[a],
+                    "min_rad": float(np.min(v)),
+                    "max_rad": float(np.max(v)),
+                    "mean_rad": float(np.mean(v)),
+                    "std_rad": float(np.std(v)),
+                    "rom_rad": float(np.max(v) - np.min(v)),
+                    "min_deg": float(np.min(v) * RAD2DEG),
+                    "max_deg": float(np.max(v) * RAD2DEG),
+                    "rom_deg": float((np.max(v) - np.min(v)) * RAD2DEG),
+                }
+            )
     return rows
 
 
@@ -170,13 +175,15 @@ def magnitude_stats(poses: np.ndarray, joint_names: List[str]) -> List[Dict]:
     rows = []
     for j in range(1, poses.shape[1]):
         v = mag[:, j]
-        rows.append({
-            "joint": joint_names[j],
-            "joint_idx": j,
-            "mean_mag_deg": float(np.mean(v) * RAD2DEG),
-            "max_mag_deg": float(np.max(v) * RAD2DEG),
-            "std_mag_deg": float(np.std(v) * RAD2DEG),
-        })
+        rows.append(
+            {
+                "joint": joint_names[j],
+                "joint_idx": j,
+                "mean_mag_deg": float(np.mean(v) * RAD2DEG),
+                "max_mag_deg": float(np.max(v) * RAD2DEG),
+                "std_mag_deg": float(np.std(v) * RAD2DEG),
+            }
+        )
     return rows
 
 
@@ -192,23 +199,27 @@ def limit_violations(poses: np.ndarray, joint_names: List[str], limits: np.ndarr
             over = np.maximum(v - hi, 0.0)
             n_viol = int(np.sum((under > 0) | (over > 0)))
             overshoot = np.maximum(under, over)
-            rows.append({
-                "joint": joint_names[j],
-                "axis": AXES[a],
-                "limit_lo_deg": float(lo * RAD2DEG),
-                "limit_hi_deg": float(hi * RAD2DEG),
-                "pct_frames_violating": 100.0 * n_viol / max(F, 1),
-                "mean_overshoot_deg": float(np.mean(overshoot) * RAD2DEG),
-                "max_overshoot_deg": float(np.max(overshoot) * RAD2DEG),
-            })
+            rows.append(
+                {
+                    "joint": joint_names[j],
+                    "axis": AXES[a],
+                    "limit_lo_deg": float(lo * RAD2DEG),
+                    "limit_hi_deg": float(hi * RAD2DEG),
+                    "pct_frames_violating": 100.0 * n_viol / max(F, 1),
+                    "mean_overshoot_deg": float(np.mean(overshoot) * RAD2DEG),
+                    "max_overshoot_deg": float(np.max(overshoot) * RAD2DEG),
+                }
+            )
     return rows
 
 
 def parse_benchmark_report(path: Optional[Path]) -> Dict[str, Optional[float]]:
     """Best-effort scrape of MPJPE / PCK from benchmark_report.txt."""
     out: Dict[str, Optional[float]] = {
-        "mpjpe_mm": None, "median_mpjpe_mm": None,
-        "pck_5px_native": None, "pck_5px_input": None,
+        "mpjpe_mm": None,
+        "median_mpjpe_mm": None,
+        "pck_5px_native": None,
+        "pck_5px_input": None,
     }
     if path is None or not Path(path).exists():
         return out
@@ -357,8 +368,7 @@ def write_summary(out_dir: Path, label: str, anim, axis_rows, viol_rows, acc, li
             )
         lines.append("")
     else:
-        lines += ["## Limit violations", "",
-                  "_No authored limits available — see finding below._", ""]
+        lines += ["## Limit violations", "", "_No authored limits available — see finding below._", ""]
     # Widest ROM joints
     rom_sorted = sorted(axis_rows, key=lambda r: r["rom_deg"], reverse=True)[:10]
     lines += [
@@ -392,11 +402,22 @@ def make_synthetic(tmp: Path) -> Tuple[Path, Path, Path]:
     poses[:, 1, 1] += 1.4
     trans = np.cumsum(rng.normal(0, 0.01, size=(F, 3)), axis=0).astype(np.float32)
     npz = tmp / "synthetic_clip.npz"
-    np.savez(npz, poses=poses, trans=trans, betas=np.zeros(10, np.float32),
-             betas_per_frame=np.zeros((F, 10), np.float32), fps=np.float32(60.0))
-    side = {"joint_names": names, "parents": [-1] + list(range(0, J - 1)),
-            "n_joints": J, "n_betas": 10, "rotation_representation": "axis_angle",
-            "root_joint_index": 0}
+    np.savez(
+        npz,
+        poses=poses,
+        trans=trans,
+        betas=np.zeros(10, np.float32),
+        betas_per_frame=np.zeros((F, 10), np.float32),
+        fps=np.float32(60.0),
+    )
+    side = {
+        "joint_names": names,
+        "parents": [-1] + list(range(0, J - 1)),
+        "n_joints": J,
+        "n_betas": 10,
+        "rotation_representation": "axis_angle",
+        "root_joint_index": 0,
+    }
     js = tmp / "synthetic_clip.json"
     js.write_text(json.dumps(side))
     limits = np.zeros((J, 3, 2), np.float64)
@@ -421,7 +442,8 @@ def run(npz, json_path, smal_file, limits_arg, benchmark, label, important, out_
     limits, limits_source = load_limits(
         Path(smal_file) if smal_file else None,
         Path(limits_arg) if limits_arg else None,
-        anim["n_joints"], anim["joint_names"],
+        anim["n_joints"],
+        anim["joint_names"],
     )
 
     axis_rows = per_axis_stats(anim["poses"], anim["joint_names"])
@@ -434,8 +456,9 @@ def run(npz, json_path, smal_file, limits_arg, benchmark, label, important, out_
     if viol_rows:
         write_csv(viol_rows, out_dir / "limit_violations.csv", label)
 
-    plot_angle_distributions(anim["poses"], anim["joint_names"], important, limits,
-                             out_dir / "joint_angle_distributions.png", label)
+    plot_angle_distributions(
+        anim["poses"], anim["joint_names"], important, limits, out_dir / "joint_angle_distributions.png", label
+    )
     plot_range_of_motion(mag_rows, out_dir / "range_of_motion.png", label)
     plot_trajectories(anim, important, traj_dir, label)
 
@@ -444,8 +467,10 @@ def run(npz, json_path, smal_file, limits_arg, benchmark, label, important, out_
     print(f"[ok] baseline analysis written to {out_dir}")
     print(f"     limits source: {limits_source}")
     if not viol_rows:
-        print("     [finding] no authored joint_limits found -> violation table skipped. "
-              "Author limits (see README) or pass --limits to enable the comparison.")
+        print(
+            "     [finding] no authored joint_limits found -> violation table skipped. "
+            "Author limits (see README) or pass --limits to enable the comparison."
+        )
 
 
 def main():
@@ -456,8 +481,12 @@ def main():
     ap.add_argument("--limits", type=str, default=None, help="Authored limits override (.npy (J,3,2) or .json ranges)")
     ap.add_argument("--benchmark", type=str, default=None, help="benchmark_report.txt for accuracy scrape")
     ap.add_argument("--label", type=str, default="unconstrained", help="Column label for comparison tables")
-    ap.add_argument("--important-joints", type=str, default=",".join(DEFAULT_IMPORTANT),
-                    help="Comma-separated joints to feature in distribution/trajectory plots")
+    ap.add_argument(
+        "--important-joints",
+        type=str,
+        default=",".join(DEFAULT_IMPORTANT),
+        help="Comma-separated joints to feature in distribution/trajectory plots",
+    )
     ap.add_argument("--out", type=str, default="prior_study_baseline", help="Output directory")
     ap.add_argument("--self-test", action="store_true", help="Run on synthetic data (no real dataset needed)")
     args = ap.parse_args()
@@ -466,6 +495,7 @@ def main():
 
     if args.self_test:
         import tempfile
+
         tmp = Path(tempfile.mkdtemp(prefix="prior_study_selftest_"))
         npz, js, lim = make_synthetic(tmp)
         run(npz, js, None, lim, None, "selftest_synthetic", important, args.out)
@@ -475,8 +505,7 @@ def main():
     if not args.npz:
         ap.error("--npz is required (or use --self-test)")
     json_path = args.json or str(Path(args.npz).with_suffix(".json"))
-    run(args.npz, json_path, args.smal_file, args.limits, args.benchmark,
-        args.label, important, args.out)
+    run(args.npz, json_path, args.smal_file, args.limits, args.benchmark, args.label, important, args.out)
 
 
 if __name__ == "__main__":
