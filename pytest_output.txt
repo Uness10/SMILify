@@ -1,0 +1,34 @@
+(/p/project1/cias-7/anouar1/conda_envs/pytorch3d) [anouar1@jrc0284 SMILify]$ pytest
+=================================================== test session starts ====================================================
+platform linux -- Python 3.10.20, pytest-9.1.1, pluggy-1.6.0
+rootdir: /p/scratch/share/anouar1/SMILify
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.14.2
+collected 104 items
+
+tests/test_animation_export.py .....                                                                                 [  4%]
+tests/test_augmentation.py .........ssssss                                                                           [ 19%]
+tests/test_axis_remap.py ........                                                                                    [ 26%]
+tests/test_config_system.py ..............................................                                           [ 71%]
+tests/test_curriculum_sync.py .                                                                                      [ 72%]
+tests/test_joint_limits_prior.py .........                                                                           [ 80%]
+tests/test_pipeline.py ....                                                                                          [ 84%]
+tests/test_singleview_from_multiview.py ....                                                                         [ 88%]
+tests/test_triangulation_consistency.py ............                                                                 [100%]
+
+===================================================== warnings summary =====================================================
+../../../../project1/cias-7/anouar1/conda_envs/pytorch3d/lib/python3.10/pickle.py:329
+  /p/project1/cias-7/anouar1/conda_envs/pytorch3d/lib/python3.10/pickle.py:329: DeprecationWarning: numpy.core.numeric is deprecated and has been renamed to numpy._core.numeric. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core.numeric._frombuffer.
+    obj = getattr(obj, subpath)
+
+tests/test_triangulation_consistency.py::TestTriangulateJointsDLT::test_perfect_cameras_recover_joints
+  /p/scratch/share/anouar1/SMILify/smal_model/smal_torch.py:32: DeprecationWarning: numpy.core.numeric is deprecated and has been renamed to numpy._core.numeric. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core.numeric._frombuffer.
+    return super().find_class(module, name)
+
+tests/test_triangulation_consistency.py::TestTriangulateJointsDLT::test_perfect_cameras_recover_joints
+  /p/scratch/share/anouar1/SMILify/smal_model/batch_lbs.py:25: DeprecationWarning: __array__ implementation doesn't accept a copy keyword, so passing copy=False failed. __array__ must implement 'dtype' and 'copy' keyword arguments. To learn more, see the migration guide https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword
+    res[np.array(indices.flatten())] = updates
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================== 98 passed, 6 skipped, 3 warnings in 108.26s (0:01:48) ===================================
