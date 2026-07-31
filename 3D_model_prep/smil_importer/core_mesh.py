@@ -227,25 +227,39 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
 
         pbone = pose_bones.get(bone.name)
         if pbone is not None:
-            # A muted constraint is not authoritative: skip it so the IK
-            # fallback below still applies. This matches the viewport
-            # visualizer (3D_model_prep/joint_rot_limit_vis.py), which also
-            # ignores muted constraints.
+            # Pick the first enabled (non-muted) LOCAL-space Limit Rotation
+            # constraint — the SAME predicate the viewport visualizer uses
+            # (smil_importer/visualization.py, 3D_model_prep/joint_rot_limit_vis.py),
+            # so preview and export always select the same constraint. Issue #56
+            # (review): the exporter previously took the first non-muted
+            # constraint of ANY space and, if it was non-LOCAL, discarded it
+            # without considering later LOCAL ones — so a stack like
+            # [WORLD, LOCAL] exported the IK/default fallback while the
+            # visualizer drew the LOCAL constraint's wedges.
             limit_con = next(
-                (c for c in pbone.constraints if c.type == "LIMIT_ROTATION" and not c.mute),
+                (
+                    c
+                    for c in pbone.constraints
+                    if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space == "LOCAL"
+                ),
                 None,
             )
-            if limit_con is not None and limit_con.owner_space != "LOCAL":
-                # The remap assumes bone-local authoring (Blender's default).
-                # A WORLD/CUSTOM-space constraint would be remapped silently
-                # wrong, so it is ignored in favour of the IK/default fallback.
-                warnings.warn(
-                    f"Joint-limit export: bone '{bone.name}' has a Limit Rotation "
-                    f"constraint with owner_space='{limit_con.owner_space}'; only "
-                    "'LOCAL' is supported. Constraint ignored - falling back to "
-                    "IK limits / default range."
-                )
-                limit_con = None
+            if limit_con is None:
+                # Non-LOCAL constraints cannot be used (the remap assumes
+                # bone-local authoring, Blender's default); warn if any were
+                # skipped so the IK/default fallback is not a silent surprise.
+                skipped_spaces = [
+                    c.owner_space
+                    for c in pbone.constraints
+                    if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space != "LOCAL"
+                ]
+                if skipped_spaces:
+                    warnings.warn(
+                        f"Joint-limit export: bone '{bone.name}' has Limit Rotation "
+                        f"constraint(s) with owner_space={skipped_spaces}; only "
+                        "'LOCAL' is supported. Skipped - falling back to "
+                        "IK limits / default range."
+                    )
             if limit_con is not None:
                 if limit_con.use_limit_x:
                     lo[0], hi[0] = limit_con.min_x, limit_con.max_x
