@@ -149,7 +149,23 @@ The `.pkl` stores **radians**: −90° appears as `-1.5708`, and unconstrained a
 ## 9. Use the limits
 
 - **Optimisation fitter:** point `config.SMAL_FILE` at your exported `.pkl` and run with the limit weight on (`w_limit > 0`). Nothing else to configure.
-- **Neural training (optional):** add `"joint_limit_regularization": 1e-3` (start small) to `loss_weights` in your training config. Default is `0.0` = off. If you enable it and the model has no usable `joint_limits`, training stops with a clear error instead of silently ignoring it.
+- **Neural training (optional):** add `"joint_limit_regularization": 1e-3` (start small) to the **`base_weights` dict inside `loss_curriculum`** in your JSON training config — the same nested path for both single-view and multi-view configs (see `smal_fitter/neuralSMIL/configs/examples/`):
+
+  ```json
+  {
+    "mode": "singleview",
+    "loss_curriculum": {
+      "base_weights": {
+        "joint_limit_regularization": 1e-3,
+        "...": "other weights unchanged"
+      }
+    }
+  }
+  ```
+
+  (For multi-view, only `"mode": "multiview"` differs. You can also raise/lower the weight per epoch via `loss_curriculum.curriculum_stages`; legacy multi-view configs that pass a flat `loss_weights` dict can put the key there instead.)
+
+  Default is `0.0` = off. If the weight is anywhere > 0 in your curriculum and the model has no usable `joint_limits`, training stops at model construction with a clear error instead of silently ignoring it.
 
 
 
