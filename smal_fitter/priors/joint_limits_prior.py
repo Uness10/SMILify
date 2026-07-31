@@ -48,7 +48,15 @@ def _ranges_from_joint_limits(dd, default_range=np.pi):
 
 
 if config.ignore_hardcoded_body:
-    Ranges = _ranges_from_joint_limits(config.dd)
+    # Issue #56 (review): never build/validate ranges at import time. A malformed
+    # 'joint_limits' in the loaded .pkl used to crash *every* entry point that
+    # transitively imported this module — even runs with the limit loss disabled
+    # (e.g. neural training at the default weight 0.0). LimitPrior.__init__
+    # rebuilds ranges from the current config.dd anyway (an import-time build
+    # could also be stale after apply_smal_file_override), and nothing else
+    # reads module-level Ranges in this mode, so validation now happens only
+    # when the prior is actually constructed.
+    Ranges = None
 else:
     Ranges = {
         "pelvis": [[0, 0], [0, 0], [0, 0]],
