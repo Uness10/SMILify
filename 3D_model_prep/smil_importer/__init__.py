@@ -70,10 +70,17 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.smpl_tool = bpy.props.PointerProperty(type=properties.SMPLProperties)
+    # Issue #56 (review): the overlay checkbox is a Scene property (saved in
+    # the .blend) but the draw handler is session state. Install a load_post
+    # handler so the overlay is restored when a file is opened, and sync the
+    # already-loaded scene now (covers add-on re-enable mid-session).
+    visualization.register_handlers()
 
 
 def unregister():
-    # Remove any active viewport overlay before classes disappear.
+    # Remove the load_post handler and any active viewport overlay before
+    # classes disappear.
+    visualization.unregister_handlers()
     visualization.disable_overlay()
 
     # Clean up temporary files written by operators.

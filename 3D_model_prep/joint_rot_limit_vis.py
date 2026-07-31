@@ -63,8 +63,22 @@ def wedge(centre, ref, sweep, a0, a1, r):
 
 
 def draw():
+    # Save the GPU state this handler touches and restore it in a try/finally,
+    # so later POST_VIEW handlers never inherit our blend/depth state — even if
+    # an exception fires mid-loop (issue #56 review; kept in sync with
+    # smil_importer/visualization.py).
+    prev_blend = gpu.state.blend_get()
+    prev_depth = gpu.state.depth_test_get()
     gpu.state.blend_set("ALPHA")
     gpu.state.depth_test_set("NONE")  # always on top
+    try:
+        _draw_wedges()
+    finally:
+        gpu.state.blend_set(prev_blend)
+        gpu.state.depth_test_set(prev_depth)
+
+
+def _draw_wedges():
     for obj in bpy.context.scene.objects:
         if obj.type != "ARMATURE":
             continue
@@ -101,7 +115,6 @@ def draw():
                 shader.bind()
                 shader.uniform_float("color", COLOUR[axis])
                 batch.draw(shader)
-    gpu.state.blend_set("NONE")
 
 
 # Swap out any handler left by a previous run, then register a fresh one.

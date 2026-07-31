@@ -71,8 +71,24 @@ def _wedge(centre, ref, sweep, a0, a1, r):
 
 def _draw():
     shader = _get_shader()
+    # Issue #56 (review): save the GPU state this handler touches and restore
+    # it in a try/finally. Previously depth_test was never restored and blend
+    # was reset to a hard-coded "NONE" (not the prior state), so any POST_VIEW
+    # handler running after this one inherited broken state — and an exception
+    # mid-loop skipped the restore entirely, leaking ALPHA blending for the
+    # rest of the redraw.
+    prev_blend = gpu.state.blend_get()
+    prev_depth = gpu.state.depth_test_get()
     gpu.state.blend_set("ALPHA")
     gpu.state.depth_test_set("NONE")  # always on top
+    try:
+        _draw_wedges(shader)
+    finally:
+        gpu.state.blend_set(prev_blend)
+        gpu.state.depth_test_set(prev_depth)
+
+
+def _draw_wedges(shader):
     for obj in bpy.context.scene.objects:
         if obj.type != "ARMATURE":
             continue
@@ -109,7 +125,6 @@ def _draw():
                 shader.bind()
                 shader.uniform_float("color", COLOUR[axis])
                 batch.draw(shader)
-    gpu.state.blend_set("NONE")
 
 
 def _tag_redraw_all_view3d():
@@ -144,3 +159,45 @@ def toggle_overlay_update(self, context):
         enable_overlay()
     else:
         disable_overlay()
+
+
+def _sync_overlay_to_property():
+    """Align the draw-handler state with the saved checkbox (issue #56 review).
+
+    ``show_joint_limit_overlay`` is a Scene property, so it is saved in the
+    ``.blend`` — but the draw handler is session state and is not. Without this
+    sync, opening a file saved with the checkbox ON shows a ticked checkbox
+    that draws nothing, and disabling/re-enabling the add-on mid-session
+    desyncs checkbox and handler.
+    """
+    if bpy.app.background:
+        return  # no viewport; gpu draw handlers are pointless/unavailable
+    scene = getattr(bpy.context, "scene", None)
+    tool = getattr(scene, "smpl_tool", None) if scene is not None else None
+    if tool is None:
+        return
+    if tool.show_joint_limit_overlay:
+        enable_overlay()
+    else:
+        disable_overlay()
+
+
+@bpy.app.handlers.persistent
+def _load_post_restore_overlay(_filepath):
+    """load_post handler: restore the overlay after opening a .blend."""
+    _sync_overlay_to_property()
+
+
+def register_handlers():
+    """Called from the add-on's register(): install the load_post handler and
+    recover the overlay state for the already-loaded scene (covers disabling
+    and re-enabling the add-on mid-session)."""
+    if _load_post_restore_overlay not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_load_post_restore_overlay)
+    _sync_overlay_to_property()
+
+
+def unregister_handlers():
+    """Called from the add-on's unregister(): remove the load_post handler."""
+    if _load_post_restore_overlay in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_load_post_restore_overlay)
