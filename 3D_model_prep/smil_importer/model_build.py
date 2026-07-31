@@ -473,6 +473,13 @@ def export_smpl_model(obj, export_path, pkl_data=None):
             default_range=bpy.context.scene.smpl_tool.joint_limit_default_range,
         )[1]
         print("joint_limits:", pkl_data["joint_limits"].shape)
+    else:
+        # Issue #56 (review): pkl_data is the embedded copy of the originally
+        # loaded .pkl, so without this a stale 'joint_limits' from that source
+        # file would silently round-trip into the new export — misaligned with
+        # any armature edits made since (added/removed/reordered bones).
+        if pkl_data.pop("joint_limits", None) is not None:
+            print("Export Joint Limits is unticked: dropped stale 'joint_limits' inherited from the loaded .pkl")
 
     # Check if model has static joint locations
     if obj.get("static_joint_locs", False) or bpy.context.scene.smpl_tool.force_static_joint_locs:
