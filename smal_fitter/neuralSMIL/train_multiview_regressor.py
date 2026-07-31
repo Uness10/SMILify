@@ -2450,6 +2450,18 @@ def main(config: dict):
     if rank == 0 and allow_mesh_scaling:
         print(f"Mesh scaling enabled with init={mesh_scale_init}")
 
+    # Issue #56 (review): resolve whether the joint-limit penalty is ever active
+    # anywhere in the loss curriculum (file-provided base weights + curriculum
+    # stages), so the model validates its limit set at construction time
+    # (fail-fast) instead of raising inside the per-batch try/except of
+    # train_epoch, where the error would print-and-skip every batch.
+    _base_loss_weights = config.get("loss_weights") or TrainingConfig.LOSS_CURRICULUM["base_weights"]
+    joint_limit_reg_weight = float(_base_loss_weights.get("joint_limit_regularization", 0.0))
+    for _epoch_threshold, _weight_updates in TrainingConfig.LOSS_CURRICULUM["curriculum_stages"]:
+        joint_limit_reg_weight = max(
+            joint_limit_reg_weight, float(_weight_updates.get("joint_limit_regularization", 0.0))
+        )
+
     model = create_multiview_regressor(
         device=device,
         batch_size=config["batch_size"],
@@ -2473,6 +2485,9 @@ def main(config: dict):
         use_gt_camera_init=config.get("use_gt_camera_init", False),
         transformer_config=config.get("transformer_config", {}),
         backbone_chunk_size=config.get("backbone_chunk_size", None),
+        # Max curriculum weight of the issue-#56 penalty; > 0 triggers fail-fast
+        # validation of the model's joint_limits at construction (see above).
+        joint_limit_regularization=joint_limit_reg_weight,
     )
 
     model = model.to(device)

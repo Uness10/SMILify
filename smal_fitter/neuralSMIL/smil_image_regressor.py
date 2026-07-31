@@ -125,6 +125,7 @@ class SMILImageRegressor(SMALFitter):
         allow_mesh_scaling=False,
         mesh_scale_init=1.0,
         fixed_camera=False,
+        joint_limit_regularization=0.0,
     ):
         """
         Initialize the SMIL Image Regressor.
@@ -147,6 +148,11 @@ class SMILImageRegressor(SMALFitter):
             scale_trans_mode: Mode for handling scale/translation betas ('ignore', 'separate', 'entangled_with_betas')
             allow_mesh_scaling: If True, predict a global mesh scale factor (default: False)
             mesh_scale_init: Initial value for mesh scale (default: 1.0 = no scaling)
+            joint_limit_regularization: Maximum weight the joint-limit penalty will
+                ever take during training (issue #56). If > 0, the per-joint limit
+                set is validated here at construction time and a broken/missing set
+                raises immediately (fail-fast), instead of raising per-batch inside
+                the trainers' exception handlers where it would be swallowed.
         """
         # For rgb_only=True, SMALFitter expects data_batch to be just the RGB tensor
         if rgb_only and isinstance(data_batch, tuple):
@@ -202,6 +208,58 @@ class SMILImageRegressor(SMALFitter):
             self._create_transformer_decoder_head()
         else:
             raise ValueError(f"Unsupported head_type: {self.head_type}. Must be 'mlp' or 'transformer_decoder'")
+
+        # Issue #56 (review): fail fast at construction time when the joint-limit
+        # penalty is requested but unusable. Validating here — rather than lazily at
+        # the first batch — means a broken or missing limit set aborts the run with
+        # a clear error instead of being swallowed by the trainers' per-batch
+        # exception handlers (which would skip every batch and "finish" at loss 0).
+        self.joint_limit_regularization = float(joint_limit_regularization)
+        if self.joint_limit_regularization > 0.0:
+            self._init_joint_limit_bounds()
+
+    def _init_joint_limit_bounds(self):
+        """Validate and cache the per-joint rotation bounds for the limit penalty.
+
+        Issue #56 (review): called from ``__init__`` when the penalty can ever be
+        active, and lazily from :meth:`_joint_limit_penalty` as a safety net for
+        models constructed without the ``joint_limit_regularization`` argument.
+        Reuses the ``(N_POSE, 3)`` ``min_limits`` / ``max_limits`` tensors the
+        parent ``SMALFitter`` already built (and ``LimitPrior`` validated) at
+        construction.
+
+        Raises:
+            RuntimeError: if the penalty cannot do anything useful — legacy
+                hardcoded-body mode (no per-model limits), a model ``.pkl``
+                without an authored ``'joint_limits'`` key (the wide-open
+                fallback would make the penalty a silent no-op despite a
+                positive weight), or missing parent bound tensors.
+        """
+        if not config.ignore_hardcoded_body:
+            raise RuntimeError(
+                "joint_limit_regularization is enabled (weight > 0) but "
+                "config.ignore_hardcoded_body is False: legacy hardcoded-body "
+                "mode carries no per-model joint limits, so the penalty cannot "
+                "be evaluated. Set the weight to 0 or use a rigged model .pkl."
+            )
+        if "joint_limits" not in config.dd:
+            raise RuntimeError(
+                "joint_limit_regularization is enabled (weight > 0) but the model "
+                ".pkl has no 'joint_limits' key: the wide-open fallback bounds "
+                "would make the penalty a guaranteed no-op. Author limits in "
+                "Blender and re-export (see docs/joint_limits_user_guide.md), or "
+                "set the weight to 0."
+            )
+        if not (hasattr(self, "min_limits") and hasattr(self, "max_limits")):
+            raise RuntimeError(
+                "joint_limit_regularization is enabled (weight > 0) but the "
+                "(min_limits, max_limits) tensors were not built by SMALFitter: "
+                f"the per-joint limit set for N_POSE={config.N_POSE} joints could "
+                "not be loaded from the model .pkl."
+            )
+        # (N_POSE, 3) tensors, already on self.device; broadcast over the batch
+        # in _joint_limit_penalty.
+        self._joint_limit_bounds = (self.min_limits, self.max_limits)
 
     def _calculate_output_dims(self):
         """Calculate the output dimensions for each SMIL parameter group."""
@@ -1300,30 +1358,13 @@ class SMILImageRegressor(SMALFitter):
             Scalar tensor.
 
         Raises:
-            RuntimeError: if the limit set cannot be loaded or reshaped. Callers only
-                invoke this when the loss weight is > 0, so a broken limit set must
-                fail loudly instead of silently training against nothing.
+            RuntimeError: if the limit set is unusable (see
+                :meth:`_init_joint_limit_bounds`). Normally this is already raised
+                at construction time; the lazy call below is a safety net for
+                models built without the ``joint_limit_regularization`` argument.
         """
         if not hasattr(self, "_joint_limit_bounds"):
-            try:
-                from smal_fitter.priors.joint_limits_prior import LimitPrior
-
-                _lp = LimitPrior()
-                _n = config.N_POSE
-                _min = np.asarray(_lp.min_values[3:], dtype=np.float32).reshape(_n, 3)
-                _max = np.asarray(_lp.max_values[3:], dtype=np.float32).reshape(_n, 3)
-                # Cache as (N_POSE, 3) tensors; broadcast over the batch below.
-                self._joint_limit_bounds = (
-                    torch.tensor(_min, device=self.device),
-                    torch.tensor(_max, device=self.device),
-                )
-            except Exception as e:
-                raise RuntimeError(
-                    "joint_limit_regularization is enabled (weight > 0) but the "
-                    "per-joint rotation limits could not be loaded from the model "
-                    ".pkl ('joint_limits' key, expected to yield per-axis bounds "
-                    f"for N_POSE={config.N_POSE} joints): {e}"
-                ) from e
+            self._init_joint_limit_bounds()
         min_lim, max_lim = self._joint_limit_bounds
 
         if self.rotation_representation == "6d":

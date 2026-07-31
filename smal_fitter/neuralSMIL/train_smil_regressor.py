@@ -1845,6 +1845,19 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             f"Using input resolution: {input_resolution}x{input_resolution} (backbone: {model_config['backbone_name']})"
         )
 
+    # Issue #56 (review): resolve whether the joint-limit penalty is ever active
+    # anywhere in the loss curriculum, so the model can validate its limit set at
+    # construction time (fail-fast). Raising later, inside the per-batch
+    # try/except of train_epoch, would print-and-skip every batch and let the
+    # epoch "complete" at loss 0.0.
+    joint_limit_reg_weight = float(
+        TrainingConfig.LOSS_CURRICULUM["base_weights"].get("joint_limit_regularization", 0.0)
+    )
+    for _epoch_threshold, _weight_updates in TrainingConfig.LOSS_CURRICULUM["curriculum_stages"]:
+        joint_limit_reg_weight = max(
+            joint_limit_reg_weight, float(_weight_updates.get("joint_limit_regularization", 0.0))
+        )
+
     model = SMILImageRegressor(
         device=device,
         data_batch=placeholder_data,
@@ -1870,6 +1883,9 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
         # size and the metric 3D; compatible with fixed_camera).
         allow_mesh_scaling=allow_mesh_scaling,
         mesh_scale_init=mesh_scale_init,
+        # Max curriculum weight of the issue-#56 penalty; > 0 triggers fail-fast
+        # validation of the model's joint_limits at construction (see above).
+        joint_limit_regularization=joint_limit_reg_weight,
     ).to(device)
 
     # Print model configuration
