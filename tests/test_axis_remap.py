@@ -10,7 +10,6 @@ import importlib.util
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 # Load smil_importer/axis_remap.py in isolation (no package __init__ -> no bpy).
 _MODULE_PATH = Path(__file__).resolve().parents[1] / "3D_model_prep" / "smil_importer" / "axis_remap.py"
@@ -86,13 +85,33 @@ def test_b_a_1_asymmetric_swaps_and_sign_flips():
     assert np.allclose(mhi, [0.79, 0.0, 0.3491])
 
 
-def test_mixed_axis_falls_back_verbatim_and_warns():
+def test_mixed_axis_falls_back_verbatim_and_logs_when_authored():
+    # Issue #56 review: the caveat goes through a plain `log` callable (default
+    # print) instead of warnings.warn, so it is visible on EVERY export instead
+    # of being deduped per session — and it fires only for authored limits.
     c = np.cos(np.pi / 4)
     R = np.array([[c, -c, 0.0], [c, c, 0.0], [0.0, 0.0, 1.0]])
     lo, hi = [-0.1, -0.2, -0.3], [0.4, 0.5, 0.6]
-    with pytest.warns(UserWarning, match="mixed-axis"):
-        mlo, mhi = remap_bounds_to_model_frame(R, lo, hi, "skew")
+
+    messages = []
+    mlo, mhi = remap_bounds_to_model_frame(R, lo, hi, "skew", authored=True, log=messages.append)
     assert mlo == lo and mhi == hi
+    assert len(messages) == 1 and "mixed-axis" in messages[0] and "skew" in messages[0]
+
+    # Repeated calls keep logging (no warnings-module dedupe).
+    remap_bounds_to_model_frame(R, lo, hi, "skew", authored=True, log=messages.append)
+    assert len(messages) == 2
+
+
+def test_mixed_axis_is_silent_for_unauthored_default_bounds():
+    c = np.cos(np.pi / 4)
+    R = np.array([[c, -c, 0.0], [c, c, 0.0], [0.0, 0.0, 1.0]])
+    lo, hi = [-np.pi, -np.pi, -np.pi], [np.pi, np.pi, np.pi]
+
+    messages = []
+    mlo, mhi = remap_bounds_to_model_frame(R, lo, hi, "organic", authored=False, log=messages.append)
+    assert mlo == lo and mhi == hi
+    assert messages == []
 
 
 def test_remap_preserves_box_membership_property():

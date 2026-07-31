@@ -21,8 +21,6 @@ swapping/negating the sign-flipped axes. For a genuinely rotated (mixed-axis)
 bounds verbatim and warn (the bounded issue-#56 caveat).
 """
 
-import warnings
-
 import numpy as np
 
 
@@ -52,14 +50,25 @@ def is_signed_permutation(B, atol=1e-3):
     )
 
 
-def remap_bounds_to_model_frame(B, lo, hi, bone_name=""):
+def remap_bounds_to_model_frame(B, lo, hi, bone_name="", authored=True, log=print):
     """Re-express per-axis bone-local limits ``lo``/``hi`` in the model frame.
 
     For a signed-permutation ``B``, model axis ``m`` equals exactly one bone-local
     axis ``k`` (optionally negated): a ``+`` keeps ``[lo_k, hi_k]``, a ``-`` gives
     ``[-hi_k, -lo_k]``. Identity ``B`` is a no-op. A mixed-axis ``B`` cannot be
     represented as a per-axis box, so the verbatim bounds are returned and a
-    warning is emitted.
+    message is emitted — but only when the bounds were actually authored.
+
+    Issue #56 (review): the message used to be a ``warnings.warn`` fired for
+    EVERY bone with a non-signed-permutation rest orientation. On organically
+    rigged models that meant a wall of warnings on the first export (one per
+    bone, even for untouched wide-open defaults where the caveat is
+    irrelevant) — and then *silence* on every later export in the same Blender
+    session, because the ``warnings`` module dedupes per location. Now:
+
+    - ``authored=False`` (untouched defaults) emits nothing;
+    - the message goes through ``log`` (default ``print``), so every export is
+      individually visible in the console. Pass ``log=None`` to silence.
 
     Returns ``(model_lo, model_hi)`` as plain 3-element lists.
     """
@@ -67,13 +76,13 @@ def remap_bounds_to_model_frame(B, lo, hi, bone_name=""):
     if np.allclose(B, np.eye(3), atol=1e-3):
         return list(lo), list(hi)
     if not is_signed_permutation(B):
-        warnings.warn(
-            f"Bone '{bone_name}': rest orientation is a mixed-axis rotation, so its "
-            f"bone-local rotation limits cannot be expressed as an axis-aligned box "
-            f"in the model frame. Exporting the bounds verbatim; the fitter will treat "
-            f"them as approximate model-frame bounds (issue #56 caveat).",
-            stacklevel=2,
-        )
+        if authored and log is not None:
+            log(
+                f"Joint-limit export: bone '{bone_name}': rest orientation is a mixed-axis "
+                f"rotation, so its bone-local rotation limits cannot be expressed as an "
+                f"axis-aligned box in the model frame. Exporting the bounds verbatim; the "
+                f"fitter will treat them as approximate model-frame bounds (issue #56 caveat)."
+            )
         return list(lo), list(hi)
 
     mlo = [0.0, 0.0, 0.0]

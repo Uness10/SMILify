@@ -224,6 +224,11 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
     for i, bone in enumerate(bones):
         lo = [-float(default_range)] * 3
         hi = [float(default_range)] * 3
+        # True when this bone's bounds come from a user-authored source (Limit
+        # Rotation constraint or IK limits/locks) rather than the wide-open
+        # default — used to keep the mixed-axis remap caveat quiet for bones
+        # where it is irrelevant (issue #56 review).
+        authored = False
 
         pbone = pose_bones.get(bone.name)
         if pbone is not None:
@@ -275,6 +280,7 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
                         "IK limits / default range."
                     )
             if limit_con is not None:
+                authored = True
                 if limit_con.use_limit_x:
                     lo[0], hi[0] = limit_con.min_x, limit_con.max_x
                 if limit_con.use_limit_y:
@@ -283,6 +289,14 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
                     lo[2], hi[2] = limit_con.min_z, limit_con.max_z
             else:
                 # Fall back to IK rotation limits / locks.
+                authored = (
+                    pbone.lock_ik_x
+                    or pbone.use_ik_limit_x
+                    or pbone.lock_ik_y
+                    or pbone.use_ik_limit_y
+                    or pbone.lock_ik_z
+                    or pbone.use_ik_limit_z
+                )
                 if pbone.lock_ik_x:
                     lo[0] = hi[0] = 0.0
                 elif pbone.use_ik_limit_x:
@@ -301,7 +315,7 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
         # compares against (issue #56). B's columns are the bone-local axes in
         # model coordinates; a signed-permutation B just permutes/flips axes.
         B = _rot3(bone.matrix_local)
-        lo, hi = _remap_bounds_to_model_frame(B, lo, hi, bone.name)
+        lo, hi = _remap_bounds_to_model_frame(B, lo, hi, bone.name, authored=authored)
 
         limits[i, :, 0] = lo
         limits[i, :, 1] = hi
