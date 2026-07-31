@@ -77,10 +77,14 @@ def _draw():
         if obj.type != "ARMATURE":
             continue
         for pb in obj.pose.bones:
-            # Same selection rule as the exporter: first enabled (non-muted),
-            # local-space Limit Rotation constraint.
+            # Same selection rule as the exporter: first enabled (non-muted,
+            # influence > 0), local-space Limit Rotation constraint.
             con = next(
-                (c for c in pb.constraints if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space == "LOCAL"),
+                (
+                    c
+                    for c in pb.constraints
+                    if c.type == "LIMIT_ROTATION" and not c.mute and c.influence > 0.0 and c.owner_space == "LOCAL"
+                ),
                 None,
             )
             if con is None:

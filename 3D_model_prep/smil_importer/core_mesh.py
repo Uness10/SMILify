@@ -240,10 +240,24 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
                 (
                     c
                     for c in pbone.constraints
-                    if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space == "LOCAL"
+                    if c.type == "LIMIT_ROTATION" and not c.mute and c.influence > 0.0 and c.owner_space == "LOCAL"
                 ),
                 None,
             )
+            if limit_con is not None and limit_con.influence < 1.0:
+                # Issue #56 (review): a partial-influence Limit Rotation is a
+                # soft constraint in Blender (the pose is only blended toward
+                # the clamped rotation), so it defines no hard bound at all.
+                # The authored range is still exported as HARD limits — warn so
+                # the user knows the .pkl is stricter than the viewport
+                # behaviour. influence == 0.0 is treated like a muted
+                # constraint (skipped by the predicate above).
+                warnings.warn(
+                    f"Joint-limit export: bone '{bone.name}' has a Limit Rotation "
+                    f"constraint with influence={limit_con.influence:.2f} < 1.0 (a "
+                    "soft constraint). Its range is exported as hard limits; set "
+                    "influence to 1.0 to silence this warning."
+                )
             if limit_con is None:
                 # Non-LOCAL constraints cannot be used (the remap assumes
                 # bone-local authoring, Blender's default); warn if any were
