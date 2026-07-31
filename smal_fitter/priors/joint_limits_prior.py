@@ -1,3 +1,18 @@
+"""Per-joint rotation-limit prior (issue #56).
+
+Bounds are interpreted per axis in the AXIS-ANGLE space of ``joint_rotations``.
+Note the representation caveat (issue #56 review): axis-angle rotations have a
+canonical magnitude of at most pi, so independent per-axis bounds are
+mathematically non-unique for |theta| > pi — a "270 degree" rotation about an
+axis is the same physical rotation as -90 degrees about it, and the hinge loss
+will accept whichever representation the pose happens to use. Author limits
+within [-pi, +pi] per axis (Blender's Limit Rotation UI maps onto this
+directly); exactly +/-pi means "free". Nothing is clamped incorrectly at the
++/-pi boundary itself — the hinge is exactly 0 there.
+See docs/joint_limits_user_guide.md (section 2 caveat) for the author-facing
+explanation.
+"""
+
 import numpy as np
 import config
 

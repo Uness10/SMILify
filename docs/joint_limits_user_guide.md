@@ -24,6 +24,8 @@ Every joint can rotate around three axes — **X, Y, Z** — and each axis gets 
 
 **Which direction is "positive"?** That depends on the bone's own local axes — every bone carries its own little XYZ frame. Before typing numbers, always *look* at the bone's axes and *test-rotate* it (§4). Never guess the sign.
 
+> ⚠️ **Caveat — very large ranges (beyond ±180°).** You author limits as Euler angles in Blender, but the fitter and the neural penalty compare them against the pose's **axis-angle** components. An axis-angle rotation has a canonical magnitude of at most 180° (|θ| ≤ π): a rotation "authored" as 270° about an axis is the same physical rotation as −90° about it, so per-axis bounds beyond ±180° are mathematically non-unique and the optimiser/network will happily satisfy them via the equivalent smaller rotation. In practice: keep each `[Min, Max]` within **−180°…+180°** per axis; ranges at exactly ±180° are fine (they mean "free"). This is a representation caveat, not a bug — nothing is clamped incorrectly at ±180°.
+
 ![SCREENSHOT 01 — Bone local axes](design/images/01_bone_local_axes.png)
 > 📷 **SCREENSHOT 01**: Pose Mode on the ant model, bone `w_1_l` selected (highlighted teal, right of the body). Per-bone axes are displayed: each bone carries small labelled axis lines (you can read the `X` and `Z` letters at the bone tails). The panel on the right is the armature's **Object Data Properties → Viewport Display**, with **Axes** ticked — that checkbox is what draws them.
 
