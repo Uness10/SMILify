@@ -6,6 +6,8 @@ Uses a frozen ResNet152 backbone as feature extractor and fully connected layers
 for parameter regression.
 """
 
+import warnings
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -233,7 +235,9 @@ class SMILImageRegressor(SMALFitter):
                 hardcoded-body mode (no per-model limits), a model ``.pkl``
                 without an authored ``'joint_limits'`` key (the wide-open
                 fallback would make the penalty a silent no-op despite a
-                positive weight), or missing parent bound tensors.
+                positive weight), missing parent bound tensors, or an authored
+                limit set that is wide open on every joint/axis while the model
+                predicts 6D rotations (see :meth:`_check_bounds_can_bite`).
         """
         if not config.ignore_hardcoded_body:
             raise RuntimeError(
@@ -259,7 +263,72 @@ class SMILImageRegressor(SMALFitter):
             )
         # (N_POSE, 3) tensors, already on self.device; broadcast over the batch
         # in _joint_limit_penalty.
+        SMILImageRegressor._check_bounds_can_bite(
+            self.min_limits, self.max_limits, getattr(self, "rotation_representation", None)
+        )
         self._joint_limit_bounds = (self.min_limits, self.max_limits)
+
+    # "Free" in LimitPrior is exactly +/-pi (the no-key fallback and an authored
+    # +/-180 deg both land there); float32 round-trip nudges it by ~1e-7, so the
+    # comparison needs a little slack.
+    _WIDE_OPEN_ATOL = 1e-4
+
+    @staticmethod
+    def _check_bounds_can_bite(min_lim, max_lim, rotation_representation):
+        """Reject/flag a limit set that is wide open on every joint and axis.
+
+        Issue #56 (review, follow-up to C1): the presence of a ``'joint_limits'``
+        key is not by itself proof that the penalty can ever be non-zero. A set
+        left at ``[-pi, +pi]`` everywhere (nobody authored a constraint, or every
+        axis was ticked at the full +/-180 deg, which the guide defines as
+        "free") gives a hinge that only fires for rotation components beyond
+        +/-pi. That distinction matters per representation:
+
+        - **6D**: ``rotation_6d_to_axis_angle`` goes through
+          ``matrix_to_axis_angle``, which returns the canonical axis-angle
+          (``|theta| <= pi``), so every component is inside ``[-pi, +pi]`` and
+          the penalty is *provably* zero for every possible prediction. A
+          positive weight can never do anything — raise, matching the fail-fast
+          contract documented in the user guide.
+        - **axis-angle**: the network's raw output is unconstrained, so the
+          hinge can still fire — but only past ``|theta| > pi``, exactly the
+          representation-ambiguous regime the user guide tells authors to stay
+          out of. That is a legitimate (if unusual) "keep rotations canonical"
+          regulariser rather than a no-op, so warn instead of raising.
+
+        A partially authored set (some joints constrained, the rest left wide
+        open) is the normal case and passes untouched.
+
+        Static (and called through the class) so the check runs identically on a
+        lightweight stub in the tests, which has no bound methods.
+        """
+        pi = float(np.pi)
+        atol = SMILImageRegressor._WIDE_OPEN_ATOL
+        wide_open = bool(torch.all(min_lim <= -pi + atol).item() and torch.all(max_lim >= pi - atol).item())
+        if not wide_open:
+            return
+
+        if rotation_representation == "6d":
+            raise RuntimeError(
+                "joint_limit_regularization is enabled (weight > 0) but every joint/axis "
+                "of the model's 'joint_limits' is wide open ([-pi, +pi] = free). With "
+                "rotation_representation='6d' the predicted rotations are converted to "
+                "canonical axis-angle (|theta| <= pi), so the hinge is provably zero for "
+                "every possible prediction — the penalty would train as a silent no-op. "
+                "Author real limits in Blender and re-export (see "
+                "docs/joint_limits_user_guide.md), or set the weight to 0."
+            )
+        warnings.warn(
+            "joint_limit_regularization is enabled (weight > 0) but every joint/axis of "
+            "the model's 'joint_limits' is wide open ([-pi, +pi] = free). In axis-angle "
+            "mode the penalty can then only fire for rotation components beyond +/-pi, "
+            "i.e. it acts purely as a 'keep rotations canonical' regulariser and "
+            "enforces no authored pose limits. Author real limits in Blender and "
+            "re-export (see docs/joint_limits_user_guide.md) if that is not what you "
+            "intended.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     def _calculate_output_dims(self):
         """Calculate the output dimensions for each SMIL parameter group."""

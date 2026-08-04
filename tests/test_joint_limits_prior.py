@@ -9,8 +9,9 @@ Covers the parts that do NOT need Blender:
 - The fitter's hinge loss (flat inside the range, linear past it): zero
   in-range, positive on violation, gradient pulls back toward the range.
 - The neural regressors' ``joint_limit_regularization`` penalty: same hinge
-  through the real 6D → axis-angle conversion, and verifiably off by default
-  (weight 0.0) in both regressors.
+  through the real 6D → axis-angle conversion, verifiably off by default
+  (weight 0.0) in both regressors, and fail-fast validation at construction —
+  including the wide-open-authored-set guard, which is a provable no-op in 6D.
 
 The Blender-side export helper is covered by ``tests/test_axis_remap.py`` (the
 bpy-free remap math) and manually per ``docs/design/issue56_implementation.md``.
@@ -18,6 +19,7 @@ bpy-free remap math) and manually per ``docs/design/issue56_implementation.md``.
 
 import os
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -273,6 +275,54 @@ def test_neural_penalty_fail_fast_validation():
             config.dd["joint_limits"] = prev
         else:
             config.dd.pop("joint_limits", None)
+
+
+@pytest.mark.slow
+def test_neural_penalty_rejects_wide_open_authored_limits():
+    """Issue #56 review C1 (third sub-point): an authored 'joint_limits' key is
+    not proof the penalty can bite. A set left wide open on EVERY joint/axis is a
+    guaranteed no-op in 6D (canonical axis-angle keeps |theta| <= pi), so it must
+    raise; in axis-angle mode it can still fire past +/-pi, so it only warns."""
+    import types
+
+    from smal_fitter.neuralSMIL.smil_image_regressor import SMILImageRegressor
+
+    n_joints = len(config.dd["J_names"])
+
+    # Authored, but every axis at the full +/-180 deg == "free".
+    jl_open = np.zeros((n_joints, 3, 2), dtype=np.float32)
+    jl_open[..., 0], jl_open[..., 1] = -np.pi, np.pi
+    open_min, open_max = _fitter_limit_tensors(_fresh_limit_prior(jl_open))
+
+    # 6D: provably zero for every possible prediction -> hard error.
+    with pytest.raises(RuntimeError, match="wide open"):
+        SMILImageRegressor._check_bounds_can_bite(open_min, open_max, "6d")
+
+    # Sanity-check the "provably zero" claim the error message rests on.
+    six = torch.zeros(2, config.N_POSE, 6)
+    six[..., 0], six[..., 4] = 1.0, 1.0
+    stub6 = types.SimpleNamespace(rotation_representation="6d", _joint_limit_bounds=(open_min, open_max))
+    assert float(SMILImageRegressor._joint_limit_penalty(stub6, six)) == 0.0
+
+    # Axis-angle: reachable past +/-pi, so warn rather than raise...
+    with pytest.warns(RuntimeWarning, match="wide open"):
+        SMILImageRegressor._check_bounds_can_bite(open_min, open_max, "axis_angle")
+
+    # ...and it really is reachable there (i.e. warning, not error, is right).
+    stub_aa = types.SimpleNamespace(rotation_representation="axis_angle", _joint_limit_bounds=(open_min, open_max))
+    jr = torch.zeros(2, config.N_POSE, 3)
+    jr[:, 1, 0] = np.pi + 0.5
+    assert float(SMILImageRegressor._joint_limit_penalty(stub_aa, jr)) > 0.0
+
+    # A partially authored set (one joint constrained, rest free) is the normal
+    # case: no error and no warning, in either representation.
+    jl_partial = jl_open.copy()
+    jl_partial[1, 0, 0], jl_partial[1, 0, 1] = -0.5, 0.5
+    part_min, part_max = _fitter_limit_tensors(_fresh_limit_prior(jl_partial))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning fails the test
+        SMILImageRegressor._check_bounds_can_bite(part_min, part_max, "6d")
+        SMILImageRegressor._check_bounds_can_bite(part_min, part_max, "axis_angle")
 
 
 def test_prior_module_import_survives_malformed_joint_limits():
