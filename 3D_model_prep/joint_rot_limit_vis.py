@@ -9,9 +9,10 @@ Run the script again to refresh (it removes the previous overlay so handlers
 do not stack). Restart Blender to clear it entirely.
 
 Notes:
-- Muted constraints and constraints with owner_space != 'LOCAL' are skipped,
-  matching what the SMIL exporter writes into ``joint_limits`` - the overlay
-  is a faithful preview of the export.
+- Muted, influence-0 and owner_space != 'LOCAL' constraints are skipped,
+  matching the SMIL exporter's selection rule - preview and export always
+  agree on WHICH limits apply. Wedges show the authored bone-local angles;
+  the export additionally remaps them into the model frame.
 - Only explicit Limit Rotation constraints are shown; the exporter's IK-limit
   fallback and the wide-open default range are not visualised.
 - Uses only long-stable API (``gpu.shader`` ``UNIFORM_COLOR``,
@@ -80,7 +81,8 @@ def draw():
 
 def _draw_wedges():
     for obj in bpy.context.scene.objects:
-        if obj.type != "ARMATURE":
+        if obj.type != "ARMATURE" or not obj.visible_get():
+            # depth test is off, so hidden rigs would paint over the viewport
             continue
         for pb in obj.pose.bones:
             # Same selection rule as the exporter: first enabled (non-muted,

@@ -5,8 +5,6 @@ register even when scipy is absent. Operators that need it are gated on
 dependencies.dependencies_installed().
 """
 
-import warnings
-
 import bpy
 import numpy as np
 from mathutils import Vector
@@ -253,34 +251,53 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
                 # Issue #56 (review): a partial-influence Limit Rotation is a
                 # soft constraint in Blender (the pose is only blended toward
                 # the clamped rotation), so it defines no hard bound at all.
-                # The authored range is still exported as HARD limits — warn so
-                # the user knows the .pkl is stricter than the viewport
+                # The authored range is still exported as HARD limits — say so,
+                # so the user knows the .pkl is stricter than the viewport
                 # behaviour. influence == 0.0 is treated like a muted
-                # constraint (skipped by the predicate above).
-                warnings.warn(
+                # constraint (skipped by the predicate above). print, not
+                # warnings.warn: the default warning filter dedupes per
+                # session, hiding repeats on re-export.
+                print(
                     f"Joint-limit export: bone '{bone.name}' has a Limit Rotation "
                     f"constraint with influence={limit_con.influence:.2f} < 1.0 (a "
                     "soft constraint). Its range is exported as hard limits; set "
-                    "influence to 1.0 to silence this warning."
+                    "influence to 1.0 to silence this notice."
                 )
             if limit_con is None:
                 # Non-LOCAL constraints cannot be used (the remap assumes
-                # bone-local authoring, Blender's default); warn if any were
-                # skipped so the IK/default fallback is not a silent surprise.
+                # bone-local authoring, Blender's default), and muted /
+                # influence-0 ones are deliberately disabled — but both remain
+                # visible in the UI, so say why the IK/default fallback kicks
+                # in rather than falling through silently.
                 skipped_spaces = [
                     c.owner_space
                     for c in pbone.constraints
-                    if c.type == "LIMIT_ROTATION" and not c.mute and c.owner_space != "LOCAL"
+                    if c.type == "LIMIT_ROTATION" and not c.mute and c.influence > 0.0 and c.owner_space != "LOCAL"
                 ]
                 if skipped_spaces:
-                    warnings.warn(
+                    print(
                         f"Joint-limit export: bone '{bone.name}' has Limit Rotation "
                         f"constraint(s) with owner_space={skipped_spaces}; only "
                         "'LOCAL' is supported. Skipped - falling back to "
                         "IK limits / default range."
                     )
+                disabled = [
+                    "muted" if c.mute else "influence 0"
+                    for c in pbone.constraints
+                    if c.type == "LIMIT_ROTATION" and (c.mute or c.influence == 0.0)
+                ]
+                if disabled:
+                    print(
+                        f"Joint-limit export: bone '{bone.name}' has disabled "
+                        f"Limit Rotation constraint(s) ({', '.join(disabled)}); "
+                        "falling back to IK limits / default range."
+                    )
             if limit_con is not None:
-                authored = True
+                # Only enabled axes make the bounds user-authored; a constraint
+                # with every axis unticked leaves the wide-open defaults, and
+                # flagging those as authored would re-trigger the mixed-axis
+                # caveat noise the flag exists to prevent.
+                authored = limit_con.use_limit_x or limit_con.use_limit_y or limit_con.use_limit_z
                 if limit_con.use_limit_x:
                     lo[0], hi[0] = limit_con.min_x, limit_con.max_x
                 if limit_con.use_limit_y:
@@ -331,7 +348,14 @@ def export_joint_limits_to_npy(armature_obj, filepath, default_range=np.pi):
     limits[..., 0] = np.where(swapped, hi_col, lo_col)
     limits[..., 1] = np.where(swapped, lo_col, hi_col)
 
-    np.save(filepath, limits)
+    # The .npy is a debug sidecar (the limits ship inside the .pkl). Never let
+    # it crash the export — with an unsaved .blend the "//"-relative path
+    # resolves against Blender's often read-only CWD.
+    try:
+        np.save(filepath, limits)
+    except OSError as e:
+        print(f"Joint-limit export: skipped debug sidecar '{filepath}' ({e})")
+
     return filepath, limits
 
 

@@ -447,7 +447,9 @@ class SMPL_OT_ExportModel(bpy.types.Operator):
                 self.report({"ERROR"}, "No valid mesh object selected.")
                 return {"CANCELLED"}
 
-            export_smpl_model(obj, pkl_data=data, export_path=bpy.path.abspath(smpl_tool.pkl_filepath))
+            export_smpl_model(
+                obj, pkl_data=data, export_path=bpy.path.abspath(smpl_tool.pkl_filepath), report=self.report
+            )
 
             self.report({"INFO"}, "SMPL Model exported successfully.")
             return {"FINISHED"}
