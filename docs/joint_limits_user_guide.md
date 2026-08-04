@@ -4,7 +4,7 @@ This guide shows, step by step, how to tell SMILify how far each joint of your m
 
 Technical details live in [issue56_implementation.md](design/issue56_implementation.md).
 
-> 📷 **Screenshots.** All screenshots use the same worked example: the **SMIL_OmniAnt** model, bone **`w_1_l`**, with a Limit Rotation constraint of **X: −90°…0°, Z: locked (0°/0°), Y: free**, Owner = Local Space. Follow along with any model — only the numbers change. (Numbering skips 06/08/10; their content is covered by 07 and 09.)
+> 📷 **Screenshots.** All screenshots use the same worked example: the **SMIL_OmniAnt** model, bone **`l_1_fe_r`** — the femur of the first right leg — with a Limit Rotation constraint of **X: −90°…0°, Z: locked (0°/0°), Y: free**, Owner = Local Space. A leg joint is deliberately chosen because it deforms visible mesh: when you test-rotate it, the leg *moves*, so you see exactly what your limits will fence in. Follow along with any model — only the numbers change. (Numbering skips 06/08/10; their content is covered by 07 and 09.)
 
 ---
 
@@ -27,7 +27,7 @@ Every joint can rotate around three axes — **X, Y, Z** — and each axis gets 
 > ⚠️ **Caveat — very large ranges (beyond ±180°).** You author limits as Euler angles in Blender, but the fitter and the neural penalty compare them against the pose's **axis-angle** components. An axis-angle rotation has a canonical magnitude of at most 180° (|θ| ≤ π): a rotation "authored" as 270° about an axis is the same physical rotation as −90° about it, so per-axis bounds beyond ±180° are mathematically non-unique and the optimiser/network will happily satisfy them via the equivalent smaller rotation. In practice: keep each `[Min, Max]` within **−180°…+180°** per axis; ranges at exactly ±180° are fine (they mean "free"). This is a representation caveat, not a bug — nothing is clamped incorrectly at ±180°.
 
 ![SCREENSHOT 01 — Bone local axes](design/images/01_bone_local_axes.png)
-> 📷 **SCREENSHOT 01**: Pose Mode on the ant model, bone `w_1_l` selected (highlighted teal, right of the body). Per-bone axes are displayed: each bone carries small labelled axis lines (you can read the `X` and `Z` letters at the bone tails). The panel on the right is the armature's **Object Data Properties → Viewport Display**, with **Axes** ticked — that checkbox is what draws them.
+> 📷 **SCREENSHOT 01**: Pose Mode on the ant model. Per-bone axes are displayed: each bone carries small labelled axis lines (you can read the `X` and `Z` letters at the bone tails). The panel on the right is the armature's **Object Data Properties → Viewport Display**, with **Axes** ticked — that checkbox is what draws them.
 
 To display bone axes: select the armature → **Object Data Properties** (green stick-figure tab) → **Viewport Display** → tick **Axes**.
 
@@ -63,7 +63,7 @@ For the joint you want to limit:
 5. Repeat for `R Y Y` and `R Z Z` until you know what each axis does for this bone.
 
 ![SCREENSHOT 05 — Test-rotating around a local axis](design/images/05_test_rotate_local_axis.png)
-> 📷 **SCREENSHOT 05**: Bone `w_1_l` mid-rotation with `R` `X` `X` — the header at the top of the viewport reads **"Rotation: 37.78 along local X"**: that live readout, with its sign, is exactly the information you need to choose Min and Max. The red line through the bone marks the rotation axis. On the right, a Limit Rotation constraint has already been added but is still empty (all axes unticked, 0°) — at this stage it constrains nothing; §5 fills it in.
+> 📷 **SCREENSHOT 05**: Bone `l_1_fe_r` mid-rotation with `R` `X` `X` — the header at the top of the viewport reads **"Rotation: 158.17 along local X"**: that live readout, with its sign, is exactly the information you need to choose Min and Max. Notice the whole leg mesh follows the femur as it swings — this is why limits on this joint matter, and what they will fence in. (158° is just an exaggerated test swing; press `Esc` so it isn't kept.) The dashed line from the bone marks the rotation, the pink line the axis.
 
 Tip: the angle readout in the viewport corner shows the current angle *with its sign* while you rotate — this tells you directly whether "knee bends forward" is positive or negative on that axis.
 
@@ -82,7 +82,7 @@ Still in Pose Mode with the bone selected:
 
 
 ![SCREENSHOT 07 — A filled-in Limit Rotation constraint](design/images/07_limit_rotation_panel.png)
-> 📷 **SCREENSHOT 07**: The filled-in Limit Rotation constraint on `w_1_l`, showing all three authoring cases at once: **Limit X ticked with Min = −90°, Max = 0°** (a real range), **Y unticked** (stays wide open), and **Z ticked with Min = Max = 0°** (locked, step 5). At the bottom of the panel, **Owner** is already set to **Local Space** — the setting explained next.
+> 📷 **SCREENSHOT 07**: The filled-in Limit Rotation constraint on `l_1_fe_r`, showing all three authoring cases at once: **Limit X ticked with Min = −90°, Max = 0°** (a real range), **Y unticked** (stays wide open), and **Z ticked with Min = Max = 0°** (locked, step 5). At the bottom of the panel, **Owner** is already set to **Local Space** — the setting explained next.
 
 ### The "Owner" space setting (important)
 
@@ -110,7 +110,7 @@ Two ways to enable it:
 2. **Standalone script:** open `3D_model_prep/joint_rot_limit_vis.py` in Blender's Text Editor and press **Run**. Re-run to refresh after editing constraints; restart Blender to clear.
 
 ![SCREENSHOT 09 — Limit overlay in the viewport](design/images/09_limit_overlay.png)
-> 📷 **SCREENSHOT 09**: The overlay in action on `w_1_l`: a **red translucent wedge** fans out from the bone's head, sweeping exactly the authored −90°→0° range around its local X. The locked Z axis (0°/0°) draws no wedge — a zero-width range has nothing to show — and the free Y axis draws nothing either. In the SMIL panel the **Visualization** section is expanded with **Show Joint Limit Overlay** ticked, and the info line below it reminds you that only explicit Limit Rotation constraints are shown.
+> 📷 **SCREENSHOT 09**: The overlay in action on `l_1_fe_r`: a **red translucent wedge** fans out from the bone's head, sweeping exactly the authored −90°→0° range around its local X. The bone is mid test-rotation (header: **"Rotation: -83.67 along local X"**) with the leg mesh visibly swung to just inside the wedge's far edge — the pose is right at the authored limit. The locked Z axis (0°/0°) draws no wedge — a zero-width range has nothing to show — and the free Y axis draws nothing either. In the SMIL panel the **Visualization** section is expanded with **Show Joint Limit Overlay** ticked, and the info line below it reminds you that only explicit Limit Rotation constraints are shown.
 
 
 Caveats:
@@ -146,7 +146,7 @@ print(jl[0])                             # root -> all zeros
 The `.pkl` stores **radians**: −90° appears as `-1.5708`, and unconstrained axes as `[-3.1416, 3.1416]`. That's expected, not a bug (pitfall #4).
 
 ![SCREENSHOT 12 — Verified .pkl output](design/images/12_pkl_verification.png)
-> 📷 **SCREENSHOT 12**: The snippet run against the exported ant model. Output, top to bottom: the shape `(55, 3, 2)` (55 joints); then `w_1_l`'s three axis rows — `[-1.5707964, 0.]` (the authored −90°→0° range), `[-0., -0.]` (the locked axis), and `[-3.1415927, 3.1415927]` (the free axis, wide open); then the all-zero root row. Note the locked axis appears in the *middle* row even though Z was locked in Blender: the exporter has remapped the bone-local axes into the model's frame, which is exactly what the fitter needs.
+> 📷 **SCREENSHOT 12**: The snippet (saved as `test.py`) run against the exported ant model. Output, top to bottom: the shape `(55, 3, 2)` (55 joints); then `l_1_fe_r`'s three axis rows — `[-1.5707964, 0.]` (the authored −90°→0° range), `[-0., -0.]` (the locked axis), and `[-3.1415927, 3.1415927]` (the free axis, wide open); then the all-zero root row. Note the locked axis appears in the *middle* row even though Z was locked in Blender: the exporter has remapped the bone-local axes into the model's frame, which is exactly what the fitter needs.
 
 ## 9. Use the limits
 
@@ -173,16 +173,16 @@ The `.pkl` stores **radians**: −90° appears as `-1.5708`, and unconstrained a
 
 ## Appendix: screenshot index
 
-All screenshots (in `docs/design/images/`) follow one worked example: model **SMIL_OmniAnt**, bone **`w_1_l`**, Limit Rotation with **X: −90°…0°**, **Z: locked (0°/0°)**, **Y: free**, **Owner = Local Space**.
+All screenshots (in `docs/design/images/`) follow one worked example: model **SMIL_OmniAnt**, bone **`l_1_fe_r`** (femur, first right leg), Limit Rotation with **X: −90°…0°**, **Z: locked (0°/0°)**, **Y: free**, **Owner = Local Space**.
 
 | # | Filename | Shows |
 |---|----------|-------|
-| 01 | `01_bone_local_axes.png` | Pose Mode, `w_1_l` selected, per-bone axis labels visible; Axes toggle ticked in Viewport Display |
+| 01 | `01_bone_local_axes.png` | Pose Mode, `l_1_fe_r` selected, per-bone axis labels visible; Axes toggle ticked in Viewport Display |
 | 02 | `02_enable_axes_display.png` | Viewport Display panel: **Axes** + **In Front** ticked |
 | 03 | `03_addon_enabled.png` | Preferences → Add-ons: add-on enabled, "All dependencies installed." |
 | 04 | `04_smil_panel_model_loaded.png` | Imported ant model + full SMIL panel in the sidebar |
-| 05 | `05_test_rotate_local_axis.png` | `R X X` test-rotation, header reads "Rotation: 37.78 along local X"; empty constraint on the right |
+| 05 | `05_test_rotate_local_axis.png` | `R X X` test-rotation, header reads "Rotation: 158.17 along local X"; the leg mesh visibly follows the bone |
 | 07 | `07_limit_rotation_panel.png` | Filled constraint: X −90°/0°, Y free, Z locked; Owner = Local Space |
-| 09 | `09_limit_overlay.png` | Red −90°→0° wedge on `w_1_l`; Visualization section with overlay ticked |
+| 09 | `09_limit_overlay.png` | Red −90°→0° wedge on `l_1_fe_r`, leg test-rotated to −83.67° against the limit; overlay ticked |
 | 11 | `11_export_panel.png` | Object Mode, mesh selected; Export Joint Limits ticked; output `SMIL_OmniAnt_authored.pkl` |
 | 12 | `12_pkl_verification.png` | Terminal: shape `(55, 3, 2)`, the bone's three rows (limited / locked / free), zero root |
