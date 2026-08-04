@@ -194,6 +194,113 @@ def test_neural_penalty_zero_in_range_and_violation():
 
 
 @pytest.mark.slow
+def test_neural_penalty_real_method_integration():
+    """Call the REAL SMILImageRegressor._joint_limit_penalty (issue #56 review).
+
+    The earlier tests exercised a file-local ``_hinge`` replica, so a regression
+    inside the method itself (mean -> sum, wrong reshape, broken 6D path) would
+    have passed the suite. Here the actual unbound method runs against a stub
+    carrying only the attributes it reads — no backbone/renderer construction.
+    """
+    import types
+
+    from smal_fitter.neuralSMIL.smil_image_regressor import SMILImageRegressor
+
+    min_l, max_l = _fitter_limit_tensors(_fresh_limit_prior(None))  # wide-open
+    B, n = 4, config.N_POSE
+    stub = types.SimpleNamespace(rotation_representation="axis_angle", _joint_limit_bounds=(min_l, max_l))
+
+    # In-range -> exactly zero.
+    assert float(SMILImageRegressor._joint_limit_penalty(stub, torch.zeros(B, n, 3))) == 0.0
+
+    # One joint/axis 0.5 rad past max in every sample: the method returns the
+    # MEAN over batch x joints x axes, so the exact value is 0.5 / (3 n).
+    # A mean -> sum regression (or a wrong reshape) changes this number.
+    jr_bad = torch.zeros(B, n, 3, requires_grad=True)
+    with torch.no_grad():
+        jr_bad[:, 2, 1] = max_l[2, 1] + 0.5
+    penalty = SMILImageRegressor._joint_limit_penalty(stub, jr_bad)
+    assert np.isclose(float(penalty), 0.5 / (3 * n), atol=1e-6), float(penalty)
+    penalty.backward()
+    assert float(jr_bad.grad[0, 2, 1]) > 0.0  # corrective gradient
+
+    # 6D representation goes through the real conversion path: the identity
+    # rotation maps to axis-angle zero, which is in-range -> exactly zero.
+    stub6 = types.SimpleNamespace(rotation_representation="6d", _joint_limit_bounds=(min_l, max_l))
+    six = torch.zeros(B, n, 6)
+    six[..., 0] = 1.0
+    six[..., 4] = 1.0
+    assert float(SMILImageRegressor._joint_limit_penalty(stub6, six)) == 0.0
+
+
+@pytest.mark.slow
+def test_neural_penalty_fail_fast_validation():
+    """Issue #56 review C1: the real _init_joint_limit_bounds raises RuntimeError
+    when the penalty is enabled but unusable (missing 'joint_limits' key, or
+    legacy hardcoded-body mode), rather than silently no-op'ing."""
+    import types
+
+    from smal_fitter.neuralSMIL.smil_image_regressor import SMILImageRegressor
+
+    prev_flag = config.ignore_hardcoded_body
+    had = "joint_limits" in config.dd
+    prev = config.dd.get("joint_limits", None)
+    try:
+        # Legacy mode guard fires first.
+        config.ignore_hardcoded_body = False
+        with pytest.raises(RuntimeError, match="ignore_hardcoded_body"):
+            SMILImageRegressor._init_joint_limit_bounds(types.SimpleNamespace())
+
+        # Rigged mode but no authored limits in the .pkl -> wide-open fallback
+        # would be a guaranteed no-op, so it must raise.
+        config.ignore_hardcoded_body = True
+        config.dd.pop("joint_limits", None)
+        with pytest.raises(RuntimeError, match="joint_limits"):
+            SMILImageRegressor._init_joint_limit_bounds(types.SimpleNamespace())
+
+        # With an authored set and parent tensors present, bounds are cached.
+        n_joints = len(config.dd["J_names"])
+        jl = np.zeros((n_joints, 3, 2), dtype=np.float32)
+        jl[..., 0], jl[..., 1] = -0.5, 0.5
+        config.dd["joint_limits"] = jl
+        min_l, max_l = _fitter_limit_tensors(_fresh_limit_prior(jl))
+        stub = types.SimpleNamespace(min_limits=min_l, max_limits=max_l)
+        SMILImageRegressor._init_joint_limit_bounds(stub)
+        assert stub._joint_limit_bounds == (min_l, max_l)
+    finally:
+        config.ignore_hardcoded_body = prev_flag
+        if had:
+            config.dd["joint_limits"] = prev
+        else:
+            config.dd.pop("joint_limits", None)
+
+
+def test_prior_module_import_survives_malformed_joint_limits():
+    """Issue #56 review C2: importing the prior module must never validate the
+    .pkl. A malformed 'joint_limits' used to crash EVERY entry point at import
+    time; validation now happens only when LimitPrior is constructed."""
+    import importlib
+
+    import smal_fitter.priors.joint_limits_prior as jlp
+
+    had = "joint_limits" in config.dd
+    prev = config.dd.get("joint_limits", None)
+    try:
+        config.dd["joint_limits"] = np.zeros((2, 2))  # garbage shape
+        importlib.reload(jlp)  # would have raised ValueError pre-fix
+        if config.ignore_hardcoded_body:
+            assert jlp.Ranges is None  # deferred, not built at import
+            with pytest.raises(ValueError):
+                jlp.LimitPrior()  # validation still happens at construction
+    finally:
+        if had:
+            config.dd["joint_limits"] = prev
+        else:
+            config.dd.pop("joint_limits", None)
+        importlib.reload(jlp)
+
+
+@pytest.mark.slow
 def test_neural_penalty_off_by_default():
     """Both regressors default the weight to 0.0 so existing training is unchanged."""
     import inspect
