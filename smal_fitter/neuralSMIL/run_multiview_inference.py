@@ -268,9 +268,7 @@ def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int =
             )
 
             # Initialize process group with explicit store (bypasses env:// which can use IPv6)
-            dist.init_process_group(
-                backend="nccl", store=store, rank=rank, world_size=world_size, timeout=dist_timeout
-            )
+            dist.init_process_group(backend="nccl", store=store, rank=rank, world_size=world_size, timeout=dist_timeout)
             print(f"[Rank {rank}] Successfully initialized NCCL process group (timeout={timeout_s}s)")
 
         except Exception as e:
