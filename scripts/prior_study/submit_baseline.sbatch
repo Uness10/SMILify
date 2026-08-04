@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --account=ias-7
+#SBATCH --account=YOUR_ACCOUNT
 #SBATCH --partition=dc-gpu
 #SBATCH --job-name=smil_baseline
 #SBATCH --gres=gpu:1
@@ -9,7 +9,11 @@
 #SBATCH --output=prior_study_results/slurm_%j.log
 #SBATCH --error=prior_study_results/slurm_%j.log
 #
-# Background baseline study on JURECA-DC. Submit with:
+# Background baseline study on a SLURM cluster (developed on JURECA-DC).
+# Edit --account/--partition above for your site, then submit FROM THE REPO
+# ROOT (the #SBATCH --output path is resolved at submit time, so the results
+# dir must exist before sbatch):
+#     mkdir -p prior_study_results
 #     sbatch scripts/prior_study/submit_baseline.sbatch
 # Monitor:
 #     squeue --me
@@ -23,16 +27,21 @@
 # For multi-GPU inference also bump the GPU count in BOTH places:
 #     edit  #SBATCH --gres=gpu:4  above, then submit with
 #     NUM_GPUS=4 BATCH_SIZE=16 NUM_WORKERS=8 \
-#       sbatch --export=ALL,NUM_GPUS,BATCH_SIZE,NUM_WORKERS submit_baseline.sbatch
+#       sbatch --export=ALL,NUM_GPUS,BATCH_SIZE,NUM_WORKERS scripts/prior_study/submit_baseline.sbatch
 # (baseline is single-clip; multi-GPU rarely moves wall-clock much — profile first.)
 #
 # NOTE: intentionally no set -u. Conda activate hooks (libblas_mkl_activate.sh)
 # reference unset vars like MKL_INTERFACE_LAYER and abort under set -u.
 set -eo pipefail
 
-# ---- locations (edit if your repo / conda live elsewhere) -------------------
-REPO_DIR="${REPO_DIR:-/p/scratch/share/anouar1/SMILify}"
-CONDA_SH="${CONDA_SH:-/p/scratch/cias-7/anouar1/miniforge3/etc/profile.d/conda.sh}"
+# ---- locations --------------------------------------------------------------
+# Defaults are generic: repo = submit directory, conda derived from `conda`
+# on PATH. Override per site, e.g.:
+#     REPO_DIR=/p/scratch/.../SMILify CONDA_SH=/path/to/conda.sh \
+#       sbatch --export=ALL,REPO_DIR,CONDA_SH scripts/prior_study/submit_baseline.sbatch
+REPO_DIR="${REPO_DIR:-$SLURM_SUBMIT_DIR}"
+REPO_DIR="${REPO_DIR:-.}"
+CONDA_SH="${CONDA_SH:-$(conda info --base 2>/dev/null)/etc/profile.d/conda.sh}"
 ENV_NAME="${ENV_NAME:-pytorch3d}"
 
 echo "Job $SLURM_JOB_ID on $(hostname) — $(date)"
