@@ -2,7 +2,7 @@
 
 This guide shows, step by step, how to tell SMILify how far each joint of your model is allowed to rotate — e.g. "this knee bends between −30° and +45°". No coding needed: you author the limits in Blender, preview them in the viewport, export, and both fitting pipelines respect them automatically.
 
-Technical details live in [issue56_implementation.md](design/issue56_implementation.md).
+Under the hood, limits travel as data: `Blender Limit Rotation constraint → .pkl['joint_limits']` (shape `(J, 3, 2)`, radians, model frame) `→ LimitPrior → hinge loss`. See [smil_importer/README.md](../3D_model_prep/smil_importer/README.md) for the export options and `smal_fitter/priors/joint_limits_prior.py` for the consumer side.
 
 > 📷 **Screenshots.** All screenshots use the same worked example: the **SMIL_OmniAnt** model, bone **`l_1_fe_r`** — the femur of the first right leg — with a Limit Rotation constraint of **X: −90°…0°, Z: locked (0°/0°), Y: free**, Owner = Local Space. A leg joint is deliberately chosen because it deforms visible mesh: when you test-rotate it, the leg *moves*, so you see exactly what your limits will fence in. Follow along with any model — only the numbers change. (Numbering skips 06/08/10; their content is covered by 07 and 09.)
 
@@ -126,7 +126,7 @@ Caveats:
 3. Your limits are now stored inside the `.pkl` under the `joint_limits` key.
 
 ![SCREENSHOT 11 — Export panel](design/images/11_export_panel.png)
-> 📷 **SCREENSHOT 11**: Ready to export: back in **Object Mode** with the **mesh** (`SMIL_OmniAnt`) selected — outlined orange, and active in the outliner. In the SMIL panel: **Export Joint Limits** ticked, **Default Joint Limit Range (rad) = 3.14**, Output Filename set to `SMIL_OmniAnt_authored.pkl`, and the **Export SMIL Model** button below. The red limit wedge is still visible in the viewport — the overlay doesn't interfere with exporting.
+> 📷 **SCREENSHOT 11**: Ready to export: back in **Object Mode** with the **mesh** (`SMIL_OmniAnt`) selected — outlined orange, and active in the outliner. In the SMIL panel: **Export Joint Limits** ticked, **Default Joint Limit Range** at its default (shown as `3.14` rad in this screenshot; the field now displays degrees, `180°`), Output Filename set to `SMIL_OmniAnt_authored.pkl`, and the **Export SMIL Model** button below. The red limit wedge is still visible in the viewport — the overlay doesn't interfere with exporting.
 
 You do **not** need to worry about the bone's rest orientation: the exporter automatically converts your bone-local limits into the model's frame (for standard axis-aligned rigs the conversion is exact; a tilted, mixed-axis bone prints a warning and exports the numbers as-is).
 
@@ -146,7 +146,7 @@ print(jl[0])                             # root -> all zeros
 The `.pkl` stores **radians**: −90° appears as `-1.5708`, and unconstrained axes as `[-3.1416, 3.1416]`. That's expected, not a bug (pitfall #4).
 
 ![SCREENSHOT 12 — Verified .pkl output](design/images/12_pkl_verification.png)
-> 📷 **SCREENSHOT 12**: The snippet (saved as `test.py`) run against the exported ant model. Output, top to bottom: the shape `(55, 3, 2)` (55 joints); then `l_1_fe_r`'s three axis rows — `[-1.5707964, 0.]` (the authored −90°→0° range), `[-0., -0.]` (the locked axis), and `[-3.1415927, 3.1415927]` (the free axis, wide open); then the all-zero root row. Note the locked axis appears in the *middle* row even though Z was locked in Blender: the exporter has remapped the bone-local axes into the model's frame, which is exactly what the fitter needs.
+> 📷 **SCREENSHOT 12**: The snippet's output for the exported ant model, top to bottom: the shape `(55, 3, 2)` (55 joints); then `l_1_fe_r`'s three axis rows — `[-1.5707964, 0.]` (the authored −90°→0° range), `[-0., -0.]` (the locked axis), and `[-3.1415927, 3.1415927]` (the free axis, wide open); then the all-zero root row. Note the locked axis appears in the *middle* row even though Z was locked in Blender: the exporter has remapped the bone-local axes into the model's frame, which is exactly what the fitter needs.
 
 ## 9. Use the limits
 
