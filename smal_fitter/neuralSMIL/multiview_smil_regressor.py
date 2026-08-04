@@ -822,6 +822,7 @@ class MultiViewSMILImageRegressor(SMILImageRegressor):
                 "cam_rot": 0.0,
                 "cam_trans": 0.0,
                 "joint_angle_regularization": 0.0001,  # Penalty for large joint angles
+                "joint_limit_regularization": 0.0,  # Issue #56: hinge penalty vs authored per-joint limits (off by default)
                 "limb_scale_regularization": 0.01,  # Penalty for deviations from scale=1 (log_beta_scales)
                 "limb_trans_regularization": 0.1,  # Heavy penalty for translation changes (betas_trans)
                 "triangulation_consistency": 0.0,  # Triangulate GT 2D keypoints with predicted cameras, compare to predicted 3D
@@ -883,6 +884,16 @@ class MultiViewSMILImageRegressor(SMILImageRegressor):
 
             loss_components["joint_angle_regularization"] = joint_angle_reg
             total_loss = total_loss + loss_weights["joint_angle_regularization"] * joint_angle_reg
+
+        # Joint-limit regularization (issue #56): see SMILImageRegressor._joint_limit_penalty.
+        # Multi-view batches carry no per-sample validity mask (every sample in
+        # target_data is valid by construction), so the penalty applies to the whole
+        # batch; the single-view path masks invalid samples first. Raises if enabled
+        # but the limit set is unusable.
+        if loss_weights.get("joint_limit_regularization", 0) > 0 and "joint_rot" in predicted_params:
+            joint_limit_reg = self._joint_limit_penalty(predicted_params["joint_rot"])
+            loss_components["joint_limit_regularization"] = joint_limit_reg
+            total_loss = total_loss + loss_weights["joint_limit_regularization"] * joint_limit_reg
 
         # Betas loss
         if body_targets.get("betas") is not None and loss_weights.get("betas", 0) > 0:

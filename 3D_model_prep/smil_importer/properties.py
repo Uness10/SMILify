@@ -2,6 +2,8 @@
 
 import bpy
 
+from . import visualization
+
 
 class SMPLProperties(bpy.types.PropertyGroup):
     pkl_filepath: bpy.props.StringProperty(
@@ -98,4 +100,46 @@ class SMPLProperties(bpy.types.PropertyGroup):
         name="Force Static Joint Locations",
         description="Joint locations will not be affected by shape keys. J_regressor will be set to all zeroes. Useful for models with root bone at world origin or when joint locations should remain constant.",
         default=False,
+    )
+
+    # Issue #56: export user-defined per-joint rotation limits.
+    # Deliberately opt-out (default=True): authored constraints always land in
+    # the .pkl, and unconstrained rigs get the wide-open default range, which
+    # keeps the limit prior inactive - so the key is harmless when unused.
+    export_joint_limits: bpy.props.BoolProperty(
+        name="Export Joint Limits",
+        description=(
+            "Read per-bone rotation limits and store them in the exported .pkl under the "
+            "'joint_limits' key. Limits act as pose priors for the optimisation fitter and "
+            "neural inference. For each bone the limits are read from a 'Limit Rotation' "
+            "pose-bone constraint if present, otherwise from the bone's IK rotation "
+            "limits/locks. Axes with no explicit limit use the wide-open default range "
+            "below; the root bone is fixed."
+        ),
+        default=True,
+    )
+
+    # Visualization section (SMIL panel > Visualization).
+    show_joint_limit_overlay: bpy.props.BoolProperty(
+        name="Show Joint Limit Overlay",
+        description=(
+            "Draw a translucent wedge in the viewport for each enabled axis of every "
+            "bone's Limit Rotation constraint (X red, Y green, Z blue). Reads exactly "
+            "the constraint fields the exporter reads, so the preview matches what "
+            "'Export Joint Limits' will write. Muted and non-local-space constraints "
+            "are skipped; the IK fallback and default range are not shown"
+        ),
+        default=False,
+        update=visualization.toggle_overlay_update,
+    )
+
+    joint_limit_default_range: bpy.props.FloatProperty(
+        name="Default Joint Limit Range (rad)",
+        description=(
+            "Half-range in radians used for axes with no explicit limit. Such axes are "
+            "exported as [-value, +value]. A large value (e.g. pi) means effectively "
+            "unconstrained, so the limit prior stays inactive until real limits are set."
+        ),
+        default=3.141592653589793,
+        min=0.0,
     )

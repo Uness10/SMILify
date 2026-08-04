@@ -192,7 +192,7 @@ def is_torchrun_launched():
     return all(var in os.environ for var in ["RANK", "LOCAL_RANK", "WORLD_SIZE"])
 
 
-def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int = None):
+def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int = None, timeout_s: int = None):
     """
     Initialize DDP environment with robust IPv4-only TCP store.
 
@@ -201,7 +201,19 @@ def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int =
         world_size: Total number of processes
         port: Master port for communication (default: 12345, ignored if MASTER_PORT env var is set)
         local_rank: Local rank within the node (for GPU assignment). If None, uses rank.
+        timeout_s: Process-group / store timeout in seconds. Defaults to the
+            SMILIFY_DIST_TIMEOUT_S env var, else 14400 (4 h). This inference
+            pipeline has long rank-0-only phases BETWEEN collectives (gathering
+            ~100k predictions from temp pickles, writing animation exports,
+            merging videos) during which the other ranks sit at a dist.barrier();
+            with the previous hard-coded 1800 s the NCCL watchdog killed those
+            ranks on large datasets (ALLREDUCE timeout at the barrier) and took
+            the whole mp.spawn job down after inference had already succeeded.
     """
+    if timeout_s is None:
+        timeout_s = int(os.environ.get("SMILIFY_DIST_TIMEOUT_S", "14400"))
+    dist_timeout = timedelta(seconds=timeout_s)
+
     # Get master address and port from environment
     master_addr = os.environ.get("MASTER_ADDR", "localhost")
     master_port = int(os.environ.get("MASTER_PORT", port or "12345"))
@@ -251,15 +263,13 @@ def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int =
                 port=master_port,
                 world_size=world_size,
                 is_master=is_master,
-                timeout=timedelta(seconds=1800),
+                timeout=dist_timeout,
                 use_libuv=False,  # Disable libuv to avoid potential IPv6 issues
             )
 
             # Initialize process group with explicit store (bypasses env:// which can use IPv6)
-            dist.init_process_group(
-                backend="nccl", store=store, rank=rank, world_size=world_size, timeout=timedelta(seconds=1800)
-            )
-            print(f"[Rank {rank}] Successfully initialized NCCL process group")
+            dist.init_process_group(backend="nccl", store=store, rank=rank, world_size=world_size, timeout=dist_timeout)
+            print(f"[Rank {rank}] Successfully initialized NCCL process group (timeout={timeout_s}s)")
 
         except Exception as e:
             print(f"Error initializing process group with NCCL + TCPStore: {e}")
@@ -277,11 +287,11 @@ def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int =
                     port=master_port + 1,  # Use different port for gloo
                     world_size=world_size,
                     is_master=is_master,
-                    timeout=timedelta(seconds=1800),
+                    timeout=dist_timeout,
                     use_libuv=False,
                 )
                 dist.init_process_group(
-                    backend="gloo", store=store, rank=rank, world_size=world_size, timeout=timedelta(seconds=1800)
+                    backend="gloo", store=store, rank=rank, world_size=world_size, timeout=dist_timeout
                 )
                 print(f"[Rank {rank}] Successfully initialized with gloo backend!")
             except Exception as e2:
@@ -1505,7 +1515,7 @@ def ddp_main_inference(rank: int, world_size: int, args, master_port: str):
         # mp.spawn mode (single-node) - local_rank == rank
         gpu_rank = rank
 
-    setup_ddp(rank, world_size, master_port, local_rank=gpu_rank)
+    setup_ddp(rank, world_size, master_port, local_rank=gpu_rank, timeout_s=getattr(args, "dist_timeout", None))
 
     # Set device override for this rank
     device_override = f"cuda:{gpu_rank}"
@@ -1590,6 +1600,17 @@ def main():
         "and per-view cameras. Gathered to rank 0 in multi-GPU runs. "
         'NOTE: any string is accepted as-is (e.g. "True" writes True.npz) — '
         "no validation is performed, so pass a real path/filename stem.",
+    )
+    parser.add_argument(
+        "--dist_timeout",
+        type=int,
+        default=None,
+        help="Distributed process-group timeout in SECONDS for multi-GPU runs "
+        "(default: SMILIFY_DIST_TIMEOUT_S env var, else 14400 = 4 h). Must "
+        "exceed the longest rank-0-only phase (prediction gather, animation "
+        "export, video merge) or the NCCL watchdog kills the ranks waiting at "
+        "the next barrier — on ~100k-frame datasets the old 1800 s default "
+        "aborted the job after inference had already finished.",
     )
     parser.add_argument(
         "--render_resolution",

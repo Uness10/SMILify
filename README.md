@@ -371,6 +371,8 @@ The addon panel provides a single interface for importing existing SMIL/SMAL `.p
 
 5. **Export the parametric model** — the addon writes a single `.pkl` file containing everything the fitting and neural inference pipelines expect: vertex template (mean shape), `shapedirs`, `J_regressor`, kinematic tree, skinning weights, shape covariance, and optionally `scaledirs`/`transdirs` for disentangled variation.
 
+   **Joint rotation limits (optional):** while your model is open in Blender, you can also define per-joint rotation ranges using standard *Limit Rotation* bone constraints — e.g. "this femur-tibia joint bends −30°…+45°" — and preview them as translucent wedges via the panel's **Visualization** overlay. With *Export Joint Limits* ticked, the ranges are written into the `.pkl` (`joint_limits`) and are used by both the optimisation fitter and, opt-in, by neural training. See the [Joint Limits User Guide](docs/joint_limits_user_guide.md).
+
 ### Disentangling shape, scale, and translation
 
 When registered meshes span multiple species or size classes, raw shape PCA conflates genuine morphological differences with differences in overall scale and joint-level translations. The addon supports an **entangled PCA** mode that jointly decomposes vertex positions, per-joint scale factors, and per-joint translations into shared principal components. This produces separate `scaledirs` and `transdirs` alongside the standard `shapedirs`, enabling:
@@ -394,7 +396,7 @@ ____________________________________
 - [X] The code is poorly tested. That needs to be fixed. Write integration tests for main functionality.
 
 ## Functionality / broader project TODOs
-- [ ] Allow to add user-defined joint limits in the Blender addon. ([#56](https://github.com/FabianPlum/SMILify/issues/56))
+- [X] Allow to add user-defined joint limits in the Blender addon. ([#56](https://github.com/FabianPlum/SMILify/issues/56)) See the [Joint Limits User Guide](docs/joint_limits_user_guide.md).
 - [X] Finish cleaning antscan dataset and prepare models for fitting.
 - [ ] Create SMIL model from massive antscan dataset. (future todo for _SMILify Gen2_) ([#57](https://github.com/FabianPlum/SMILify/issues/57))
 - [X] Add configurable mouse SMIL model.

@@ -55,6 +55,9 @@ class SMIL_PT_Panel(bpy.types.Panel):
             layout.operator("smpl.clear_morph_pca", text="Clear Transformation PCA components")
 
         layout.separator()
+        layout.prop(smpl_tool, "export_joint_limits")
+        if smpl_tool.export_joint_limits:
+            layout.prop(smpl_tool, "joint_limit_default_range")
         layout.prop(smpl_tool, "output_filename")
         layout.operator("smpl.export_model", text="Export SMIL Model")
 
@@ -74,6 +77,28 @@ class SMIL_PT_Panel(bpy.types.Panel):
         # Stays greyed out until SMPL_OT_ExportAnimationGLTF.poll() finds
         # SMIL_Animation_Root in the scene.
         layout.operator("smpl.export_animation_gltf", text="Export animated model as glTF")
+
+
+class SMIL_PT_VisualizationPanel(bpy.types.Panel):
+    """Viewport overlays. Kept as its own sub-panel so further visualization
+    options can be added here over time."""
+
+    bl_label = "Visualization"
+    bl_idname = "SMIL_PT_VisualizationPanel"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "SMIL"
+    bl_parent_id = "SMIL_PT_Panel"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        smpl_tool = context.scene.smpl_tool
+
+        box = layout.box()
+        box.prop(smpl_tool, "show_joint_limit_overlay")
+        if smpl_tool.show_joint_limit_overlay:
+            box.label(text="Only explicit Limit Rotation constraints are shown.", icon="INFO")
 
 
 class SMIL_PT_MorphometryPanel(bpy.types.Panel):
