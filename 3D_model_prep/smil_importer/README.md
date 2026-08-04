@@ -58,10 +58,11 @@ The export section of the **SMIL** panel exposes, among others:
   from an enabled (non-muted), local-space **Limit Rotation** bone constraint
   if present, otherwise from the bone's IK rotation limits/locks. See the
   [Joint Limits User Guide](../../docs/joint_limits_user_guide.md).
-- **Default Joint Limit Range (rad)** — half-range used for axes with no
-  explicit limit; such axes export as `[-value, +value]`. The default (pi)
-  is effectively unconstrained, so the fitter's limit prior stays inactive
-  until real limits are authored.
+- **Default Joint Limit Range** — half-range used for axes with no explicit
+  limit; such axes export as `[-value, +value]`. Displayed in degrees (like
+  the Limit Rotation constraint fields), stored/exported in radians. The
+  default (180°) is effectively unconstrained, so the fitter's limit prior
+  stays inactive until real limits are authored.
 
 ## Visualization
 

@@ -124,22 +124,29 @@ class SMPLProperties(bpy.types.PropertyGroup):
         name="Show Joint Limit Overlay",
         description=(
             "Draw a translucent wedge in the viewport for each enabled axis of every "
-            "bone's Limit Rotation constraint (X red, Y green, Z blue). Reads exactly "
-            "the constraint fields the exporter reads, so the preview matches what "
-            "'Export Joint Limits' will write. Muted and non-local-space constraints "
-            "are skipped; the IK fallback and default range are not shown"
+            "bone's Limit Rotation constraint (X red, Y green, Z blue). Selects exactly "
+            "the constraints 'Export Joint Limits' reads (muted, influence-0 and "
+            "non-local-space constraints are skipped), so preview and export always "
+            "agree on WHICH limits apply. Wedges show the authored bone-local angles; "
+            "the export additionally remaps them into the model frame. The IK fallback "
+            "and default range are not shown"
         ),
         default=False,
         update=visualization.toggle_overlay_update,
     )
 
     joint_limit_default_range: bpy.props.FloatProperty(
-        name="Default Joint Limit Range (rad)",
+        name="Default Joint Limit Range",
         description=(
-            "Half-range in radians used for axes with no explicit limit. Such axes are "
-            "exported as [-value, +value]. A large value (e.g. pi) means effectively "
-            "unconstrained, so the limit prior stays inactive until real limits are set."
+            "Half-range used for axes with no explicit limit (displayed in degrees, "
+            "matching the Limit Rotation constraint fields; stored in radians). Such "
+            "axes are exported as [-value, +value]. The default 180 deg means "
+            "effectively unconstrained, so the limit prior stays inactive until real "
+            "limits are set. WARNING: 0 exports every unset axis as locked, which "
+            "freezes the pose wherever the limit loss is active"
         ),
         default=3.141592653589793,
         min=0.0,
+        soft_min=0.017453292519943295,  # 1 degree: keep the slider off the all-locked 0
+        subtype="ANGLE",
     )

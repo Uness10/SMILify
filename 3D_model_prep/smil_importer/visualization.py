@@ -5,12 +5,14 @@ the scene, a translucent wedge is drawn for each enabled axis of each bone's
 Limit Rotation constraint (X red, Y green, Z blue; the Y/twist wedge is an
 approximation by nature).
 
-The overlay reads exactly the constraint fields the exporter reads
-(:func:`core_mesh.export_joint_limits_to_npy`): muted constraints and
-constraints with ``owner_space != 'LOCAL'`` are skipped, so the preview and
-the exported ``joint_limits`` agree. The IK-limit fallback and the wide-open
-default range are NOT visualised - a bone without a wedge simply has no
-explicit constraint.
+The overlay selects exactly the constraints the exporter reads
+(:func:`core_mesh.export_joint_limits_to_npy`): muted, influence-0 and
+``owner_space != 'LOCAL'`` constraints are skipped, so preview and export
+always agree on WHICH limits apply. Wedges show the authored bone-local
+angles; the export additionally remaps them into the model frame (exact for
+signed-permutation rest orientations, verbatim + notice otherwise). The
+IK-limit fallback and the wide-open default range are NOT visualised - a bone
+without a wedge simply has no explicit constraint.
 
 Also available as a self-contained Text Editor script:
 ``3D_model_prep/joint_rot_limit_vis.py`` (kept in sync with this module).
@@ -70,6 +72,14 @@ def _wedge(centre, ref, sweep, a0, a1, r):
 
 
 def _draw():
+    # The handler is session-global but the checkbox is per-scene, and undo /
+    # scene switches can flip the property without firing its update= callback.
+    # Gating here keeps what is DRAWN correct in every scene regardless of
+    # handler state; the undo/redo sync below then reconciles the handler.
+    scene = getattr(bpy.context, "scene", None)
+    tool = getattr(scene, "smpl_tool", None) if scene is not None else None
+    if tool is None or not tool.show_joint_limit_overlay:
+        return
     shader = _get_shader()
     # Issue #56 (review): save the GPU state this handler touches and restore
     # it in a try/finally. Previously depth_test was never restored and blend
@@ -90,7 +100,9 @@ def _draw():
 
 def _draw_wedges(shader):
     for obj in bpy.context.scene.objects:
-        if obj.type != "ARMATURE":
+        if obj.type != "ARMATURE" or not obj.visible_get():
+            # depth test is off, so wedges of hidden rigs would paint straight
+            # over the viewport - skip anything not visible in this view layer.
             continue
         for pb in obj.pose.bones:
             # Same selection rule as the exporter: first enabled (non-muted,
@@ -188,16 +200,32 @@ def _load_post_restore_overlay(_filepath):
     _sync_overlay_to_property()
 
 
+@bpy.app.handlers.persistent
+def _undo_redo_restore_overlay(_scene):
+    """undo_post/redo_post handler: Blender does not fire property update=
+    callbacks on undo, so undoing across a toggle desyncs checkbox and
+    handler - re-sync after every undo/redo."""
+    _sync_overlay_to_property()
+
+
 def register_handlers():
-    """Called from the add-on's register(): install the load_post handler and
-    recover the overlay state for the already-loaded scene (covers disabling
-    and re-enabling the add-on mid-session)."""
+    """Called from the add-on's register(): install the load_post and
+    undo/redo handlers and recover the overlay state for the already-loaded
+    scene (covers disabling and re-enabling the add-on mid-session)."""
     if _load_post_restore_overlay not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_load_post_restore_overlay)
+    if _undo_redo_restore_overlay not in bpy.app.handlers.undo_post:
+        bpy.app.handlers.undo_post.append(_undo_redo_restore_overlay)
+    if _undo_redo_restore_overlay not in bpy.app.handlers.redo_post:
+        bpy.app.handlers.redo_post.append(_undo_redo_restore_overlay)
     _sync_overlay_to_property()
 
 
 def unregister_handlers():
-    """Called from the add-on's unregister(): remove the load_post handler."""
+    """Called from the add-on's unregister(): remove the app handlers."""
     if _load_post_restore_overlay in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_load_post_restore_overlay)
+    if _undo_redo_restore_overlay in bpy.app.handlers.undo_post:
+        bpy.app.handlers.undo_post.remove(_undo_redo_restore_overlay)
+    if _undo_redo_restore_overlay in bpy.app.handlers.redo_post:
+        bpy.app.handlers.redo_post.remove(_undo_redo_restore_overlay)

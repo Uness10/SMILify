@@ -267,6 +267,7 @@ class TrainingConfig:
             "joint_angle_regularization": 0.001,  # Penalty for large joint angles (excluding root)
             "limb_scale_regularization": 0.01,  # Penalty for deviations from scale=1 (log_beta_scales)
             "limb_trans_regularization": 1,  # Heavy penalty for translation changes (betas_trans) - prevents artifacts
+            "joint_limit_regularization": 0.0,  # Hinge vs authored 'joint_limits' (issue #56); off by default
         },
         # Curriculum stages: (epoch_threshold, weight_updates) - AniMer-style conservative
         "curriculum_stages": [

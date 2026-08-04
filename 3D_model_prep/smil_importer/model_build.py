@@ -390,7 +390,7 @@ def create_shapekeys_from_pkl_shapedirs(data, obj):
     return cov, mean_betas
 
 
-def export_smpl_model(obj, export_path, pkl_data=None):
+def export_smpl_model(obj, export_path, pkl_data=None, report=None):
     """
     Export the updated model as a new SMPL file with the shapekeys stored in the model's shapedirs.
 
@@ -398,6 +398,8 @@ def export_smpl_model(obj, export_path, pkl_data=None):
     - obj (bpy.types.Object): The mesh object with the updated vertex locations and shapekeys.
     - pkl_data (dict): Dictionary containing the original SMPL data.
     - export_path (str): The file path where the new SMPL file will be saved.
+    - report (callable): Optional Blender operator ``self.report`` so user-facing
+      notices reach the UI, not just the console.
     """
 
     if pkl_data is None:
@@ -479,7 +481,10 @@ def export_smpl_model(obj, export_path, pkl_data=None):
         # file would silently round-trip into the new export — misaligned with
         # any armature edits made since (added/removed/reordered bones).
         if pkl_data.pop("joint_limits", None) is not None:
-            print("Export Joint Limits is unticked: dropped stale 'joint_limits' inherited from the loaded .pkl")
+            msg = "Export Joint Limits is unticked: dropped stale 'joint_limits' inherited from the loaded .pkl"
+            print(msg)
+            if report is not None:
+                report({"WARNING"}, msg)
 
     # Check if model has static joint locations
     if obj.get("static_joint_locs", False) or bpy.context.scene.smpl_tool.force_static_joint_locs:

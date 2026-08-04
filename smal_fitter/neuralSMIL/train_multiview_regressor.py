@@ -1993,6 +1993,8 @@ def visualize_3d_keypoints(
 
 def save_checkpoint(model, optimizer, scheduler, epoch, config, metrics, filepath):
     """Save training checkpoint."""
+    import config as smal_model_config  # the 'config' parameter shadows the module
+
     checkpoint = {
         "epoch": epoch,
         "model_state_dict": model.module.state_dict() if hasattr(model, "module") else model.state_dict(),
@@ -2000,6 +2002,10 @@ def save_checkpoint(model, optimizer, scheduler, epoch, config, metrics, filepat
         "scheduler_state_dict": scheduler.state_dict() if scheduler else None,
         "config": config,
         "metrics": metrics,
+        # Provenance (issue #56): the joint-limit set active during training,
+        # or None. A limits-trained checkpoint deployed against a model file
+        # without (or with different) limits is otherwise undetectable.
+        "joint_limits": smal_model_config.dd.get("joint_limits", None),
     }
     torch.save(checkpoint, filepath)
     print(f"Checkpoint saved: {filepath}")

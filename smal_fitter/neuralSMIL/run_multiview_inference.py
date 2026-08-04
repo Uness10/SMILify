@@ -211,7 +211,12 @@ def setup_ddp(rank: int, world_size: int, port: str = "12345", local_rank: int =
             the whole mp.spawn job down after inference had already succeeded.
     """
     if timeout_s is None:
-        timeout_s = int(os.environ.get("SMILIFY_DIST_TIMEOUT_S", "14400"))
+        raw = os.environ.get("SMILIFY_DIST_TIMEOUT_S", "14400")
+        try:
+            timeout_s = int(raw)
+        except ValueError:
+            print(f"[setup_ddp] invalid SMILIFY_DIST_TIMEOUT_S={raw!r}; using default 14400 s")
+            timeout_s = 14400
     dist_timeout = timedelta(seconds=timeout_s)
 
     # Get master address and port from environment
