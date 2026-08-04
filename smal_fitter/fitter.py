@@ -198,7 +198,26 @@ class SMALFitter(nn.Module):
         # In the original SMALify code, the joint limits are not used.
         if config.ignore_hardcoded_body:
             # treating everything as ball joints for now, see priors/joint_limits_prior.py
-            limit_prior = LimitPrior()
+            try:
+                limit_prior = LimitPrior()
+                self._joint_limits_error = None
+            except ValueError as e:
+                # A malformed 'joint_limits' in the model file must not take
+                # down consumers that never use the limit loss (e.g. neural
+                # inference constructs a SMALFitter purely for rendering).
+                # Defer the error to the first forward pass with w_limit > 0
+                # and fall back to wide-open ranges meanwhile.
+                self._joint_limits_error = e
+                print(
+                    f"WARNING: invalid 'joint_limits' in the model file: {e} "
+                    "Using wide-open ranges; the limit loss (w_limit > 0) will raise."
+                )
+                _dd_orig = config.dd
+                config.dd = {k: v for k, v in _dd_orig.items() if k != "joint_limits"}
+                try:
+                    limit_prior = LimitPrior()
+                finally:
+                    config.dd = _dd_orig
             # exclude root joint
             self.max_limits = torch.FloatTensor(limit_prior.max_values[3:]).view(config.N_POSE, 3).to(device)
             self.min_limits = torch.FloatTensor(limit_prior.min_values[3:]).view(config.N_POSE, 3).to(device)
@@ -300,6 +319,11 @@ class SMALFitter(nn.Module):
         # We're re-introducing them here (temporarily)
         if config.ignore_hardcoded_body:
             if w_limit > 0:
+                if self._joint_limits_error is not None:
+                    raise ValueError(
+                        "Limit loss is enabled (w_limit > 0) but the model's 'joint_limits' "
+                        f"is invalid: {self._joint_limits_error}"
+                    )
                 zeros = torch.zeros_like(batch_params["joint_rotations"])
                 objs["limit"] = w_limit * torch.mean(
                     torch.max(batch_params["joint_rotations"] - self.max_limits, zeros)

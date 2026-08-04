@@ -108,7 +108,17 @@ def _deep_merge_into_dataclass(target, overrides: Dict[str, Any]):
     field_names = {f.name for f in fields(target)}
 
     for key, value in overrides.items():
-        if key not in field_names or value is None:
+        if key not in field_names:
+            # A typo'd or misplaced key (e.g. 'joint_limit_regularization' at
+            # the loss_curriculum level instead of inside base_weights, or a
+            # legacy flat 'loss_weights' block) would otherwise vanish without
+            # a trace and the run would train with silently-wrong settings.
+            # Underscore-prefixed keys ('_doc', '_comment') are the JSON
+            # comment convention and stay quiet.
+            if not key.startswith("_"):
+                print(f"WARNING: config key '{key}' is not a field of {type(target).__name__} and will be IGNORED.")
+            continue
+        if value is None:
             continue
 
         current = getattr(target, key)

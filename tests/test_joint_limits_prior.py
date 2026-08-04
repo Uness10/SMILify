@@ -167,7 +167,6 @@ def test_fitter_limit_loss_violation_and_gradient():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_neural_penalty_zero_in_range_and_violation():
     from smal_fitter.neuralSMIL.smil_image_regressor import rotation_6d_to_axis_angle
 
@@ -195,7 +194,6 @@ def test_neural_penalty_zero_in_range_and_violation():
     assert float(_hinge(rotation_6d_to_axis_angle(six), min_l, max_l)) >= 0.0
 
 
-@pytest.mark.slow
 def test_neural_penalty_real_method_integration():
     """Call the REAL SMILImageRegressor._joint_limit_penalty (issue #56 review).
 
@@ -235,7 +233,6 @@ def test_neural_penalty_real_method_integration():
     assert float(SMILImageRegressor._joint_limit_penalty(stub6, six)) == 0.0
 
 
-@pytest.mark.slow
 def test_neural_penalty_fail_fast_validation():
     """Issue #56 review C1: the real _init_joint_limit_bounds raises RuntimeError
     when the penalty is enabled but unusable (missing 'joint_limits' key, or
@@ -277,7 +274,6 @@ def test_neural_penalty_fail_fast_validation():
             config.dd.pop("joint_limits", None)
 
 
-@pytest.mark.slow
 def test_neural_penalty_rejects_wide_open_authored_limits():
     """Issue #56 review C1 (third sub-point): an authored 'joint_limits' key is
     not proof the penalty can bite. A set left wide open on EVERY joint/axis is a
@@ -350,7 +346,6 @@ def test_prior_module_import_survives_malformed_joint_limits():
         importlib.reload(jlp)
 
 
-@pytest.mark.slow
 def test_neural_penalty_off_by_default():
     """Both regressors default the weight to 0.0 so existing training is unchanged."""
     import inspect

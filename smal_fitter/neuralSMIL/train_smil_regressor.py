@@ -1370,6 +1370,10 @@ def save_checkpoint(
         "train_param_errors_history": train_param_errors,
         "val_param_errors_history": val_param_errors,
         "best_val_loss": best_val_loss,
+        # Provenance (issue #56): the joint-limit set active during training,
+        # or None. A limits-trained checkpoint deployed against a model file
+        # without (or with different) limits is otherwise undetectable.
+        "joint_limits": config.dd.get("joint_limits", None),
     }
     if checkpoint_config is not None:
         state["config"] = checkpoint_config
