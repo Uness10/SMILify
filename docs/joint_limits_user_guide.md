@@ -151,6 +151,7 @@ The `.pkl` stores **radians**: −90° appears as `-1.5708`, and unconstrained a
 ## 9. Use the limits
 
 - **Optimisation fitter:** point `config.SMAL_FILE` at your exported `.pkl` and run with the limit weight on (`w_limit > 0`). Nothing else to configure.
+- **3D mesh registration (`fitter_3d/`):** the same `w_limit` weight, set per-stage under that stage's `loss_weights:` block in your YAML config (see the commented example in `fitter_3d/ants_cfg.yaml`). Off by default (`0.0`); models without a `joint_limits` key behave exactly as before. This is the fourth consuming path, alongside the optimisation fitter and the single-/multi-view neural regressors below.
 - **Neural training (optional):** add `"joint_limit_regularization": 1e-3` (start small) to the **`base_weights` dict inside `loss_curriculum`** in your JSON training config — the same nested path for both single-view and multi-view configs (see `smal_fitter/neuralSMIL/configs/examples/`):
 
   ```json

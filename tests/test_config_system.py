@@ -264,8 +264,24 @@ class TestSmalModelDownstreamOverwrite:
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         import config as project_config
 
-        original_smal = getattr(project_config, "SMAL_FILE", None)
-        original_shape = getattr(project_config, "SHAPE_FAMILY", -1)
+        # apply_smal_file_override mutates every global it re-derives from the
+        # pickle, not just SMAL_FILE/SHAPE_FAMILY (see its docstring). Snapshot
+        # all of them so this test doesn't leak a different model's N_POSE/dd/
+        # etc. into whichever test runs next in the same pytest process.
+        mutated_attrs = [
+            "SMAL_FILE",
+            "ignore_hardcoded_body",
+            "dd",
+            "joint_names",
+            "N_POSE",
+            "ROOT_JOINT",
+            "STATIC_JOINT_LOCATIONS",
+            "CANONICAL_MODEL_JOINTS",
+            "N_BETAS",
+            "SHAPE_FAMILY",
+        ]
+        _MISSING = object()
+        originals = {attr: getattr(project_config, attr, _MISSING) for attr in mutated_attrs}
         # Use a path that exists: try example from singleview_baseline.json, else skip
         smal_path = os.path.join(
             repo_root, "3D_model_prep", "SMILy_Mouse_static_joints_Falkner_conv_repose_hind_legs.pkl"
@@ -279,8 +295,12 @@ class TestSmalModelDownstreamOverwrite:
             assert project_config.SMAL_FILE == smal_path
             assert project_config.SHAPE_FAMILY == 42
         finally:
-            project_config.SMAL_FILE = original_smal
-            project_config.SHAPE_FAMILY = original_shape
+            for attr, value in originals.items():
+                if value is _MISSING:
+                    if hasattr(project_config, attr):
+                        delattr(project_config, attr)
+                else:
+                    setattr(project_config, attr, value)
 
 
 # ---------------------------------------------------------------------------

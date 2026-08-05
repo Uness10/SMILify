@@ -20,12 +20,13 @@ import pickle as pkl
 
 from smal_model.smal_torch import SMAL
 from smal_fitter.utils import eul_to_axis
+from smal_fitter.priors.joint_limits_prior import _ranges_from_joint_limits
 
 nn = torch.nn
 
 default_weights = dict(
-    w_chamfer=1.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_sdf=0.5
-)  # Added SDF distance weight
+    w_chamfer=1.0, w_edge=1.0, w_normal=0.01, w_laplacian=0.1, w_sdf=0.5, w_limit=0.0
+)  # Added SDF distance weight; w_limit off by default (issue #97)
 # Want to vary learning ratios between parameters,
 default_lr_ratios = []
 
@@ -34,6 +35,39 @@ def get_meshes(verts, faces, device="cuda"):
     """Returns Meshes object of all SMAL meshes."""
     meshes = Meshes(verts=verts, faces=faces).to(device)
     return meshes
+
+
+def _joint_limit_tensors_from_dd(dd, device):
+    """Build (min_limits, max_limits, error) tensors of shape (N_POSE, 3) from an
+    already-loaded SMAL .pkl dict. `error` is the deferred ValueError (or None) if
+    'joint_limits' was present but malformed - validation is never raised here,
+    only reported, so construction never crashes a consumer that doesn't use w_limit."""
+
+    def _safe_ranges(dd):
+        try:
+            return _ranges_from_joint_limits(dd), None
+        except ValueError as e:
+            # Fall back to wide-open ranges. Build the fallback from a *copy*
+            # of dd with 'joint_limits' stripped - dd itself is never mutated.
+            dd_no_limits = {k: v for k, v in dd.items() if k != "joint_limits"}
+            return _ranges_from_joint_limits(dd_no_limits), e
+
+    ranges, error = _safe_ranges(dd)
+    if error is not None:
+        print(
+            f"WARNING: invalid 'joint_limits' in the model file: {error} "
+            "Using wide-open ranges; the limit loss (w_limit > 0) will raise."
+        )
+
+    joint_names = dd["J_names"]
+    n_pose = len(joint_names) - 1  # not including the root/global rotation
+    min_values = np.array([ranges[j][ax][0] for j in joint_names for ax in range(3)])
+    max_values = np.array([ranges[j][ax][1] for j in joint_names for ax in range(3)])
+
+    # exclude root joint (its 3 values come first), reshape to match joint_rot
+    min_limits = torch.FloatTensor(min_values[3:]).view(n_pose, 3).to(device)
+    max_limits = torch.FloatTensor(max_values[3:]).view(n_pose, 3).to(device)
+    return min_limits, max_limits, error
 
 
 class SMAL3DFitter(nn.Module):
@@ -87,12 +121,8 @@ class SMAL3DFitter(nn.Module):
 
         self.betas = nn.Parameter(self.mean_betas.unsqueeze(0).repeat(batch_size, 1))
 
-        # Load the kinematic tree from SMAL model data
-        with open(config.SMAL_FILE, "rb") as f:
-            u = pkl._Unpickler(f)
-            u.encoding = "latin1"
-            dd = u.load()
-            self.kintree_table = torch.tensor(dd["kintree_table"]).to(device)
+        # Reuses the dd loaded above rather than re-opening config.SMAL_FILE.
+        self.kintree_table = torch.tensor(dd["kintree_table"]).to(device)
 
         # Get number of joints from kintree
         self.n_joints = self.kintree_table.shape[1]
@@ -116,6 +146,29 @@ class SMAL3DFitter(nn.Module):
 
         default_joints = torch.zeros(batch_size, config.N_POSE, 3).to(device)
         self.joint_rot = nn.Parameter(default_joints)
+
+        # Joint rotation limits (issue #97): read authored 'joint_limits' from the
+        # model .pkl and build a hinge-loss prior, mirroring smal_fitter/fitter.py's
+        # SMALFitter.__init__. Built from the local `dd` loaded above (not
+        # LimitPrior()/config.dd) so this doesn't depend on config.dd staying in sync
+        # with config.SMAL_FILE for this class.
+        #
+        # A malformed 'joint_limits' in the model file must not take down every run
+        # that constructs a SMAL3DFitter (this class is built unconditionally, before
+        # any stage's loss_weights are even looked at - see optimise.py). So we defer
+        # the error to the first forward pass with w_limit > 0 (Stage.forward()) and
+        # fall back to wide-open ranges meanwhile.
+        if config.ignore_hardcoded_body:
+            self.min_limits, self.max_limits, self._joint_limits_error = _joint_limit_tensors_from_dd(dd, device)
+        else:
+            # Legacy hardcoded-body mode: joint_limits/N_POSE-per-name mapping doesn't
+            # apply here. Keep the attributes present (None) so Stage.forward()'s
+            # _joint_limits_error check never hits AttributeError; max_limits/
+            # min_limits are also None, so w_limit > 0 in this mode raises a clear
+            # error at first use rather than silently doing nothing.
+            self._joint_limits_error = None
+            self.max_limits = None
+            self.min_limits = None
 
         # Use this to restrict global rotation if necessary
         self.global_mask = torch.ones(1, 3).to(device)
@@ -431,6 +484,27 @@ class Stage:
             )
             loss_components["sdf"] = loss_sdf
             loss += self.loss_weights["w_sdf"] * loss_sdf
+
+        if self.consider_loss("limit"):
+            if self.smal_3d_fitter._joint_limits_error is not None:
+                raise ValueError(
+                    "Limit loss is enabled (w_limit > 0) but the model's 'joint_limits' "
+                    f"is invalid: {self.smal_3d_fitter._joint_limits_error}"
+                )
+            if self.smal_3d_fitter.max_limits is None or self.smal_3d_fitter.min_limits is None:
+                raise ValueError(
+                    "Limit loss is enabled (w_limit > 0) but no joint limits are available "
+                    "for this model (legacy hardcoded-body mode does not support joint_limits)."
+                )
+            joint_rot = self.smal_3d_fitter.joint_rot
+            max_limits = self.smal_3d_fitter.max_limits
+            min_limits = self.smal_3d_fitter.min_limits
+            zeros = torch.zeros_like(joint_rot)
+            loss_limit = torch.mean(
+                torch.max(joint_rot - max_limits, zeros) + torch.max(min_limits - joint_rot, zeros)
+            )
+            loss_components["limit"] = loss_limit
+            loss += self.loss_weights["w_limit"] * loss_limit
 
         return loss, loss_components
 
