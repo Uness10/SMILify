@@ -500,9 +500,7 @@ class Stage:
             max_limits = self.smal_3d_fitter.max_limits
             min_limits = self.smal_3d_fitter.min_limits
             zeros = torch.zeros_like(joint_rot)
-            loss_limit = torch.mean(
-                torch.max(joint_rot - max_limits, zeros) + torch.max(min_limits - joint_rot, zeros)
-            )
+            loss_limit = torch.mean(torch.max(joint_rot - max_limits, zeros) + torch.max(min_limits - joint_rot, zeros))
             loss_components["limit"] = loss_limit
             loss += self.loss_weights["w_limit"] * loss_limit
 
