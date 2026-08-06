@@ -11,9 +11,8 @@
 - One slow, real end-to-end registration test (marked `slow`, skipped by
   default): a synthetic tight limit that provably conflicts with where an
   unconstrained fit lands, run through the actual SMAL3DFitter ->
-  Stage.forward() -> optimizer path, confirming the prior both pulls the
-  violating joint back inside bounds and measurably trades off chamfer to do
-  so.
+  Stage.forward() -> optimizer path, confirming the prior pulls the
+  violating joint back inside bounds.
 """
 
 import os
@@ -151,9 +150,9 @@ def test_w_limit_zero_is_true_noop_not_just_zero_valued():
 @pytest.mark.skipif(not os.path.isfile(TARGET_OBJ), reason=f"target mesh not found: {TARGET_OBJ}")
 def test_limit_prior_binds_on_real_registration_path(tmp_path):
     """A synthetic tight limit, chosen to conflict with where the unconstrained fit
-    lands, actually pulls the constrained fit back inside bounds and costs chamfer
-    to do so -- confirming the prior binds on the real registration path, not just
-    in the isolated unit tests above."""
+    lands, actually pulls the constrained fit back inside bounds -- confirming the
+    prior binds on the real registration path, not just in the isolated unit tests
+    above."""
     import pickle as pkl
 
     import config as project_config
