@@ -18,6 +18,7 @@ stages:
           w_edge: 0.8
           w_normal: 0.02
           w_laplacian: 0.01
+          w_limit: 100.0   # joint rotation limit prior, enabled - requires 'joint_limits' in the model .pkl (see docs/joint_limits_user_guide.md)
 
       custom_lrs: # optional, used to provide different learning rates to certain parameters
         joint_rot: 0.002
