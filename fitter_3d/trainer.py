@@ -39,14 +39,15 @@ def get_meshes(verts, faces, device="cuda"):
 
 def _joint_limit_tensors_from_dd(dd, device):
     """Build (min_limits, max_limits, error) tensors of shape (N_POSE, 3) from an
-    already-loaded SMAL .pkl dict. `error` is the deferred ValueError (or None) if
-    'joint_limits' was present but malformed - validation is never raised here,
-    only reported, so construction never crashes a consumer that doesn't use w_limit."""
+    already-loaded SMAL .pkl dict. `error` is the deferred ValueError/TypeError (or
+    None) if 'joint_limits' was present but malformed - validation is never raised
+    here, only reported, so construction never crashes a consumer that doesn't use
+    w_limit."""
 
     def _safe_ranges(dd):
         try:
             return _ranges_from_joint_limits(dd), None
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             # Fall back to wide-open ranges. Build the fallback from a *copy*
             # of dd with 'joint_limits' stripped - dd itself is never mutated.
             dd_no_limits = {k: v for k, v in dd.items() if k != "joint_limits"}

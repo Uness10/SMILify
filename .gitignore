@@ -14,7 +14,7 @@ __pycache__/
 
 # Temp results
 Fitter_RESULTS/
-fit3d_results_*/
+fit3d_results
 output/
 3D_model_prep/morph_anim/
 3D_model_prep/measurements/
