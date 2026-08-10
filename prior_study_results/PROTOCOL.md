@@ -95,6 +95,10 @@ the *data* constant, not the architecture.
 
 ### 2.1 Primary — realism
 
+> ⚠️ **Superseded by Amendment 1 (2026-08-10) — see §8.** The joint set below was found to
+> be unconstrainable under §5.4 before any run took place. The original text is retained
+> unedited; §8 defines the endpoint actually in force.
+
 **Per-axis limit-violation rate.** Percentage of test frames in which a joint's axis-angle
 component falls outside its authored `[min, max]`, averaged over the six
 `joint_importance` leg-tip joints:
@@ -230,3 +234,78 @@ that must be recorded here **before** Phase 5 is run, not after.
 | Date | Change | Reason |
 |---|---|---|
 | 2026-08-10 | Protocol locked (Phase 0 + 0.5). | Initial pre-registration. |
+| 2026-08-10 | **Amendment 1** (§8): primary endpoint moves from the six `*_pt_*` pretarsus joints to the 18 documented leg hinges (`co`/`tr`/`ti` × 6 legs). | §2.1 and §5.4 were mutually unsatisfiable: the pretarsi are undocumented in the literature and would be left wide open, making the primary endpoint identically zero in every column. Amended **before any constrained run**, on rig-audit evidence alone. |
+
+---
+
+## 8. Amendment 1 — primary endpoint joint set
+
+**Date:** 2026-08-10 **Status:** in force, supersedes §2.1
+**Evidence:** rig audit of `3D_model_prep/SMILy_STICK.pkl` (55 joints), Phase 3a.
+**Runs affected:** none — no constrained model had been trained when this was written.
+
+### Why
+
+Each leg in the rig is the chain
+
+```
+b_t → co → tr → fe → ti → ta → pt          (× 6 legs, suffix _r / _l)
+```
+
+A joint's rotation is that of the named bone relative to its parent, so the anatomical
+mapping is:
+
+| Rig segment | Rotates relative to | Anatomical joint | Literature |
+|---|---|---|---|
+| `co` coxa | thorax | **ThC** — protraction/retraction (α) | well covered |
+| `tr` trochanter | coxa | **CTr** — levation/depression (β) | well covered |
+| `fe` femur | trochanter | trochantero-femoral | fused/immobile in stick insects |
+| `ti` tibia | femur | **FTi** — flexion/extension (γ) | best documented |
+| `ta` tarsus | tibia | tibia–tarsus | sparse, often treated as passive |
+| `pt` pretarsus | tarsus | tarsus–pretarsus (claw) | effectively absent |
+
+The six `joint_importance` joints named in §2.1 are `l_{1,2,3}_pt_{l,r}` — the **pretarsi**,
+the bottom row of that table. §5.4 commits to leaving undocumented joints wide open at ±π.
+Both cannot hold: with the pretarsi unconstrained the hinge loss is inert there, so the
+violation rate is identically 0 in the unconstrained, control **and** prior columns. The
+primary endpoint would measure nothing, and the Phase-4 gate would read "< 2 %, return to
+Phase 3" for a reason that is not a sign or axis error.
+
+Note that §2.1 inherited this joint set from `joint_importance`, whose purpose is
+*keypoint weighting* — the leg tips are where positional error matters most. That is a
+good reason to weight them in MPJPE and no reason at all to expect a rotation prior on
+them.
+
+### The endpoint now in force
+
+**Primary (realism): per-axis limit-violation rate over the 18 documented leg hinges.**
+Percentage of test frames in which a joint's axis-angle component falls outside its
+authored `[min, max]`, averaged over the constrained axes of:
+
+```
+l_{1,2,3}_co_{l,r}   (6 × ThC)
+l_{1,2,3}_tr_{l,r}   (6 × CTr)
+l_{1,2,3}_ti_{l,r}   (6 × FTi)
+```
+
+Measured per axis (x, y, z), since the hinge loss clamps each component independently.
+Source: `limit_violations.csv` from `scripts/prior_study/analyze_baseline_pose.py`, invoked
+with `--important-joints` set to the 18 names above.
+
+Reported alongside, unchanged in role:
+
+- Violation rate over **all** constrained joints (secondary, §2.2) — catches a gain
+  concentrated in one hinge.
+- Per-joint breakdown (§5.3).
+- The six `*_pt_*` joints stay in the **accuracy guardrail** (§2.3), where they belong:
+  they are the leg tips MPJPE and PCK are weighted on.
+
+### Consequential notes
+
+- `fe` (trochantero-femoral) is fused in stick insects. Per the Risks table it should be
+  **locked** (Min = Max = 0) rather than loosely bounded, and it is excluded from the
+  primary endpoint — a locked joint that never moves cannot show a violation reduction.
+- `ta` and `pt` remain wide open unless Phase 2 turns up a defensible source. If it does,
+  they join the secondary "all constrained joints" figure, not the primary.
+- §3's decision rule, §4's hypotheses and §6's viability table are unchanged in form; they
+  now read against the 18-joint set.

@@ -403,8 +403,15 @@ def build_eval_split(
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-def _self_test(out: Path) -> int:
-    """Exercise the whole path on a synthetic dataset -- no HDF5, no GPU."""
+def _self_test() -> int:
+    """Exercise the whole path on a synthetic dataset -- no HDF5, no GPU.
+
+    Writes to a throwaway temp directory, never to ``prior_study_results/``: the
+    synthetic fixture must not end up sitting next to the real frozen split, where a
+    later reader could mistake a 137-sample toy for the study's evaluation set.
+    """
+    import tempfile
+
     import torch
 
     n_samples, max_views = 137, 4
@@ -439,11 +446,12 @@ def _self_test(out: Path) -> int:
         assert item not in train_items
     assert set(isi[split.test_view_items].tolist()) == set(split.test_samples)
 
-    # 4. JSON round-trip
-    p = split.write(out / "eval_split_selftest.json")
-    again = load_eval_split(p)
-    assert again.to_dict()["samples"] == split.to_dict()["samples"]
-    again.assert_compatible(n_samples, CANONICAL_SEED)
+    # 4. JSON round-trip (in a temp dir that is discarded on exit)
+    with tempfile.TemporaryDirectory(prefix="eval_split_selftest_") as td:
+        p = split.write(Path(td) / "eval_split_selftest.json")
+        again = load_eval_split(p)
+        assert again.to_dict()["samples"] == split.to_dict()["samples"]
+        again.assert_compatible(n_samples, CANONICAL_SEED)
 
     print("self-test OK")
     print(f"  {n_samples} samples -> {n_train}/{n_val}/{n_test}")
@@ -451,7 +459,7 @@ def _self_test(out: Path) -> int:
         f"  {len(isi)} view-items -> "
         f"{len(split.train_view_items)}/{len(split.val_view_items)}/{len(split.test_view_items)}"
     )
-    print(f"  wrote {p}")
+    print("  (round-trip written to a temp dir and discarded -- nothing added to prior_study_results/)")
     return 0
 
 
@@ -469,11 +477,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--verify", action="store_true", help="Recompute and compare against --out; exit 1 on drift")
     ap.add_argument("--force", action="store_true", help="Overwrite an existing frozen split")
-    ap.add_argument("--self-test", action="store_true", help="Validate the logic on synthetic data and exit")
+    ap.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Validate the logic on synthetic data (writes to a temp dir) and exit",
+    )
     args = ap.parse_args(argv)
 
     if args.self_test:
-        return _self_test(args.out.parent if args.out.suffix else args.out)
+        return _self_test()
 
     if args.dataset is None and args.num_samples is None:
         ap.error("one of --dataset or --num-samples is required")
