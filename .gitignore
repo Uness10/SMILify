@@ -246,3 +246,5 @@ benchmark_singleview_*/
 
 # Claude Code: project CLAUDE.md is tracked; machine-local settings are not.
 .claude/settings.local.json
+scripts/prior_study/ROADMAP.md
+next_steps.txt
