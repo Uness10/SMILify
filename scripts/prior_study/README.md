@@ -12,6 +12,36 @@ it later against a constrained checkpoint and diff the two output folders.
 
 ---
 
+## Before any run: the frozen protocol (Phase 0)
+
+`ROADMAP.md` describes the full study. Its Phase 0 is done and lives in two places:
+
+- **`prior_study_results/PROTOCOL.md`** — pre-registered endpoints, the filled-in decision
+  rule, and hypotheses H1–H3. Locked 2026-08-10; amendments append to the log at the bottom.
+- **`freeze_eval_split.py`** — freezes the train/val/test split both arms share, so the
+  single-view and multi-view test sets contain the same underlying frames.
+
+```bash
+# freeze once, commit the JSON
+python scripts/prior_study/freeze_eval_split.py \
+    --dataset SMILySTICKS_centred_reprojected_FIXED.h5 --seed 42
+
+# re-verify before every study run (exit 1 on drift)
+python scripts/prior_study/freeze_eval_split.py \
+    --dataset SMILySTICKS_centred_reprojected_FIXED.h5 --verify
+
+# validate the logic with no data on disk
+python scripts/prior_study/freeze_eval_split.py --self-test
+```
+
+**Canonical split: seed `42`, ratios `0.85 / 0.05 / 0.10`.** The multi-view stick config
+already uses seed 42; the single-view study config must adopt it (the shipped single-view
+example uses 1234, which would put different frames in each arm's test set).
+`tests/test_prior_study_eval_split.py` pins the equivalence to both trainers' inline split
+logic.
+
+---
+
 ## Key finding to discuss first
 
 The stick model `3D_model_prep/SMILy_STICK.pkl` **has no `joint_limits` key yet** (probed:
