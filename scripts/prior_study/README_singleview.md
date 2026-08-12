@@ -113,14 +113,26 @@ gdown 1wlVPe1ZwGmFkS9KhLODpIzvfi3DsqgQL -O SMILySTICKS_centred_reprojected_FIXED
 ```bash
 python scripts/prior_study/prepare_resume_config.py \
     --checkpoint singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth \
-    --base-config singleview_SMILySTICKS_3D_ViT_checkpoints/config.json \
+    --base-config singleview_SMILySTICKS_3D_ViT.json \
     --extra-epochs 10 \
     --label unconstrained \
     --joint-limit-weight 0.0 \
-    --data-path SMILySTICKS_centred_reprojected_FIXED.h5 \
-    --smal-file 3D_model_prep/SMILy_STICK.pkl \
     --out configs_runs/singleview_unconstrained.json
 ```
+
+`--base-config` must be **the JSON that produced the checkpoint** — for this run
+that is `singleview_SMILySTICKS_3D_ViT.json` (whose `output.checkpoint_dir` is
+`singleview_SMILySTICKS_3D_ViT_checkpoints`). Omit the flag and the script
+auto-discovers it from that naming convention.
+
+> **Never let it fall back to the checkpoint's embedded config.** That block is
+> serialized from the runtime `TrainingConfig`, so it carries stale defaults, not
+> what the run used. On job 15521637 it yielded `data_path:
+> RealSMILyMouseFalknerFROM3D_no_crop.h5` (a **mouse** dataset) paired with the
+> 55-joint stick model, plus `hidden_dim 1024`/`freeze_backbone true` instead of
+> the real `512`/`false`. Training ran without error. The fallback is now behind
+> `--allow-embedded-config` and off by default, and the script cross-checks the
+> model's joint count against the HDF5's `n_joints` before writing anything.
 
 It prints the epoch arithmetic — check it before submitting:
 

@@ -61,6 +61,21 @@ echo " out dir    : $OUT_DIR"
 echo " limits     : ${LIMITS:-<none: violation table will be skipped>}"
 echo "=================================================================="
 
+# -- resolve the checkpoint ---------------------------------------------------
+# best_model.pth is only written when val_loss beats the value RESTORED from the
+# resumed checkpoint (train_smil_regressor.py:1303 + 2161). Continuing an
+# already-converged run for a handful of epochs can therefore finish without ever
+# writing one. Fall back to the newest periodic checkpoint so the study still runs.
+if [[ ! -e "$CHECKPOINT" && "$(basename "$CHECKPOINT")" == "best_model.pth" ]]; then
+  CKPT_DIR="$(dirname "$CHECKPOINT")"
+  FALLBACK="$(ls -t "$CKPT_DIR"/checkpoint_epoch_*.pth 2>/dev/null | head -n1 || true)"
+  if [[ -n "$FALLBACK" ]]; then
+    echo "  [note] $CHECKPOINT not found (val loss never beat the resumed best)."
+    echo "         Falling back to newest periodic checkpoint: $FALLBACK"
+    CHECKPOINT="$FALLBACK"
+  fi
+fi
+
 # -- sanity: inputs exist -----------------------------------------------------
 missing=0
 for f in "$CHECKPOINT" "$DATASET" "$SMAL_FILE"; do
