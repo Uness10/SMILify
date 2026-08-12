@@ -3,7 +3,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=128
-#SBATCH --account=ias-7
+#SBATCH --account=cias-7
 #SBATCH --partition=dc-gpu
 #SBATCH --time=04:00:00
 #SBATCH --job-name=sv_unconstrained
@@ -15,11 +15,14 @@
 # resuming from a downloaded checkpoint. Unconstrained arm of the joint-limit
 # prior study (joint_limit_regularization = 0).
 #
+# Uses the conda env directly (NOT the sc_venv/torchrun_jsc setup from the
+# jsc-hpc branch — that venv isn't in this working tree).
+#
 # Prepare the config on the LOGIN NODE first (it reads the checkpoint's epoch
 # and turns "N more epochs" into the absolute end epoch the trainer expects):
 #
 #   mkdir -p logs configs_runs
-#   source hpc_files/sc_venv_pytorch3d/activate.sh
+#   conda activate /p/project1/cias-7/anouar1/conda_envs/pytorch3d
 #   python scripts/prior_study/prepare_resume_config.py \
 #       --checkpoint singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth \
 #       --base-config singleview_SMILySTICKS_3D_ViT_checkpoints/config.json \
@@ -32,40 +35,63 @@
 #
 #   sbatch hpc_files/sc_venv_pytorch3d/run_singleview_training_JURECA.sbatch
 #
-# Override the config without editing this file:
+# Override without editing this file:
 #   CONFIG=configs_runs/singleview_constrained.json \
 #     sbatch --export=ALL,CONFIG --job-name=sv_constrained \
 #       hpc_files/sc_venv_pytorch3d/run_singleview_training_JURECA.sbatch
 #
 # Monitor:  squeue --me   /   tail -f logs/<jobname>_<jobid>.out
 # Cancel :  scancel <jobid>
+#
+# NOTE: intentionally no `set -u`. Conda's activate hooks (libblas_mkl_activate.sh)
+# reference unset vars like MKL_INTERFACE_LAYER and abort under set -u.
+set -eo pipefail
 # ---------------------------------------------------------------------------
 
-# Backbone weights are pre-fetched on the login node (hpc_files/download_backbone_weights.py);
-# keep HF/timm off the network on the compute nodes.
+# Backbone weights must already be cached (hpc_files/download_backbone_weights.py
+# on the login node); compute nodes have no outbound network.
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
-# One task per node; expose the task's CPU allocation to srun (DataLoader workers).
-export SRUN_CPUS_PER_TASK="$SLURM_CPUS_PER_TASK"
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 
-# torchrun rendezvous: first node of the allocation is the master.
-MASTER_ADDR="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)"
-export MASTER_ADDR="$(nslookup "$MASTER_ADDR" | grep -oP '(?<=Address: ).*')"
-export MASTER_PORT=7011
+REPO_DIR="${REPO_DIR:-$SLURM_SUBMIT_DIR}"
+ENV_PREFIX="${ENV_PREFIX:-/p/project1/cias-7/anouar1/conda_envs/pytorch3d}"
 
-# Activate the venv (config.sh exports SMILIFY_DIR = repo root), then run from the
-# repo root so the absolute `smal_fitter.*` / `config` imports resolve.
-source "${SLURM_SUBMIT_DIR}/hpc_files/sc_venv_pytorch3d/activate.sh"
-cd "${SMILIFY_DIR}"
+# --- activate conda ----------------------------------------------------------
+# Batch jobs don't reliably source ~/.bashrc, so locate conda.sh explicitly.
+# Override with CONDA_SH=/path/to/conda.sh if this guess is wrong.
+if [[ -z "${CONDA_SH:-}" ]]; then
+    if command -v conda >/dev/null 2>&1; then
+        CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh"
+    else
+        for base in "$HOME/miniconda3" "$HOME/miniforge3" "$HOME/anaconda3" \
+                    /p/project1/cias-7/anouar1/miniconda3 /p/project1/cias-7/anouar1/miniforge3; do
+            [[ -f "$base/etc/profile.d/conda.sh" ]] && { CONDA_SH="$base/etc/profile.d/conda.sh"; break; }
+        done
+    fi
+fi
+if [[ ! -f "$CONDA_SH" ]]; then
+    echo "ERROR: could not locate conda.sh. Submit with:" >&2
+    echo "  CONDA_SH=/path/to/conda/etc/profile.d/conda.sh sbatch --export=ALL,CONDA_SH ..." >&2
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$CONDA_SH"
+conda activate "$ENV_PREFIX"
 
-# --- edit for your run -------------------------------------------------------
-CONFIG="${CONFIG:-configs_runs/singleview_unconstrained.json}"
+cd "$REPO_DIR"
 
 echo "Job $SLURM_JOB_ID on $(hostname) — $(date)"
-echo "Config: $CONFIG"
+echo "  repo   : $REPO_DIR"
+echo "  env    : $CONDA_PREFIX"
+echo "  python : $(which python)"
+python -c "import torch; print(f'  torch  : {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.device_count()} GPU(s) visible')"
+
+# --- config ------------------------------------------------------------------
+CONFIG="${CONFIG:-configs_runs/singleview_unconstrained.json}"
+echo "  config : $CONFIG"
 
 if [[ ! -f "$CONFIG" ]]; then
     echo "ERROR: config not found: $CONFIG" >&2
@@ -76,7 +102,7 @@ fi
 # --- pre-flight: the num_epochs trap ----------------------------------------
 # training.num_epochs is an ABSOLUTE end epoch and the trainer resumes at
 # checkpoint_epoch + 1. If num_epochs <= that, the loop body never executes and
-# the job "succeeds" after training nothing. Catch it before allocating GPUs.
+# the job "succeeds" after training nothing. Catch it before burning the GPUs.
 python - "$CONFIG" <<'PY' || exit 1
 import json, sys, os, torch
 cfg = json.load(open(sys.argv[1]))
@@ -98,20 +124,28 @@ if num_epochs is None or num_epochs <= start:
 print(f"  -> will train {num_epochs - start} epoch(s)")
 w = (cfg.get("loss_curriculum", {}).get("base_weights", {}) or {}).get("joint_limit_regularization", 0.0)
 print(f"  joint_limit_regularization: {w}  ({'UNCONSTRAINED' if not w else 'CONSTRAINED'})")
+bs = tr.get("batch_size")
+print(f"  batch_size {bs} per GPU x 4 GPUs -> effective {bs * 4 if bs else '?'} "
+      f"(train_smil_regressor.py:1737 — batch_size is PER PROCESS under DDP)")
 print(f"  checkpoints -> {cfg.get('output', {}).get('checkpoint_dir')}")
 PY
 
 # --- launch ------------------------------------------------------------------
-# One torchrun agent per node, one process per GPU. The single-view trainer
-# detects RANK/LOCAL_RANK/WORLD_SIZE (is_torchrun_launched) and skips its own
-# mp.spawn path, so --num_gpus is intentionally not passed.
-srun --export=ALL --cpu_bind=none bash -c "torchrun_jsc \
-    --nnodes=$SLURM_NNODES \
-    --nproc_per_node=gpu \
-    --rdzv_backend c10d \
-    --rdzv_id $RANDOM \
-    --rdzv_endpoint=$MASTER_ADDR:$MASTER_PORT \
-    --rdzv_conf=is_host=\$(if ((SLURM_NODEID)); then echo 0; else echo 1; fi) \
-    -m smal_fitter.neuralSMIL.train_smil_regressor --config $CONFIG"
+# Single node: --standalone gives torchrun its own rendezvous on localhost, so no
+# MASTER_ADDR/MASTER_PORT/rdzv plumbing is needed. The single-view trainer detects
+# RANK/LOCAL_RANK/WORLD_SIZE (is_torchrun_launched) and skips its own mp.spawn
+# path, so --num_gpus is intentionally not passed.
+#
+# Run torchrun directly rather than under srun: the batch script already runs on
+# the allocated node with all 4 GPUs visible, and srun+torchrun double-launching
+# is a common source of duplicated ranks.
+TORCHRUN="torchrun"
+command -v torchrun >/dev/null 2>&1 || TORCHRUN="python -m torch.distributed.run"
+
+$TORCHRUN \
+    --standalone \
+    --nnodes=1 \
+    --nproc_per_node=4 \
+    -m smal_fitter.neuralSMIL.train_smil_regressor --config "$CONFIG"
 
 echo "Done — $(date)"

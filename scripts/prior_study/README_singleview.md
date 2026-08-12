@@ -19,7 +19,17 @@ checkpoint at epoch 240 with `num_epochs: 250` gives you 9 more epochs; with
 `num_epochs = epoch + 1 + N` for you, and the training sbatch re-checks it
 before allocating GPUs.
 
-**2. `3D_model_prep/SMILy_STICK.pkl` has no authored `joint_limits`.**
+**2. `batch_size` is PER PROCESS under DDP.**
+`train_smil_regressor.py:1737` prints `Total effective batch size: batch_size *
+world_size`. On 4 GPUs the checkpoint's batch size is quadrupled, so the
+continuation runs at a different effective batch (and therefore a different
+noise scale) than the run that produced the checkpoint — while inheriting that
+run's learning-rate curriculum unchanged. Either divide `training.batch_size` by
+4 in the prepared config to match the original regime, or accept 4× and keep it
+**identical across both arms** so the comparison stays clean. The training job
+prints the arithmetic in its pre-flight block before it starts.
+
+**3. `3D_model_prep/SMILy_STICK.pkl` has no authored `joint_limits`.**
 Only `3D_model_prep/OmniAnt_25PCs_joint_limited.pkl` does (added in `978c69b`:
 99 of 165 axes constrained across 33 of 55 joints). So:
 
@@ -43,10 +53,16 @@ Only `3D_model_prep/OmniAnt_25PCs_joint_limited.pkl` does (added in `978c69b`:
 | `../../hpc_files/sc_venv_pytorch3d/run_singleview_study_JURECA.sbatch` | 1 GPU, runs the study wrapper. |
 | `analyze_baseline_pose.py` | Shared with the multi-view arm — unchanged. |
 
-> The `hpc_files/sc_venv_pytorch3d/` venv itself (`activate.sh`, `config.sh`,
-> `modules.sh`, `setup.sh`, `requirements*.txt`) lives on the **`jsc-hpc`**
-> branch, not on `master`. If it isn't in your working tree yet:
-> `git checkout upstream/jsc-hpc -- hpc_files/sc_venv_pytorch3d/`
+> **These sbatch scripts use conda, not the JSC `sc_venv` setup.** The
+> `activate.sh` / `torchrun_jsc` combination in
+> `run_multiview_training_JURECA.sbatch` comes from the **`jsc-hpc`** branch and
+> is not in this working tree — sourcing it fails and `torchrun_jsc: command not
+> found` follows. These scripts activate the conda env directly and use plain
+> `torchrun --standalone`, which is all a single node needs.
+>
+> Defaults are `ENV_PREFIX=/p/project1/cias-7/anouar1/conda_envs/pytorch3d` and
+> `--account=cias-7`. Override without editing:
+> `ENV_PREFIX=... sbatch --export=ALL,ENV_PREFIX ...`
 
 ---
 
@@ -55,12 +71,18 @@ Only `3D_model_prep/OmniAnt_25PCs_joint_limited.pkl` does (added in `978c69b`:
 ### 0. One-time setup on the login node
 
 ```bash
-cd $SMILIFY_DIR                       # your repo checkout on /p/scratch
-git checkout upstream/jsc-hpc -- hpc_files/sc_venv_pytorch3d/   # if needed
-bash hpc_files/sc_venv_pytorch3d/setup.sh                       # builds venv/
-source hpc_files/sc_venv_pytorch3d/activate.sh
-python hpc_files/download_backbone_weights.py                   # ViT-L weights, compute nodes are offline
+cd /p/scratch/share/anouar1/SMILify
+conda activate /p/project1/cias-7/anouar1/conda_envs/pytorch3d
+python hpc_files/download_backbone_weights.py   # ViT-L weights; compute nodes are offline
 mkdir -p logs configs_runs
+```
+
+If the job later reports `could not locate conda.sh`, batch jobs aren't picking
+up conda from your `~/.bashrc`. Pass it explicitly:
+
+```bash
+CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh" \
+  sbatch --export=ALL,CONDA_SH hpc_files/sc_venv_pytorch3d/run_singleview_training_JURECA.sbatch
 ```
 
 ### 1. Download the checkpoint folder
