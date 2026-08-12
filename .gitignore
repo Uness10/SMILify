@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+*.pdf
 # Ensure no nested __pycache__ folders are tracked
 **/__pycache__/
 
@@ -239,6 +239,15 @@ getting_started*checkpoints/
 getting_started*plots/
 getting_started*visualizations*/
 benchmark_singleview_*/
+
+# Prior-study run artefacts: derived continuation configs, training outputs,
+# study results and SLURM logs. All regenerable from the scripts in
+# scripts/prior_study/ plus the downloaded checkpoint.
+configs_runs/
+runs/
+prior_study_results/
+logs/
+singleview_SMILySTICKS_3D_ViT_checkpoints/
 
 # Scratch parametric-model exports from Blender prep. The tracked .pkl
 # models carry no _TEST suffix, so they are unaffected.
