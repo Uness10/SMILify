@@ -1,14 +1,21 @@
-# Single-view prior study — unconstrained arm
+# Single-view prior study — constrained run (RWTH CLAIX-2023)
 
 The single-view counterpart of [`README.md`](README.md) (which is multi-view).
-This folder's job here is the **"before" (unconstrained) column**: resume the
-downloaded single-view checkpoint for a few more epochs with
-`joint_limit_regularization = 0`, then measure accuracy *and* pose realism so a
-constrained run drops straight into a side-by-side table.
+Resume the downloaded single-view checkpoint for 10 more epochs with
+`joint_limit_regularization > 0` against the authored per-joint limits, then
+measure accuracy *and* pose realism.
+
+**Runs on RWTH CLAIX-2023 (`c23g`, 4× H100).** The JSC/JURECA scripts under
+`hpc_files/sc_venv_pytorch3d/` are superseded — see [Cluster port](#cluster-port).
+
+**Scope note:** this study now has a **single arm**. The unconstrained
+fine-tuning arm was dropped; the reference point is the downloaded checkpoint
+itself, not a separately fine-tuned baseline. Anything below that reads as a
+two-column comparison is stale.
 
 ---
 
-## Read this first — two things that will bite you
+## Read this first — three things that will bite you
 
 **1. `training.num_epochs` is an absolute END epoch, not a count.**
 On resume the trainer sets `start_epoch = checkpoint["epoch"] + 1`
@@ -25,20 +32,51 @@ world_size`. On 4 GPUs the checkpoint's batch size is quadrupled, so the
 continuation runs at a different effective batch (and therefore a different
 noise scale) than the run that produced the checkpoint — while inheriting that
 run's learning-rate curriculum unchanged. Either divide `training.batch_size` by
-4 in the prepared config to match the original regime, or accept 4× and keep it
-**identical across both arms** so the comparison stays clean. The training job
-prints the arithmetic in its pre-flight block before it starts.
+4 in the prepared config to match the original regime, or accept 4× knowingly.
+The training job prints the arithmetic in its pre-flight block before it starts.
 
-**3. `3D_model_prep/SMILy_STICK.pkl` has no authored `joint_limits`.**
-Only `3D_model_prep/OmniAnt_25PCs_joint_limited.pkl` does (added in `978c69b`:
-99 of 165 axes constrained across 33 of 55 joints). So:
+**3. The penalty is averaged over ALL non-root axes, not the constrained ones.**
+`_joint_limit_penalty` is a `torch.mean` over the full `(N, N_POSE, 3)` hinge
+(`smil_image_regressor.py:1445`). Free axes contribute exact zeros to that mean,
+so the *fraction* of authored axes directly scales the effective prior strength.
+With the current 30-of-162 non-root coverage, `w_limit = 100` delivers roughly
+**4.3× less** pull than the same number would on a densely authored set. The
+training pre-flight prints the coverage percentage; read it before concluding
+"the prior does nothing."
 
-- the **unconstrained** run below works today;
-- the **constrained** run on the stick model does not exist yet — the trainer
-  raises if `joint_limit_regularization > 0` and the `.pkl` has no usable limits.
-  Author the stick limits in Blender (`docs/joint_limits_user_guide.md`) first.
-  The angle distributions this study produces are exactly the data you'd use to
-  pick those ranges.
+---
+
+## The model file
+
+**`3D_model_prep/SMILy_STICK_limits_authored.pkl`** — this is the one to use.
+
+- `3D_model_prep/SMILy_STICK.pkl` has no `joint_limits` at all; the trainer
+  raises rather than training a silent no-op.
+- `3D_model_prep/SMILy_STICK_authored.pkl` is an earlier, densely authored
+  variant (132/165 axes). Geometry is identical to the file above — only
+  `joint_limits` differs — so the two are interchangeable as far as the mesh,
+  skinning and joint regressor are concerned.
+
+Verified contents of `SMILy_STICK_limits_authored.pkl`:
+
+| Check | Result |
+|---|---|
+| `joint_limits` shape | `(55, 3, 2)`, float64, radians — matches `len(J_names)` |
+| `min <= max`, all finite | pass (`LimitPrior._ranges_from_joint_limits` validation) |
+| all axes within `[-π, π]` | pass — no representation-ambiguous authoring |
+| rest pose inside limits | pass — 0 ∈ `[min, max]` on every axis |
+| Constrained axes | **33 of 165**, across **11 of 55** joints (132 axes at ±π = free) |
+| Constrained joints | `l_{1,2,3}_co_{r,l}` (coxae), `w_1_{r,l}`, `w_2_r`, `b_h` |
+| Root `b_t` | `[0,0]` on all 3 axes — correct; `LimitPrior` pins it, the fitter drops it via the `[3:]` slice |
+| `_check_bounds_can_bite` | passes — not wide-open, so the hinge is not a silent no-op even in `6d` |
+| Non-root constrained ranges | 20°–120°, median 57° |
+
+> **Coverage is deliberate and narrow.** Limits are authored on the coxae, wings
+> and head only; the trochanter/femur/tibia/tarsus chain and the
+> antennae/mandibles are intentionally left free. So the prior constrains
+> **proximal leg placement**, not distal leg articulation — violations in the
+> femur/tibia/tarsus chain are not penalised and should not be expected to
+> improve. See also caveat 3 above on how coverage dilutes the effective weight.
 
 ---
 
@@ -49,43 +87,64 @@ Only `3D_model_prep/OmniAnt_25PCs_joint_limited.pkl` does (added in `978c69b`:
 | `prepare_resume_config.py` | Derives the run config from the checkpoint's `config.json`: sets `resume_checkpoint`, computes the absolute `num_epochs`, sets the joint-limit weight, isolates output dirs, validates via `load_config`. |
 | `export_singleview_poses.py` | Runs a single-view checkpoint over the **same test split the benchmark scores** and writes the `.npz`/`.json` pair `analyze_baseline_pose.py` expects. (Needed because `run_singleview_inference --export_animation` only accepts a folder/video, not an HDF5.) |
 | `run_singleview_study.sh` | benchmark → export → analyse, into `prior_study_results/singleview_<label>/`. |
-| `../../hpc_files/sc_venv_pytorch3d/run_singleview_training_JURECA.sbatch` | 1 node × 4 GPUs, `torchrun_jsc`, resumes from the checkpoint. |
-| `../../hpc_files/sc_venv_pytorch3d/run_singleview_study_JURECA.sbatch` | 1 GPU, runs the study wrapper. |
+| `../../hpc_files/rwth/run_singleview_training_RWTH.sbatch` | `c23g`, 1 node × 4 H100, `torchrun --standalone`, resumes from the checkpoint. |
+| `../../hpc_files/rwth/run_singleview_study_RWTH.sbatch` | `c23g`, 1 GPU, runs the study wrapper. |
 | `analyze_baseline_pose.py` | Shared with the multi-view arm — unchanged. |
 
-> **These sbatch scripts use conda, not the JSC `sc_venv` setup.** The
-> `activate.sh` / `torchrun_jsc` combination in
-> `run_multiview_training_JURECA.sbatch` comes from the **`jsc-hpc`** branch and
-> is not in this working tree — sourcing it fails and `torchrun_jsc: command not
-> found` follows. These scripts activate the conda env directly and use plain
-> `torchrun --standalone`, which is all a single node needs.
->
-> Defaults are `ENV_PREFIX=/p/project1/cias-7/anouar1/conda_envs/pytorch3d` and
-> `--account=cias-7`. Override without editing:
-> `ENV_PREFIX=... sbatch --export=ALL,ENV_PREFIX ...`
+### Cluster port
+
+The RWTH scripts were ported from `hpc_files/sc_venv_pytorch3d/run_singleview_*_JURECA.sbatch`.
+What changed and why:
+
+| | JURECA-DC | RWTH CLAIX-2023 |
+|---|---|---|
+| `--partition` | `dc-gpu` | `c23g` |
+| GPUs/node | 4× A100 40GB | 4× H100 80GB — `--nproc_per_node` stays **4**, so effective batch is unchanged |
+| `--cpus-per-task` | 128 | **96** (2× Xeon 8468) — 24 for the 1-GPU study job |
+| `--account` | hardcoded `cias-7` | **not hardcoded** — RWTH accounts are per-project; the script aborts unless you pass `--account=` |
+| env / data root | `/p/project1/...` | `$HPCWORK` (`$HOME` quota won't hold a conda env + 21 GB dataset) |
+| launcher | `torchrun --standalone` | unchanged (never used `torchrun_jsc`; that lives on the `jsc-hpc` branch) |
+| compute-node network | none | none — `HF_*_OFFLINE=1` and the login-node weight prefetch both stay |
+
+Two latent bugs were fixed in the port rather than carried over:
+
+- The study script's `SMAL_FILE` defaulted to `SMILy_STICK.pkl` (**no limits**),
+  so `analyze_baseline_pose.load_limits` found nothing and silently skipped the
+  limit-violation table — the headline number of the study. It now defaults to
+  the authored `.pkl`, and the job prints the limits source before running.
+- The JSC study script used `--account=ias-7` while training used `cias-7`.
+  Moot now that the account is supplied at submit time.
+
+`LIMITS` stays unset on purpose: `load_limits` prefers an explicit `--limits`
+file but falls back to the `joint_limits` key inside `SMAL_FILE`, so pointing at
+the authored `.pkl` is sufficient.
 
 ---
 
-## Run it on JURECA-DC
+## Run it on RWTH CLAIX-2023
+
+Substitute your project for `<proj>` throughout (`rwth####` / `p0######`;
+`squeue --me --format="%a"` or your project portal shows it).
 
 ### 0. One-time setup on the login node
 
 ```bash
-cd /p/scratch/share/anouar1/SMILify
-conda activate /p/project1/cias-7/anouar1/conda_envs/pytorch3d
-python hpc_files/download_backbone_weights.py   # ViT-L weights; compute nodes are offline
+cd "$HPCWORK/SMILify"
+conda activate "$HPCWORK/conda_envs/pytorch3d"
+python hpc_files/download_backbone_weights.py   # ViT-L weights; c23g nodes are offline
 mkdir -p logs configs_runs
 ```
 
-If the job later reports `could not locate conda.sh`, batch jobs aren't picking
-up conda from your `~/.bashrc`. Pass it explicitly:
+If a job later reports `could not locate conda.sh`, batch jobs aren't picking up
+conda from your `~/.bashrc`. Pass it explicitly:
 
 ```bash
 CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh" \
-  sbatch --export=ALL,CONDA_SH hpc_files/sc_venv_pytorch3d/run_singleview_training_JURECA.sbatch
+  sbatch --account=<proj> --export=ALL,CONDA_SH \
+    hpc_files/rwth/run_singleview_training_RWTH.sbatch
 ```
 
-### 1. Download the checkpoint folder
+### 1. Checkpoint and dataset
 
 ```bash
 pip install gdown
@@ -97,27 +156,26 @@ ls singleview_SMILySTICKS_3D_ViT_checkpoints/
 You want `best_model.pth` (or a specific `checkpoint_epoch_*.pth`) **and**
 `config.json` — the trainer writes the resolved config next to the checkpoints,
 and reusing it guarantees the architecture, split seed and loss curriculum match
-the run being continued. If `config.json` is missing, `prepare_resume_config.py`
-falls back to the config block embedded in the `.pth` and tells you which
-sections it had to guess.
+the run being continued.
 
-The dataset (`SMILySTICKS_centred_reprojected_FIXED.h5`, ~21 GB) goes in the
-repo root per `GETTING_STARTED.md`:
+The dataset (`SMILySTICKS_centred_reprojected_FIXED.h5`, ~21 GB) goes in the repo
+root per `GETTING_STARTED.md`. On RWTH keep the repo itself on `$HPCWORK` —
+`$HOME` will not hold it.
 
 ```bash
 gdown 1wlVPe1ZwGmFkS9KhLODpIzvfi3DsqgQL -O SMILySTICKS_centred_reprojected_FIXED.h5
 ```
 
-### 2. Prepare the continuation config (login node)
+### 2. Prepare the run config (login node)
 
 ```bash
 python scripts/prior_study/prepare_resume_config.py \
     --checkpoint singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth \
     --base-config singleview_SMILySTICKS_3D_ViT.json \
-    --extra-epochs 10 \
-    --label unconstrained \
-    --joint-limit-weight 0.0 \
-    --out configs_runs/singleview_unconstrained.json
+    --extra-epochs 10 --label constrained \
+    --joint-limit-weight 100.0 \
+    --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+    --out configs_runs/singleview_constrained.json
 ```
 
 `--base-config` must be **the JSON that produced the checkpoint** — for this run
@@ -134,54 +192,59 @@ auto-discovers it from that naming convention.
 > `--allow-embedded-config` and off by default, and the script cross-checks the
 > model's joint count against the HDF5's `n_joints` before writing anything.
 
-It prints the epoch arithmetic — check it before submitting:
+Expected output — check the epoch arithmetic before submitting:
 
 ```
 [prepare] checkpoint epoch: 240
 [prepare] resume from epoch 241, train 10 epoch(s) -> training.num_epochs = 251 (was 250)
-[prepare] arm: UNCONSTRAINED
-[prepare] outputs -> runs/singleview_unconstrained/
+[prepare] arm: CONSTRAINED (w=100.0)
+[prepare] outputs -> runs/singleview_constrained/
+[prepare] smal file : 3D_model_prep/SMILy_STICK_limits_authored.pkl
 [prepare] load_config round-trip: OK
 ```
 
 ### 3. Submit training + evaluation as a chain
 
 ```bash
-jid=$(sbatch --parsable hpc_files/sc_venv_pytorch3d/run_singleview_training_JURECA.sbatch)
+jid=$(sbatch --parsable --account=<proj> \
+        hpc_files/rwth/run_singleview_training_RWTH.sbatch)
 echo "training job: $jid"
 
-LABEL=unconstrained \
-CHECKPOINT=runs/singleview_unconstrained/checkpoints/best_model.pth \
-  sbatch --dependency=afterok:$jid --export=ALL,LABEL,CHECKPOINT \
-    hpc_files/sc_venv_pytorch3d/run_singleview_study_JURECA.sbatch
+sbatch --dependency=afterok:$jid --account=<proj> \
+    hpc_files/rwth/run_singleview_study_RWTH.sbatch
 ```
+
+Both scripts default to the constrained arm, so no `CONFIG`/`LABEL`/`CHECKPOINT`
+exports are needed. The training job's pre-flight block aborts before allocating
+GPUs if `joint_limit_regularization` is 0, if the `.pkl` carries no usable
+`joint_limits`, or if the epoch arithmetic would train zero epochs.
 
 Monitor / cancel:
 
 ```bash
 squeue --me
-tail -f logs/sv_unconstrained_${jid}.out
+tail -f logs/sv_constrained_${jid}.out
 scancel $jid
 ```
 
 ### 4. Results
 
 ```
-runs/singleview_unconstrained/
+runs/singleview_constrained/
   checkpoints/  best_model.pth, checkpoint_epoch_*.pth, config.json
   plots/  visualizations/  visualizations_train/
-prior_study_results/singleview_unconstrained/
+prior_study_results/singleview_constrained/
   analysis/baseline_summary.md            <- headline tables
-  analysis/joint_angle_distributions.png
+  analysis/joint_angle_distributions.png  <- dashed red = authored limits
   analysis/range_of_motion.png
   analysis/per_axis_stats.csv, magnitude_stats.csv
   analysis/trajectories/*.png
   benchmark_singleview_*/benchmark_report.txt   <- MPJPE mm + PCK
-  clip_unconstrained.npz / .json          <- exported poses
+  clip_constrained.npz / .json            <- exported poses
 ```
 
-Every table carries a `--label` column, so the constrained arm concatenates
-directly.
+Every table carries a `--label` column, so additional runs (a higher `w_limit`,
+a denser limit set) concatenate directly.
 
 ---
 
@@ -196,29 +259,23 @@ python scripts/prior_study/prepare_resume_config.py \
     --checkpoint /dev/null --assume-epoch 240 --extra-epochs 10 \
     --base-config smal_fitter/neuralSMIL/configs/examples/getting_started_singleview.json \
     --label dryrun --out /tmp/dryrun.json --no-validate
+
+# sbatch syntax
+bash -n hpc_files/rwth/run_singleview_training_RWTH.sbatch
+bash -n hpc_files/rwth/run_singleview_study_RWTH.sbatch
 ```
 
 ---
 
-## Later: the constrained arm
+## If the prior shows no effect
 
-Once the stick model carries authored limits, the whole change is one flag:
+In order of likelihood, before concluding the hypothesis is wrong:
 
-```bash
-python scripts/prior_study/prepare_resume_config.py \
-    --checkpoint singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth \
-    --base-config singleview_SMILySTICKS_3D_ViT_checkpoints/config.json \
-    --extra-epochs 10 --label constrained \
-    --joint-limit-weight 100.0 \
-    --smal-file 3D_model_prep/SMILy_STICK_joint_limited.pkl \
-    --out configs_runs/singleview_constrained.json
-```
-
-(`w_limit=100` is the value that removed every violation at no surface cost in
-the `fitter_3d` ant study — a starting point, not a tuned value for this model.)
-
-Then re-run steps 3–4 with `LABEL=constrained` and diff
-`prior_study_results/singleview_{unconstrained,constrained}/`.
-
-Both arms start from the **same** checkpoint and train the **same** number of
-epochs, so the only difference is the prior.
+1. **Coverage dilution** (caveat 3) — raise `--joint-limit-weight` to ~430 to
+   match the gradient scale a densely authored set would give at 100.
+2. **Nothing was violating those joints anyway** — check the violation table in
+   `analysis/baseline_summary.md`. If the coxae/wings/head were already inside
+   their ranges, the hinge is near-zero by construction and the free
+   femur/tibia/tarsus chain is where the implausibility lives.
+3. **10 epochs at a decayed LR** — the curriculum is inherited from the original
+   run, so the tail LR may be too small to move the pose much.
