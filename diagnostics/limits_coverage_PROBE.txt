@@ -1,0 +1,10 @@
+PROBE: joint-limit coverage of 3D_model_prep/SMILy_STICK_limits_authored.pkl
+  shape (55, 3, 2) dtype float32
+  joints: 55  axes total: 165
+  non-root axes: 162  constrained: 129  free(+-pi): 33
+  coverage: 79.6%
+  joints with >=1 constrained axis (non-root): 43 of 54
+  fully-free joints: ['b_a_1', 'b_a_2', 'b_a_3', 'b_a_4', 'b_a_5', 'l_1_pt_r', 'l_2_pt_r', 'l_3_pt_r', 'l_1_pt_l', 'l_2_pt_l', 'l_3_pt_l']
+  constrained-range deg: min 20.0  median 20.0  max 160.0
+  rest pose (0) inside every range: True
+  root row all-zero: True

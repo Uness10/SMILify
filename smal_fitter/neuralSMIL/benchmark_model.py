@@ -1184,6 +1184,80 @@ def _run_multiview_benchmark(
     for line in _collect_dataset_summary(dataset):
         log_fn(line)
 
+    log_fn(f"\nLoaded data resolution (target): {dataset.target_resolution}x{dataset.target_resolution}")
+    log_fn(f"Original world scale: {dataset.world_scale}")
+    if dataset.world_scale != 0.0:
+        log_fn(f"World scale conversion factor to original units: {1.0 / dataset.world_scale:.6f}")
+
+    _log_keypoint_rescaling_info(log_fn, dataset, override_size)
+
+    # Data splits (mirror train_multiview_regressor.py)
+    total_size = len(dataset)
+    train_size = int(total_size * config_from_ckpt["train_ratio"])
+    val_size = int(total_size * config_from_ckpt["val_ratio"])
+    test_size = total_size - train_size - val_size
+
+    train_set, val_set, test_set = torch.utils.data.random_split(
+        dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(config_from_ckpt["seed"])
+    )
+
+    log_fn("\nDataset split sizes:")
+    log_fn(f"  Train: {len(train_set)}")
+    log_fn(f"  Val: {len(val_set)}")
+    log_fn(f"  Test: {len(test_set)}")
+
+    test_loader = DataLoader(
+        test_set,
+        batch_size=config_from_ckpt["batch_size"],
+        shuffle=False,
+        num_workers=config_from_ckpt.get("num_workers", 4),
+        pin_memory=config_from_ckpt.get("pin_memory", True),
+        collate_fn=multiview_collate_fn,
+    )
+
+    model, input_resolution = _create_multiview_model(
+        checkpoint=checkpoint,
+        checkpoint_path=args.checkpoint,
+        dataset=dataset,
+        config_from_ckpt=config_from_ckpt,
+        device=device,
+        log_fn=log_fn,
+    )
+
+    _run_multiview_eval_loop(
+        args=args,
+        model=model,
+        test_loader=test_loader,
+        dataset=dataset,
+        device=device,
+        output_dir=output_dir,
+        log_fn=log_fn,
+        override_size=override_size,
+        input_resolution=input_resolution,
+        config_from_ckpt=config_from_ckpt,
+    )
+
+
+def _create_multiview_model(
+    checkpoint: dict,
+    checkpoint_path: str,
+    dataset,
+    config_from_ckpt: dict,
+    device: torch.device,
+    log_fn=print,
+):
+    """Build a multi-view regressor from a checkpoint and load its weights.
+
+    Extracted from ``_run_multiview_benchmark`` so that anything evaluating a
+    multi-view checkpoint (the benchmark, ``scripts/prior_study/export_poses.py``)
+    builds *the same* architecture from *the same* inference rules. Architecture is
+    inferred from the state dict rather than trusted from the config block, because
+    that block is written from the runtime config and goes stale.
+
+    Returns ``(model, input_resolution)``. ``config_from_ckpt`` is mutated in place
+    with the inferred ``hidden_dim``/``transformer_config``, matching the previous
+    inline behaviour.
+    """
     # Get dataset max_views and canonical_camera_order
     dataset_max_views = dataset.get_max_views_in_dataset()
     dataset_canonical_camera_order = dataset.get_canonical_camera_order()
@@ -1237,52 +1311,12 @@ def _run_multiview_benchmark(
         log_fn(f"WARNING: Model supports {max_views} views but dataset has up to {dataset_max_views} views")
         log_fn(f"         Samples with >{max_views} views will be truncated")
 
-    log_fn(f"\nLoaded data resolution (target): {dataset.target_resolution}x{dataset.target_resolution}")
-    log_fn(f"Original world scale: {dataset.world_scale}")
-    if dataset.world_scale != 0.0:
-        log_fn(f"World scale conversion factor to original units: {1.0 / dataset.world_scale:.6f}")
-
-    _log_keypoint_rescaling_info(log_fn, dataset, override_size)
-
-    # Data splits (mirror train_multiview_regressor.py)
-    total_size = len(dataset)
-    train_size = int(total_size * config_from_ckpt["train_ratio"])
-    val_size = int(total_size * config_from_ckpt["val_ratio"])
-    test_size = total_size - train_size - val_size
-
-    train_set, val_set, test_set = torch.utils.data.random_split(
-        dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(config_from_ckpt["seed"])
-    )
-
-    log_fn("\nDataset split sizes:")
-    log_fn(f"  Train: {len(train_set)}")
-    log_fn(f"  Val: {len(val_set)}")
-    log_fn(f"  Test: {len(test_set)}")
-
-    test_loader = DataLoader(
-        test_set,
-        batch_size=config_from_ckpt["batch_size"],
-        shuffle=False,
-        num_workers=config_from_ckpt.get("num_workers", 4),
-        pin_memory=config_from_ckpt.get("pin_memory", True),
-        collate_fn=multiview_collate_fn,
-    )
-
     # Create model (mirror training script)
     backbone_name = config_from_ckpt["backbone_name"]
     from smal_fitter.neuralSMIL.backbone_factory import BackboneFactory
 
     input_resolution = BackboneFactory.get_default_input_resolution(backbone_name)
     log_fn(f"\nUsing input resolution: {input_resolution}x{input_resolution} (backbone: {backbone_name})")
-
-    # PCK is reported at two scales (see _compute_pck_errors): the native/original
-    # image resolution and the model's square input resolution.
-    if override_size is not None:
-        native_label = f"native override {override_size[1]}x{override_size[0]}"
-    else:
-        native_label = "native (per-view image sizes)"
-    input_label = f"input res {input_resolution}px"
-    log_fn(f"PCK reported at TWO resolutions: [{native_label}] and [{input_label}].")
 
     allow_mesh_scaling = config_from_ckpt.get("allow_mesh_scaling", False)
     mesh_scale_init = config_from_ckpt.get("mesh_scale_init", 1.0)
@@ -1317,8 +1351,33 @@ def _run_multiview_benchmark(
     )
     model = model.to(device)
 
-    _ = load_checkpoint(args.checkpoint, model, optimizer=None, scheduler=None, device=device)
+    _ = load_checkpoint(checkpoint_path, model, optimizer=None, scheduler=None, device=device)
     model.eval()
+
+    return model, input_resolution
+
+
+def _run_multiview_eval_loop(
+    args,
+    model,
+    test_loader,
+    dataset,
+    device: torch.device,
+    output_dir: str,
+    log_fn,
+    override_size: Optional[Tuple[int, int]],
+    input_resolution: int,
+    config_from_ckpt: dict,
+):
+    """Score a built multi-view model over the test loader (PCK + MPJPE + report)."""
+    # PCK is reported at two scales (see _compute_pck_errors): the native/original
+    # image resolution and the model's square input resolution.
+    if override_size is not None:
+        native_label = f"native override {override_size[1]}x{override_size[0]}"
+    else:
+        native_label = "native (per-view image sizes)"
+    input_label = f"input res {input_resolution}px"
+    log_fn(f"PCK reported at TWO resolutions: [{native_label}] and [{input_label}].")
 
     # Benchmark loop
     all_errors_native = []

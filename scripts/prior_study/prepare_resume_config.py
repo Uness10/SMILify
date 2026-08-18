@@ -24,14 +24,21 @@ It also:
   * validates the result through the real loader (``load_config``) unless
     ``--no-validate``.
 
+Works for both modalities. The modality is read off the checkpoint's weights
+(``view_embeddings.weight`` => multi-view) and cross-checked against the base
+config's ``mode`` field; a disagreement is a blocking error, because it means
+the config being resumed is not the one that produced the checkpoint.
+
 Usage
 -----
     python scripts/prior_study/prepare_resume_config.py \
         --checkpoint singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth \
-        --base-config singleview_SMILySTICKS_3D_ViT_checkpoints/config.json \
+        --base-config singleview_SMILySTICKS_3D_ViT.json \
         --extra-epochs 10 \
-        --label unconstrained \
-        --out configs_runs/singleview_unconstrained.json
+        --label constrained \
+        --joint-limit-weight 100.0 \
+        --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+        --out configs_runs/singleview_constrained.json
 
 If ``--base-config`` is omitted it defaults to ``config.json`` next to the
 checkpoint, and failing that to the ``config`` block embedded in the checkpoint.
@@ -54,11 +61,17 @@ if str(REPO_ROOT) not in sys.path:
 # --------------------------------------------------------------------- helpers
 
 
-def read_checkpoint_epoch(ckpt_path: Path) -> tuple[int, dict | None]:
-    """Return ``(epoch, embedded_config_or_None)`` from a checkpoint.
+def read_checkpoint_epoch(ckpt_path: Path) -> tuple[int, dict | None, str]:
+    """Return ``(epoch, embedded_config_or_None, mode)`` from a checkpoint.
 
     Loaded on CPU with ``weights_only=False`` because the checkpoint carries a
     plain-dict ``config`` block alongside the tensors.
+
+    ``mode`` is detected from the weights, not from the config block or the
+    filename: only the multi-view regressor has ``view_embeddings.weight`` (it
+    is what ``benchmark_model._detect_model_type`` keys on). Detecting from the
+    tensors means a mislabelled checkpoint cannot silently produce a config for
+    the wrong trainer.
     """
     import torch
 
@@ -71,10 +84,12 @@ def read_checkpoint_epoch(ckpt_path: Path) -> tuple[int, dict | None]:
             f"       Keys present: {sorted(k for k in ckpt if not k.endswith('state_dict'))}\n"
             f"       Pass --assume-epoch N to override."
         )
-    return int(ckpt["epoch"]), ckpt.get("config")
+    state_dict = ckpt.get("model_state_dict", ckpt)
+    mode = "multiview" if "view_embeddings.weight" in state_dict else "singleview"
+    return int(ckpt["epoch"]), ckpt.get("config"), mode
 
 
-def embedded_config_to_json_schema(embedded: dict) -> dict:
+def embedded_config_to_json_schema(embedded: dict, mode: str = "singleview") -> dict:
     """Best-effort conversion of a checkpoint's flat ``config`` block to the
     JSON config schema.
 
@@ -87,7 +102,7 @@ def embedded_config_to_json_schema(embedded: dict) -> dict:
     training_params = dict(embedded.get("training_params") or {})
 
     out = {
-        "mode": "singleview",
+        "mode": mode,
         "smal_model": {
             "smal_file": embedded.get("smal_file"),
             "shape_family": embedded.get("shape_family", -1),
@@ -219,12 +234,21 @@ def cross_check_model_and_data(cfg: dict) -> list[str]:
     return problems
 
 
-def set_output_dirs(cfg: dict, run_dir: str) -> None:
+def set_output_dirs(cfg: dict, run_dir: str, mode: str) -> None:
+    """Point every output directory inside ``run_dir`` so arms never collide.
+
+    ``MultiViewOutputConfig`` adds ``singleview_visualizations_dir`` on top of
+    the shared ``OutputConfig`` fields (configs/multiview_config.py:15); leaving
+    it at its default would drop multi-view single-view renders into a
+    repo-root folder shared with every other run.
+    """
     out = cfg.setdefault("output", {})
     out["checkpoint_dir"] = f"{run_dir}/checkpoints"
     out["plots_dir"] = f"{run_dir}/plots"
     out["visualizations_dir"] = f"{run_dir}/visualizations"
     out["train_visualizations_dir"] = f"{run_dir}/visualizations_train"
+    if mode == "multiview":
+        out["singleview_visualizations_dir"] = f"{run_dir}/singleview_renders"
     out.setdefault("save_checkpoint_every", 1)
     out.setdefault("generate_visualizations_every", 1)
     out.setdefault("plot_history_every", 1)
@@ -251,7 +275,14 @@ def main() -> int:
         help="Skip loading the checkpoint and assume it was saved at this epoch (for dry runs)",
     )
     p.add_argument("--label", default="unconstrained", help="Run label; drives the output dir names")
-    p.add_argument("--run-dir", default=None, help="Output root (default: runs/singleview_<label>)")
+    p.add_argument(
+        "--mode",
+        default=None,
+        choices=["singleview", "multiview"],
+        help="Override the modality. By default it is detected from the checkpoint's weights "
+        "(view_embeddings.weight => multiview) and cross-checked against the base config.",
+    )
+    p.add_argument("--run-dir", default=None, help="Output root (default: runs/<mode>_<label>)")
     p.add_argument("--out", default=None, help="Where to write the derived config JSON")
     p.add_argument(
         "--joint-limit-weight",
@@ -288,20 +319,22 @@ def main() -> int:
         if base_path is not None:
             print(f"[prepare] auto-discovered base config: {base_path}")
 
-    # ---- checkpoint epoch --------------------------------------------------
+    # ---- checkpoint epoch + modality ---------------------------------------
+    detected_mode = None
     if args.assume_epoch is not None:
         ckpt_epoch = int(args.assume_epoch)
         print(f"[prepare] assuming checkpoint epoch {ckpt_epoch} (--assume-epoch, checkpoint not read)")
     else:
-        ckpt_epoch, embedded = read_checkpoint_epoch(ckpt_path)
+        ckpt_epoch, embedded, detected_mode = read_checkpoint_epoch(ckpt_path)
         print(f"[prepare] checkpoint epoch: {ckpt_epoch}")
+        print(f"[prepare] checkpoint kind : {detected_mode} (from the state dict)")
 
     if base_path is not None:
         with open(base_path) as f:
             cfg = json.load(f)
         print(f"[prepare] base config: {base_path}")
     elif embedded and args.allow_embedded_config:
-        cfg = embedded_config_to_json_schema(embedded)
+        cfg = embedded_config_to_json_schema(embedded, mode=args.mode or detected_mode or "singleview")
         print(
             "[prepare] WARNING: reconstructing the config from the checkpoint's embedded 'config' block\n"
             "          (--allow-embedded-config). That block is written from the RUNTIME TrainingConfig,\n"
@@ -324,7 +357,35 @@ def main() -> int:
         )
 
     cfg = copy.deepcopy(cfg)
-    cfg["mode"] = "singleview"
+
+    # ---- modality resolution (checkpoint weights are the ground truth) ------
+    # Precedence: --mode > detected from the checkpoint > the base config's own
+    # "mode" field. A disagreement between the checkpoint and the base config is
+    # blocking: it means the config does not describe the run that produced this
+    # checkpoint, and the resumed run would be a different experiment.
+    base_mode = cfg.get("mode")
+    mode = args.mode or detected_mode or base_mode
+    if mode not in ("singleview", "multiview"):
+        raise SystemExit(
+            "ERROR: could not resolve the modality.\n"
+            f"       --mode: {args.mode!r}, detected: {detected_mode!r}, base config: {base_mode!r}\n"
+            "       Pass --mode singleview|multiview."
+        )
+    if detected_mode and base_mode and detected_mode != base_mode and args.mode is None:
+        raise SystemExit(
+            f"ERROR: MODE MISMATCH. The checkpoint's weights say '{detected_mode}' but\n"
+            f"       {base_path} declares \"mode\": \"{base_mode}\".\n"
+            f"       That config did not produce this checkpoint, so resuming would silently\n"
+            f"       change the architecture, split seed or loss curriculum.\n"
+            f"       Point --base-config at the right JSON, or force it with --mode {detected_mode}."
+        )
+    if args.mode and detected_mode and args.mode != detected_mode:
+        print(
+            f"[prepare] WARNING: --mode {args.mode} overrides the detected '{detected_mode}'. "
+            f"The trainer will build a {args.mode} model from {detected_mode} weights."
+        )
+    cfg["mode"] = mode
+    print(f"[prepare] mode      : {mode}")
 
     # ---- resume + absolute end epoch ---------------------------------------
     start_epoch = ckpt_epoch + 1  # trainer resumes here
@@ -376,8 +437,8 @@ def main() -> int:
     if args.smal_file:
         cfg.setdefault("smal_model", {})["smal_file"] = args.smal_file
 
-    run_dir = args.run_dir or f"runs/singleview_{args.label}"
-    set_output_dirs(cfg, run_dir)
+    run_dir = args.run_dir or f"runs/{mode}_{args.label}"
+    set_output_dirs(cfg, run_dir, mode)
     print(f"[prepare] outputs -> {run_dir}/")
 
     # ---- model/dataset pairing (blocking) ----------------------------------
@@ -414,7 +475,7 @@ def main() -> int:
                 print(f"[prepare] (could not probe {smal_file} for joint_limits: {exc})")
 
     # ---- write -------------------------------------------------------------
-    out_path = Path(args.out or f"configs_runs/singleview_{args.label}.json")
+    out_path = Path(args.out or f"configs_runs/{mode}_{args.label}.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(cfg, f, indent=2)
@@ -426,7 +487,7 @@ def main() -> int:
             os.chdir(REPO_ROOT)
             from smal_fitter.neuralSMIL.configs.config_utils import load_config
 
-            load_config(config_file=str(out_path), expected_mode="singleview")
+            load_config(config_file=str(out_path), expected_mode=mode)
             print("[prepare] load_config round-trip: OK")
         except Exception as exc:
             print(f"[prepare] ERROR: derived config failed to load: {exc}", file=sys.stderr)
