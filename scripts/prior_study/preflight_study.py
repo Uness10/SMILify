@@ -96,6 +96,34 @@ def infer_from_state_dict(sd) -> dict:
     return out
 
 
+def adjusted_hidden_dim(model_block: dict) -> int | None:
+    """Resolve the hidden_dim the model is ACTUALLY built with.
+
+    Mirrors ``ModelConfig.get_adjusted_hidden_dim`` (``base_config.py:122``),
+    which overrides the config's ``hidden_dim`` from the backbone name so the
+    decoder width matches the backbone feature dim without a projection. For any
+    ViT/ResNet backbone the JSON's ``hidden_dim`` is **dead** — comparing against
+    it produces a false architecture mismatch on every correctly-paired ViT
+    checkpoint, which is exactly what this function exists to prevent.
+    """
+    backbone = (model_block or {}).get("backbone_name") or ""
+    if backbone.startswith("vit"):
+        if "base" in backbone:
+            return 768
+        if "large" in backbone:
+            return 1024
+    elif backbone.startswith("resnet"):
+        return 2048
+    elif backbone.startswith("unet_"):
+        return {
+            "unet_efficientnet_b0": 512,
+            "unet_efficientnet_b3": 512,
+            "unet_resnet34": 512,
+            "unet_mobilenet_v3": 256,
+        }.get(backbone, 512)
+    return (model_block or {}).get("hidden_dim")
+
+
 def flatten_config(cfg: dict) -> dict:
     """Pull the architecture/split fields out of the nested JSON schema."""
     flat = {}
@@ -108,6 +136,10 @@ def flatten_config(cfg: dict) -> dict:
     if isinstance(tc, dict):
         for k, v in tc.items():
             flat.setdefault(k, v)
+    # Override with the value the model is really constructed at (see above).
+    resolved = adjusted_hidden_dim(cfg.get("model") or {})
+    if resolved is not None:
+        flat["hidden_dim"] = resolved
     flat.setdefault("mode", cfg.get("mode"))
     return flat
 
@@ -135,6 +167,13 @@ def check_one(config_path: Path, reference: Path | None, problems: list, warning
     print(f"  resume checkpoint: {resume} (epoch {ck.get('epoch', '?')})")
     if inferred:
         print(f"  inferred from tensors: {inferred}")
+    declared = (cfg.get("model") or {}).get("hidden_dim")
+    if declared is not None and flat.get("hidden_dim") != declared:
+        print(
+            f"  note: config declares hidden_dim={declared} but backbone "
+            f"'{(cfg.get('model') or {}).get('backbone_name')}' forces "
+            f"{flat['hidden_dim']} via get_adjusted_hidden_dim() — the declared value is unused"
+        )
 
     # ---- 1. architecture ---------------------------------------------------
     for field, ckpt_value in inferred.items():
