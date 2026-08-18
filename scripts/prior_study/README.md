@@ -95,6 +95,7 @@ per-axis CSV and the build script. The `.pkl` matches that CSV exactly.
 | `export_poses.py` | Runs a **single-view or multi-view** checkpoint over the same test split the benchmark scores and writes the `.npz`/`.json` pair `analyze_baseline_pose.py` expects. Needed because neither inference entry point accepts an HDF5. |
 | `run_prior_study.sh` | One arm, end to end: benchmark → export → analyse into `prior_study_results/<label>/`. Detects the modality from the checkpoint. |
 | `compare_arms.py` | Joins the four arm folders into `comparison.md` + `arms.csv` — the study's actual deliverable. |
+| `preflight_study.py` | Login-node guard for the two silent invalidations: config/checkpoint architecture drift (which resets the epoch counter to 0) and seed/ratio disagreement between arms (which scores them on different frames). |
 | `analyze_baseline_pose.py` | The analysis engine: angle distributions, ROM, limit violations, trajectories. Unchanged. |
 | `../../hpc_files/rwth/run_prior_study_train.sbatch` | Array `0-1` (SV, MV), 4× H100 each, `torchrun --standalone`. |
 | `../../hpc_files/rwth/run_prior_study_eval.sbatch` | Array `0-3` (the four arms), 1 GPU each, runs `compare_arms.py` at the end. |
@@ -172,11 +173,38 @@ Check the arithmetic in the output before submitting:
 [prepare] load_config round-trip: OK
 ```
 
-### 2. Submit
+### 2. Pre-flight (login node) — do not skip
 
 ```bash
 export SV_REF=<path to the downloaded single-view .pth>
 export MV_REF=<path to the downloaded multi-view .pth>
+
+python scripts/prior_study/preflight_study.py \
+    --config configs_runs/singleview_constrained.json --reference "$SV_REF" \
+    --config configs_runs/multiview_constrained.json  --reference "$MV_REF"
+```
+
+This catches the two failures that **do not crash**:
+
+- **Architecture drift.** `load_checkpoint` drops every tensor whose shape
+  disagrees with the freshly-built model and then calls
+  `load_state_dict(strict=False)`, returning `epoch = 0` when anything was
+  dropped. A wrong `--base-config` therefore silently re-initialises layers *and*
+  resets the epoch counter — so `num_epochs: 251` trains **251 epochs from
+  scratch**, not 10, and the job eats the whole wall clock. The epoch arithmetic
+  in the training job reads the checkpoint's stored epoch and is blind to this.
+- **Split mismatch.** The benchmark and exporter derive the test split from
+  `seed` + `train_ratio` + `val_ratio`. The reference arm takes them from the
+  downloaded checkpoint's embedded config, the constrained arm from the config we
+  prepared. If they disagree the two arms are scored on **different frames** and
+  every number still looks plausible.
+
+Exit 0 means safe to submit. The architecture half runs again inside the training
+job, but fixing it here takes seconds instead of a queue wait.
+
+### 3. Submit
+
+```bash
 
 jid=$(sbatch --parsable --account=<proj> \
         hpc_files/rwth/run_prior_study_train.sbatch)
@@ -197,7 +225,7 @@ sbatch --array=0,2 --account=<proj> --export=ALL,SV_REF,MV_REF \
 
 Monitor: `squeue --me` / `tail -f logs/jl_train_<jobid>_<task>.out`
 
-### 3. Results
+### 4. Results
 
 ```
 runs/{singleview,multiview}_constrained/
@@ -209,7 +237,9 @@ prior_study_results/
     arm.json                                <- provenance for compare_arms.py
     analysis/baseline_summary.md            <- per-arm tables
     analysis/limit_violations.csv           <- the before/after number
-    analysis/joint_angle_distributions.png  <- dashed red = authored limits
+    analysis/joint_angle_distributions.png  <- dashed red = authored limits; features the
+                                               COXAE, not analyze_baseline_pose's default
+                                               pretarsi (those are free in this .pkl)
     analysis/range_of_motion.png
     benchmark_*/benchmark_report.txt        <- MPJPE mm + PCK
   comparison/

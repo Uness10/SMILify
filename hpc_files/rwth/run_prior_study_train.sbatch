@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=96
-#SBATCH --time=08:00:00
+#SBATCH --time=12:00:00
 #SBATCH --job-name=jl_train
 #SBATCH --array=0-1
 #SBATCH --output=logs/%x_%A_%a.out
@@ -57,6 +57,17 @@
 #
 # The script refuses to write if the checkpoint's modality disagrees with the
 # base config, or if the model and dataset describe different skeletons.
+#
+# THEN pre-flight both configs together — this catches the failures that do not
+# crash (architecture drift, mismatched test splits):
+#
+#   python scripts/prior_study/preflight_study.py \
+#       --config configs_runs/singleview_constrained.json --reference "$SV_REF" \
+#       --config configs_runs/multiview_constrained.json  --reference "$MV_REF"
+#
+# Exit code 0 means safe to submit. The same architecture check runs again below
+# per array task, but running it on the login node lets you fix a bad
+# --base-config in seconds instead of after a queue wait.
 #
 # ---------------------------------------------------------------------------
 # SUBMIT (from the repo root — the #SBATCH --output path resolves at submit
@@ -254,6 +265,22 @@ print(f"  batch_size {bs} per GPU x 4 GPUs -> effective {bs * 4 if bs else '?'} 
       f"(batch_size is PER PROCESS under DDP)")
 print(f"  checkpoints -> {cfg.get('output', {}).get('checkpoint_dir')}")
 PY
+
+# --- pre-flight: architecture agreement --------------------------------------
+# The single check the block above CANNOT do. load_checkpoint drops every tensor
+# whose shape disagrees with the freshly-built model and then calls
+# load_state_dict(strict=False), returning epoch=0 when anything was dropped
+# (train_multiview_regressor.py:2073+2095). So a wrong --base-config silently
+# re-initialises layers AND resets the epoch counter — at which point
+# "num_epochs: 251" means 251 epochs from scratch, not 10, and the job burns the
+# entire wall clock producing a model that answers no question.
+#
+# The epoch arithmetic above reads the checkpoint's stored epoch, so it is blind
+# to this. This is not.
+python scripts/prior_study/preflight_study.py --config "$CONFIG" || {
+    echo "ERROR: pre-flight failed — see above. Not launching." >&2
+    exit 1
+}
 
 # --- launch ------------------------------------------------------------------
 # Single node: --standalone gives torchrun its own rendezvous on localhost, so no

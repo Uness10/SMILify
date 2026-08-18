@@ -51,6 +51,12 @@ NUM_WORKERS="${NUM_WORKERS:-}"
 LIMITS="${LIMITS:-}"
 SKIP_BENCH="${SKIP_BENCH:-0}"
 SKIP_EXPORT="${SKIP_EXPORT:-0}"
+# analyze_baseline_pose's DEFAULT_IMPORTANT is the six pretarsi (l_*_pt_*) —
+# which are exactly the six joints left FREE (+-pi) in the authored .pkl. Featuring
+# them would produce a headline distribution plot with no limit lines and nothing
+# the prior can act on. Feature the coxae instead: they carry the widest authored
+# ranges and are the proximal leg-placement joints the prior actually constrains.
+IMPORTANT_JOINTS="${IMPORTANT_JOINTS:-l_1_co_r,l_1_co_l,l_2_co_r,l_2_co_l,l_3_co_r,l_3_co_l}"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
@@ -209,6 +215,7 @@ ANALYZE_ARGS=(
   --json "$JSON"
   --smal-file "$SMAL_FILE"
   --label "$LABEL"
+  --important-joints "$IMPORTANT_JOINTS"
   --out "$OUT_DIR/analysis"
 )
 [[ -n "$BENCH_REPORT" ]] && ANALYZE_ARGS+=(--benchmark "$BENCH_REPORT")
