@@ -13,8 +13,9 @@
 # equally well; to reproduce that instead, set pytorch=2.1.1, torchvision=0.16.1,
 # pytorch3d=0.7.7 below.
 #
-# Only the core deep-learning stack is pinned (PyTorch3D must match the torch/CUDA build);
-# the scientific/IO packages float to whatever recent build conda resolves. Optional tooling
+# The core deep-learning stack is pinned (PyTorch3D must match the torch/CUDA build) and
+# numpy is pinned <2 (see note below); the other scientific/IO packages float to whatever
+# recent build conda resolves. Optional tooling
 # (dataset viewer, AntScan scraper, SDF tests, legacy quadruped pose-prior viz) is listed
 # commented-out at the bottom — install only if needed.
 
@@ -34,7 +35,12 @@ dependencies:
   - torchvision=0.18.1
   - pytorch3d=0.7.8        # cu118_pyt231 build; pulls fvcore / iopath automatically
 
-  # --- scientific / IO stack (versions float) ---
+  # --- scientific / IO stack ---
+  # numpy MUST stay <2: the conda scikit-image / torch / scipy builds are compiled
+  # against the NumPy 1.x C ABI. Installing numpy>=2 here (or letting the pip
+  # section pull it in) breaks them at import time with
+  #   "numpy.dtype size changed ... Expected 96 from C header, got 88".
+  - numpy=1.26
   - scipy
   - h5py
   - pandas
@@ -49,7 +55,8 @@ dependencies:
 
   - pip
   - pip:
-    - numpy
+    # NOTE: do NOT list numpy here — pip runs after conda and would overwrite
+    # conda's numpy 1.26 with the latest 2.x, breaking the compiled extensions.
     - matplotlib
     - timm
     - opencv-python
