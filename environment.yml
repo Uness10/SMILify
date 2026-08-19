@@ -55,11 +55,17 @@ dependencies:
 
   - pip
   - pip:
-    # NOTE: do NOT list numpy here — pip runs after conda and would overwrite
-    # conda's numpy 1.26 with the latest 2.x, breaking the compiled extensions.
+    # numpy is pinned here as well as in the conda section above, on purpose.
+    # `conda env create` runs pip with `-U`, so an unpinned transitive requirement
+    # (e.g. opencv-python 5.x, which requires numpy>=2) will silently UNINSTALL
+    # conda's numpy 1.26 and replace it with 2.x — breaking scikit-image/scipy at
+    # import time. With this hard pin, pip raises ResolutionImpossible instead,
+    # which is a loud failure at build time rather than a silent one at runtime.
+    - numpy==1.26.4
     - matplotlib
+    # opencv-python 5.x requires numpy>=2 — must stay on the 4.9 line.
+    - opencv-python==4.9.0.80
     - timm
-    - opencv-python
     - nibabel
     - pycocotools
     - toml
