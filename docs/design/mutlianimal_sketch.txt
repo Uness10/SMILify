@@ -1,0 +1,51 @@
+A: Number of Animals (var) -> need an animal_mask (like view_mask)
+- Data representation change:
+    sample= V images,
+             animal_i: V*55 2D keypoints, params
+
+- #queries change : N queries :  query i -> animal i
+    qi attends to the image and extract info belonging to 1 animal (e.g DETR-style object queries)
+- Parameter(pose,shape ..) Head becomes per-animal 
+    -> Camera params are diff! animals are in the same camera (Scene level params Vs Animal level params)
+
+- Multi view becomes more complicated: Try single view first
+
+- Animal matching problem: GT= (anml1,anml2,anml3) Vs predicted=(anml3,anml1,anml2)
+    A naive loss would do GT[i] <-> predicted[i]
+    -> establish a fixed identity/ordering beforehand.
+-> Enforce a strict matching of one head associated with one specimen in the footage, so we don't deal with identity ambiguity
+
+- Occlusion Problem: visible animal, partially visible animal,heavily occluded animal
+
+                         IMAGE(S)
+                            │
+                            ▼
+                    ┌──────────────┐
+                    │ Shared ViT   │
+                    │   extractor  │
+                    └──────┬───────┘
+                           │
+                    stacked features
+                           │
+             ┌─────────────┴─────────────┐
+             │                           │
+             ▼                           ▼
+        Camera Head              N SMIL Heads
+             │                 ┌────┬────┬────┐
+             ▼                 ▼    ▼    ▼    ▼
+          Camera              H1   H2   H3   ...
+                               │    │    │
+                               ▼    ▼    ▼
+                              θ1   θ2   θ3
+                               │    │    │
+                               ▼    ▼    ▼
+                              SMAL SMAL SMAL
+                               │    │    │
+                               └────┼────┘
+                                    ▼
+                              Projection /
+                                Rendering
+                                    │
+                                    ▼
+                                   Loss
+
