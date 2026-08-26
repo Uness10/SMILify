@@ -1,0 +1,10 @@
+{
+  "label": "mv_reference",
+  "mode": "multiview",
+  "checkpoint": "SMILySTICKS_ViT_model.pth",
+  "checkpoint_epoch": "345",
+  "dataset": "SMILySTICKS_centred_reprojected_FIXED.h5",
+  "smal_file": "3D_model_prep/SMILy_STICK_limits_authored.pkl",
+  "benchmark_report": "prior_study_results/mv_reference/benchmark_multiview_SMILySTICKS_ViT_model_on_SMILySTICKS_centred_reprojected_FIXED/benchmark_report.txt",
+  "timestamp": "20260826_120343"
+}

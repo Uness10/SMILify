@@ -188,9 +188,6 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# benchmark outputs
-benchmark_*/
-
 # custom
 dev_notes/
 checkpoints/
@@ -228,9 +225,7 @@ sleap_canonicalize_proto*.png
 # so both top-level dirs and per-model-run subdirs are covered
 # (e.g. ViT_Large_*/multiview_checkpoints/).
 multiview_checkpoints*/
-multiview_plots*/
 multiview_singleview_renders*/
-multiview_visualizations*/
 
 # Single-view / getting-started training run outputs (checkpoints, plots,
 # visualizations). Regenerable; covers getting_started_* and
@@ -245,8 +240,6 @@ benchmark_singleview_*/
 # scripts/prior_study/ plus the downloaded checkpoint.
 configs_runs/
 runs/
-prior_study_results/
-logs/
 singleview_SMILySTICKS_3D_ViT_checkpoints/
 
 # Scratch parametric-model exports from Blender prep. The tracked .pkl
@@ -257,3 +250,4 @@ singleview_SMILySTICKS_3D_ViT_checkpoints/
 .claude/settings.local.json
 scripts/prior_study/ROADMAP.md
 next_steps.txt
+*.npz

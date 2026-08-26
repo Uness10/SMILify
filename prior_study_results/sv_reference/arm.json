@@ -1,0 +1,10 @@
+{
+  "label": "sv_reference",
+  "mode": "singleview",
+  "checkpoint": "singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth",
+  "checkpoint_epoch": "386",
+  "dataset": "SMILySTICKS_centred_reprojected_FIXED.h5",
+  "smal_file": "3D_model_prep/SMILy_STICK_limits_authored.pkl",
+  "benchmark_report": "prior_study_results/sv_reference/benchmark_singleview_best_model_on_SMILySTICKS_centred_reprojected_FIXED/benchmark_report.txt",
+  "timestamp": "20260826_120401"
+}
