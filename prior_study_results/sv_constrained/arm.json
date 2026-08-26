@@ -1,0 +1,10 @@
+{
+  "label": "sv_constrained",
+  "mode": "singleview",
+  "checkpoint": "runs/singleview_constrained/checkpoints/checkpoint_epoch_394.pth",
+  "checkpoint_epoch": "394",
+  "dataset": "SMILySTICKS_centred_reprojected_FIXED.h5",
+  "smal_file": "3D_model_prep/SMILy_STICK_limits_authored.pkl",
+  "benchmark_report": "prior_study_results/sv_constrained/benchmark_singleview_checkpoint_epoch_394_on_SMILySTICKS_centred_reprojected_FIXED/benchmark_report.txt",
+  "timestamp": "20260826_172604"
+}

@@ -1,0 +1,10 @@
+{
+  "label": "mv_constrained",
+  "mode": "multiview",
+  "checkpoint": "runs/multiview_constrained/checkpoints/checkpoint_epoch_0354.pth",
+  "checkpoint_epoch": "354",
+  "dataset": "SMILySTICKS_centred_reprojected_FIXED.h5",
+  "smal_file": "3D_model_prep/SMILy_STICK_limits_authored.pkl",
+  "benchmark_report": "prior_study_results/mv_constrained/benchmark_multiview_checkpoint_epoch_0354_on_SMILySTICKS_centred_reprojected_FIXED/benchmark_report.txt",
+  "timestamp": "20260826_172604"
+}
