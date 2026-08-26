@@ -114,6 +114,7 @@ esac
 
 # Backbone weights must already be cached (hpc_files/download_backbone_weights.py
 # on the login node); c23g compute nodes have no outbound network.
+export HF_HOME="${HF_HOME:-$HPCWORK/hf_cache}"
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1

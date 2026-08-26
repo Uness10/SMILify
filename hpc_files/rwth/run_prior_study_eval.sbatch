@@ -84,6 +84,7 @@ case "$TASK" in
     *) echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-3)." >&2; exit 1 ;;
 esac
 
+export HF_HOME="${HF_HOME:-$HPCWORK/hf_cache}"
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
