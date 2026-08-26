@@ -38,6 +38,7 @@ from .base_config import (
     TrainingHyperparameters,
     SmalModelConfig,
 )
+from .multianimal_config import MultiAnimalConfig, MultiAnimalConfigError
 from .singleview_config import SingleViewConfig
 from .multiview_config import MultiViewConfig, MultiViewOutputConfig
 from .config_utils import (
@@ -64,6 +65,8 @@ __all__ = [
     "OutputConfig",
     "TrainingHyperparameters",
     "SmalModelConfig",
+    "MultiAnimalConfig",
+    "MultiAnimalConfigError",
     # Mode-specific
     "SingleViewConfig",
     "MultiViewConfig",

@@ -661,42 +661,13 @@ class MultiViewSMILImageRegressor(SMILImageRegressor):
             return params
 
         elif self.head_type == "transformer_decoder":
-            # Use transformer decoder for body params.
-            if features.dim() == 3:
-                # Multiview: features is (B, V, D) — fused CLS tokens
-
-                # Pool fused CLS tokens for the global feature vector.
-                # NOTE: `global_feats` is passed to the decoder head below but
-                # its *content* is not consumed there — the head uses it only as
-                # a batch-size/device carrier; the decoder's sole visual input is
-                # cross-attention over `spatial_feats`. A pooled global feature
-                # was previously fed into the decoder token but removed (it gave
-                # the head a memorisable image-level fingerprint and drove
-                # train/val divergence on betas). The pooling is kept here as a
-                # documented hook for potential future reuse — see
-                # SMILTransformerDecoderHead.forward.
-                if view_mask is not None:
-                    mask_exp = view_mask.unsqueeze(-1).float()  # (B, V, 1)
-                    global_feats = (features * mask_exp).sum(dim=1) / (mask_exp.sum(dim=1) + 1e-8)
-                else:
-                    global_feats = features.mean(dim=1)  # (B, D)
-
-                # Cross-attention context: use per-view patch tokens when
-                # available (rich spatial detail), else fall back to V fused
-                # CLS tokens.
-                if patch_tokens is not None and camera_indices is not None:
-                    # Add view identity so the decoder knows which view each
-                    # spatial patch came from: (B, V, D) → broadcast over P
-                    view_emb = self.patch_view_embed(camera_indices)  # (B, V, D)
-                    spatial_feats = patch_tokens + view_emb.unsqueeze(2)  # (B, V, P, D)
-                    Bp, Vp, P, D = spatial_feats.shape
-                    spatial_feats = spatial_feats.reshape(Bp, Vp * P, D)  # (B, V*P, D)
-                else:
-                    spatial_feats = features  # (B, V, D) — one token per view
-            else:
-                # Single-view / already-pooled fallback: (B, D)
-                spatial_feats = features.unsqueeze(1)  # (B, 1, D)
-                global_feats = features
+            # Use transformer decoder for body params. Feature preparation is
+            # factored out into `_prepare_decoder_inputs` so subclasses that
+            # swap only the head (the multi-animal regressor runs N specimen
+            # heads on exactly these inputs) reuse it rather than copying it.
+            global_feats, spatial_feats = self._prepare_decoder_inputs(
+                features, view_mask=view_mask, patch_tokens=patch_tokens, camera_indices=camera_indices
+            )
 
             params = self.transformer_head(global_feats, spatial_feats)
 
@@ -710,6 +681,64 @@ class MultiViewSMILImageRegressor(SMILImageRegressor):
             return params
         else:
             raise ValueError(f"Unsupported head_type: {self.head_type}")
+
+    def _prepare_decoder_inputs(
+        self,
+        features: torch.Tensor,
+        view_mask: Optional[torch.Tensor] = None,
+        patch_tokens: Optional[torch.Tensor] = None,
+        camera_indices: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Build the (global, spatial) inputs of the transformer decoder head.
+
+        Extracted from :meth:`_predict_body_params` with no behavioural change so
+        that a subclass replacing only the head can reuse it.
+
+        NOTE: `global_feats` is passed to the decoder head but its *content* is
+        not consumed there — the head uses it only as a batch-size/device
+        carrier; the decoder's sole visual input is cross-attention over
+        `spatial_feats`. A pooled global feature was previously fed into the
+        decoder token but removed (it gave the head a memorisable image-level
+        fingerprint and drove train/val divergence on betas). The pooling is kept
+        here as a documented hook for potential future reuse — see
+        SMILTransformerDecoderHead.forward.
+
+        Args:
+            features: ``(B, V, D)`` fused per-view CLS tokens, or ``(B, D)`` when
+                already pooled (single-view fallback).
+            view_mask: ``(B, V)`` boolean mask of valid views.
+            patch_tokens: ``(B, V, P, D)`` per-view spatial tokens.
+            camera_indices: ``(B, V)`` canonical camera index per view; required
+                when ``patch_tokens`` is given.
+
+        Returns:
+            ``(global_feats, spatial_feats)``.
+        """
+        if features.dim() == 3:
+            # Multiview: features is (B, V, D) — fused CLS tokens
+            if view_mask is not None:
+                mask_exp = view_mask.unsqueeze(-1).float()  # (B, V, 1)
+                global_feats = (features * mask_exp).sum(dim=1) / (mask_exp.sum(dim=1) + 1e-8)
+            else:
+                global_feats = features.mean(dim=1)  # (B, D)
+
+            # Cross-attention context: use per-view patch tokens when available
+            # (rich spatial detail), else fall back to V fused CLS tokens.
+            if patch_tokens is not None and camera_indices is not None:
+                # Add view identity so the decoder knows which view each spatial
+                # patch came from: (B, V, D) → broadcast over P
+                view_emb = self.patch_view_embed(camera_indices)  # (B, V, D)
+                spatial_feats = patch_tokens + view_emb.unsqueeze(2)  # (B, V, P, D)
+                Bp, Vp, P, D = spatial_feats.shape
+                spatial_feats = spatial_feats.reshape(Bp, Vp * P, D)  # (B, V*P, D)
+            else:
+                spatial_feats = features  # (B, V, D) — one token per view
+        else:
+            # Single-view / already-pooled fallback: (B, D)
+            spatial_feats = features.unsqueeze(1)  # (B, 1, D)
+            global_feats = features
+
+        return global_feats, spatial_feats
 
     def _predict_camera_params_per_view(
         self,

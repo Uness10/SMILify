@@ -16,6 +16,8 @@ Configuration Precedence (highest to lowest):
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 
+from .multianimal_config import MultiAnimalConfig
+
 if TYPE_CHECKING:
     pass  # reserved for future type-only imports
 
@@ -573,6 +575,7 @@ class BaseTrainingConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     training: TrainingHyperparameters = field(default_factory=TrainingHyperparameters)
     smal_model: SmalModelConfig = field(default_factory=SmalModelConfig)
+    multi_animal: MultiAnimalConfig = field(default_factory=MultiAnimalConfig)
 
     def validate(self):
         """Validate entire configuration for consistency."""
@@ -581,6 +584,7 @@ class BaseTrainingConfig:
         self.scale_trans_beta.validate()
         if self.training.rotation_representation not in ("6d", "axis_angle"):
             raise ValueError(f"Invalid rotation_representation '{self.training.rotation_representation}'")
+        self.multi_animal.validate()
 
     def get_loss_weights_for_epoch(self, epoch: int) -> Dict[str, float]:
         """
@@ -616,7 +620,10 @@ class BaseTrainingConfig:
         )
         legacy_smal_file = self.smal_model.smal_file if self.smal_model is not None else None
 
+        self.multi_animal.normalize()
+
         return {
+            "multi_animal": self.multi_animal.to_dict(),
             "data_path": self.dataset.data_path,
             # Legacy overrides (consumed by callers; not part of TrainingConfig.get_all_config())
             "shape_family": legacy_shape_family,

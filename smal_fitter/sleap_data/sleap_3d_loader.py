@@ -70,7 +70,13 @@ class SLEAP3DDataLoader:
     All data is formatted for use in multi-view model fitting pipelines.
     """
 
-    def __init__(self, session_path: str, video_subdir: Optional[str] = None, session_idx: int = 0):
+    def __init__(
+        self,
+        session_path: str,
+        video_subdir: Optional[str] = None,
+        session_idx: int = 0,
+        track_index: int = 0,
+    ):
         """
         Initialize the 3D data loader.
 
@@ -80,8 +86,16 @@ class SLEAP3DDataLoader:
             video_subdir: Optional video subdirectory name (e.g., "PerShu_012").
                          If None, will search for points3d.h5 in subdirectories.
             session_idx: Index of session to use if session_path is a project directory (default: 0)
+            track_index: Which SLEAP track (animal identity) this loader exposes as
+                ``keypoints_3d`` (default: 0). SLEAP's ``tracks`` array carries an
+                explicit identity axis, which is what pins a specimen to a
+                parameter head in the multi-animal model -- see
+                ``docs/design/multianimal.md``. Every track stays available via
+                :meth:`get_keypoints_3d_for_track` / :attr:`keypoints_3d_all_tracks`,
+                so a multi-animal loader does not have to re-read the file.
         """
         self.session_path = Path(session_path)
+        self.track_index = int(track_index)
 
         if not self.session_path.exists():
             raise ValueError(f"Session path does not exist: {session_path}")
@@ -214,15 +228,58 @@ class SLEAP3DDataLoader:
 
             tracks = f["tracks"][:]  # Shape: (n_frames, n_tracks, n_keypoints, 3)
 
-            # Extract first track (assuming single animal)
             if tracks.shape[1] == 0:
                 raise ValueError(f"No tracks found in {self.points3d_file}")
 
-            self.keypoints_3d = tracks[:, 0, :, :]  # (n_frames, n_keypoints, 3)
+            # The track axis IS the animal identity. Keep all of it so a
+            # multi-animal dataset can read every specimen from one open file,
+            # and expose the configured track as the single-animal view that
+            # every existing caller already expects.
+            self.keypoints_3d_all_tracks = tracks  # (n_frames, n_tracks, n_keypoints, 3)
+            self.n_tracks = int(tracks.shape[1])
+
+            if not 0 <= self.track_index < self.n_tracks:
+                raise ValueError(
+                    f"track_index {self.track_index} is out of range: {self.points3d_file} "
+                    f"has {self.n_tracks} track(s)."
+                )
+
+            self.keypoints_3d = tracks[:, self.track_index, :, :]  # (n_frames, n_keypoints, 3)
             self.n_frames = self.keypoints_3d.shape[0]
             self.n_keypoints = self.keypoints_3d.shape[1]
 
-            print(f"Loaded 3D data: {self.n_frames} frames, {self.n_keypoints} keypoints")
+            print(
+                f"Loaded 3D data: {self.n_frames} frames, {self.n_keypoints} keypoints, "
+                f"{self.n_tracks} track(s) (using track {self.track_index})"
+            )
+
+    def get_num_tracks(self) -> int:
+        """Number of animal identities (SLEAP tracks) in this session."""
+        return int(getattr(self, "n_tracks", 1))
+
+    def get_keypoints_3d_for_track(self, track_index: int) -> np.ndarray:
+        """3D keypoints of one track: ``(n_frames, n_keypoints, 3)``.
+
+        Args:
+            track_index: Identity index into SLEAP's track axis.
+
+        Raises:
+            ValueError: when the session has no such track, naming how many it has.
+        """
+        n_tracks = self.get_num_tracks()
+        if not 0 <= track_index < n_tracks:
+            raise ValueError(f"track_index {track_index} is out of range: session has {n_tracks} track(s)")
+        return self.keypoints_3d_all_tracks[:, track_index, :, :]
+
+    def get_track_presence(self, track_index: int) -> np.ndarray:
+        """Per-frame presence of one track: ``(n_frames,)`` boolean.
+
+        A track that is untracked in a frame is stored as all-NaN by SLEAP, so
+        "has at least one finite keypoint" is the presence test. This is what
+        feeds the multi-animal ``animal_mask``.
+        """
+        keypoints = self.get_keypoints_3d_for_track(track_index)
+        return np.isfinite(keypoints).any(axis=(1, 2))
 
     def _load_calibration_data(self):
         """Load camera calibration data from calibration.toml."""

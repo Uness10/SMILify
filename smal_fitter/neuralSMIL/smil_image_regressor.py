@@ -838,6 +838,12 @@ class SMILImageRegressor(SMALFitter):
         This ensures SLEAP data (and any other partial-label data) is never penalized for missing parameters
         in both single-dataset and mixed-batch multi-dataset training scenarios.
 
+        The body is split into three reusable steps -- :meth:`assemble_batch_inputs`,
+        the forward pass, and :meth:`merge_available_label_masks` -- so that
+        subclasses which change *only* the forward pass (notably the multi-animal
+        regressor, which runs one shared backbone pass and N specimen heads) can
+        reuse the target-side assembly instead of duplicating it.
+
         Args:
             x_data_batch: List of x_data dictionaries (one per sample)
                 - Can optionally include 'available_labels' dict for explicit protection
@@ -847,7 +853,46 @@ class SMILImageRegressor(SMALFitter):
         Returns:
             Tuple of (predicted_params, target_params_batch, auxiliary_data)
         """
-        # Extract image data from all samples
+        batch_images, target_params_batch, batch_auxiliary_data = self.assemble_batch_inputs(
+            x_data_batch, y_data_batch
+        )
+
+        if batch_images is None:
+            # No valid samples in batch
+            return None, None, None
+
+        # Preprocess all images at once
+        image_tensor = self.preprocess_image(batch_images).to(self.device)
+
+        # Forward pass on entire batch
+        predicted_params = self.forward(image_tensor)
+
+        # Camera-centric mode: pin the camera to the PyTorch3D identity and take
+        # the vertical FOV from calibration (target_params_batch["fov"]). This
+        # overrides whatever the (now-unsupervised) camera heads predicted, so
+        # the 2D reprojection loss is evaluated through the fixed known camera --
+        # the model cannot cheat the reprojection by moving the camera.
+        if self.fixed_camera:
+            self.apply_fixed_camera(predicted_params, target_params_batch)
+
+        # If per-sample available_labels provided, convert them to availability masks
+        # so unavailable parameters are fully masked from loss
+        self.merge_available_label_masks(target_params_batch, batch_auxiliary_data)
+
+        return predicted_params, target_params_batch, batch_auxiliary_data
+
+    def assemble_batch_inputs(self, x_data_batch, y_data_batch):
+        """Collect images, targets and auxiliary data for a batch.
+
+        Extracted from :meth:`predict_from_batch` so that any subclass which
+        changes only the forward pass can reuse the (non-trivial) target-side
+        assembly verbatim. Behaviour is identical to the inline version it
+        replaced.
+
+        Returns:
+            ``(batch_images, target_params_batch, batch_auxiliary_data)``, or
+            ``(None, None, None)`` when the batch contains no usable sample.
+        """
         batch_images = []
         batch_target_params = []
         batch_auxiliary_data = {
@@ -902,99 +947,122 @@ class SMILImageRegressor(SMALFitter):
                 batch_auxiliary_data["available_labels"].append(x_data["available_labels"])
 
         if not batch_images:
-            # No valid samples in batch
             return None, None, None
-
-        # Preprocess all images at once
-        image_tensor = self.preprocess_image(batch_images).to(self.device)
-
-        # Forward pass on entire batch
-        predicted_params = self.forward(image_tensor)
 
         # Combine target parameters into batched format
         target_params_batch = self._combine_target_parameters_batch(batch_target_params)
 
-        # Camera-centric mode: pin the camera to the PyTorch3D identity and take
-        # the vertical FOV from calibration (target_params_batch["fov"]). This
-        # overrides whatever the (now-unsupervised) camera heads predicted, so
-        # the 2D reprojection loss is evaluated through the fixed known camera —
-        # the model cannot cheat the reprojection by moving the camera.
-        if self.fixed_camera:
-            bs = predicted_params["global_rot"].shape[0]
-            predicted_params["cam_rot"] = torch.eye(3, device=self.device).unsqueeze(0).expand(bs, 3, 3).contiguous()
-            predicted_params["cam_trans"] = torch.zeros(bs, 3, device=self.device)
-            gt_fov = target_params_batch.get("fov", None)
-            if gt_fov is not None:
-                predicted_params["fov"] = gt_fov.to(self.device).reshape(bs, 1)
+        return batch_images, target_params_batch, batch_auxiliary_data
 
-        # If per-sample available_labels provided, convert them to availability masks
-        # so unavailable parameters are fully masked from loss
-        if "available_labels" in batch_auxiliary_data:
-            # Get implicit availability masks from None detection (already in target_params_batch)
-            implicit_masks = target_params_batch.get("_availability_masks", {})
+    def apply_fixed_camera(self, predicted_params, target_params_batch):
+        """Pin the camera to the PyTorch3D identity (camera-centric mode).
 
-            # Build explicit availability masks from available_labels
-            explicit_masks = {}
-            labels_list = batch_auxiliary_data["available_labels"]
-            num_samples = len(labels_list)
-            # For each parameter in targets, build a boolean mask over samples
-            for param_name in [
-                "global_rot",
-                "joint_rot",
-                "betas",
-                "trans",
-                "fov",
-                "cam_rot",
-                "cam_trans",
-                "log_beta_scales",
-                "betas_trans",
-                "keypoint_2d",
-                "keypoint_3d",
-                "silhouette",
-            ]:
-                mask_vals = []
-                for i in range(num_samples):
-                    mask_vals.append(bool(labels_list[i].get(param_name, False)))
-                explicit_masks[param_name] = torch.tensor(mask_vals, dtype=torch.bool, device=self.device)
+        Extracted from :meth:`predict_from_batch` so subclasses with a
+        scene-level camera head can apply the same override.
+        """
+        bs = predicted_params["global_rot"].shape[0]
+        predicted_params["cam_rot"] = torch.eye(3, device=self.device).unsqueeze(0).expand(bs, 3, 3).contiguous()
+        predicted_params["cam_trans"] = torch.zeros(bs, 3, device=self.device)
+        gt_fov = target_params_batch.get("fov", None) if target_params_batch is not None else None
+        if gt_fov is not None:
+            predicted_params["fov"] = gt_fov.to(self.device).reshape(bs, 1)
 
-            # Merge explicit and implicit masks using AND logic for safety
-            # A sample is only considered available if BOTH mechanisms agree
-            # This prevents penalizing samples with None ground truth even if available_labels incorrectly marks them as available
-            availability_masks = {}
-            for param_name in explicit_masks.keys():
-                if param_name in implicit_masks:
-                    # Use AND logic: only available if both implicit (None detection) AND explicit (available_labels) say so
-                    merged_mask = explicit_masks[param_name] & implicit_masks[param_name]
-                    availability_masks[param_name] = merged_mask
+    def merge_available_label_masks(self, target_params_batch, batch_auxiliary_data):
+        """Merge explicit ``available_labels`` with implicit None-detection masks.
 
-                    # Detect potential dataset configuration errors where available_labels claims data is available
-                    # but the actual ground truth is None (detected by implicit mask)
-                    mismatches = explicit_masks[param_name] & ~implicit_masks[param_name]
-                    if mismatches.any():
-                        num_mismatches = mismatches.sum().item()
-                        # Only warn occasionally to avoid spam (1% of batches)
-                        if torch.rand(1).item() < 0.01:
-                            print(f"⚠️  WARNING: Dataset configuration mismatch detected for '{param_name}':")
-                            print(
-                                f"   {num_mismatches} sample(s) marked as available in 'available_labels' but have None ground truth"
-                            )
-                            print("   These samples will be PROTECTED from loss computation (using AND logic)")
-                            print(
-                                "   Please fix the dataset's 'available_labels' to match actual ground truth availability"
-                            )
-                else:
-                    # No implicit mask for this param (e.g., keypoint_2d, silhouette), use explicit only
-                    availability_masks[param_name] = explicit_masks[param_name]
+        Extracted from :meth:`predict_from_batch`; mutates ``target_params_batch``
+        in place by attaching ``_availability_masks``. No-op when the batch
+        carries no explicit label declarations.
+        """
+        if target_params_batch is None or batch_auxiliary_data is None:
+            return
+        if "available_labels" not in batch_auxiliary_data:
+            return
 
-            # Also preserve any implicit masks not in explicit (shouldn't happen, but for safety)
-            for param_name in implicit_masks.keys():
-                if param_name not in availability_masks:
-                    availability_masks[param_name] = implicit_masks[param_name]
+        # Get implicit availability masks from None detection (already in target_params_batch)
+        implicit_masks = target_params_batch.get("_availability_masks", {})
 
-            # Attach merged masks to target_params_batch
-            target_params_batch["_availability_masks"] = availability_masks
+        # Build explicit availability masks from available_labels
+        explicit_masks = {}
+        labels_list = batch_auxiliary_data["available_labels"]
+        num_samples = len(labels_list)
 
-        return predicted_params, target_params_batch, batch_auxiliary_data
+        # `available_labels` is collected only for the samples that declare it, so a
+        # batch where only SOME samples carry it yields a short list. Broadcasting a
+        # short boolean mask against the full-length implicit mask silently resolves
+        # to "nothing is available" and deletes the whole batch's supervision, which
+        # shows up only as a mysteriously flat loss. Skip the explicit merge in that
+        # case and say so -- the implicit (None-detection) masks still protect every
+        # sample without ground truth.
+        expected_samples = None
+        for mask in implicit_masks.values():
+            if hasattr(mask, "shape") and len(mask.shape) >= 1:
+                expected_samples = int(mask.shape[0])
+                break
+        if expected_samples is not None and num_samples != expected_samples:
+            print(
+                f"⚠️  WARNING: 'available_labels' was provided for {num_samples} of {expected_samples} "
+                "samples in this batch. Explicit label masking is SKIPPED for this batch (implicit "
+                "None-detection masking still applies). Provide 'available_labels' for every sample "
+                "or for none."
+            )
+            return
+        # For each parameter in targets, build a boolean mask over samples
+        for param_name in [
+            "global_rot",
+            "joint_rot",
+            "betas",
+            "trans",
+            "fov",
+            "cam_rot",
+            "cam_trans",
+            "log_beta_scales",
+            "betas_trans",
+            "keypoint_2d",
+            "keypoint_3d",
+            "silhouette",
+        ]:
+            mask_vals = []
+            for i in range(num_samples):
+                mask_vals.append(bool(labels_list[i].get(param_name, False)))
+            explicit_masks[param_name] = torch.tensor(mask_vals, dtype=torch.bool, device=self.device)
+
+        # Merge explicit and implicit masks using AND logic for safety
+        # A sample is only considered available if BOTH mechanisms agree
+        # This prevents penalizing samples with None ground truth even if available_labels incorrectly marks them as available
+        availability_masks = {}
+        for param_name in explicit_masks.keys():
+            if param_name in implicit_masks:
+                # Use AND logic: only available if both implicit (None detection) AND explicit (available_labels) say so
+                merged_mask = explicit_masks[param_name] & implicit_masks[param_name]
+                availability_masks[param_name] = merged_mask
+
+                # Detect potential dataset configuration errors where available_labels claims data is available
+                # but the actual ground truth is None (detected by implicit mask)
+                mismatches = explicit_masks[param_name] & ~implicit_masks[param_name]
+                if mismatches.any():
+                    num_mismatches = mismatches.sum().item()
+                    # Only warn occasionally to avoid spam (1% of batches)
+                    if torch.rand(1).item() < 0.01:
+                        print(f"⚠️  WARNING: Dataset configuration mismatch detected for '{param_name}':")
+                        print(
+                            f"   {num_mismatches} sample(s) marked as available in 'available_labels' but have None ground truth"
+                        )
+                        print("   These samples will be PROTECTED from loss computation (using AND logic)")
+                        print(
+                            "   Please fix the dataset's 'available_labels' to match actual ground truth availability"
+                        )
+            else:
+                # No implicit mask for this param (e.g., keypoint_2d, silhouette), use explicit only
+                availability_masks[param_name] = explicit_masks[param_name]
+
+        # Also preserve any implicit masks not in explicit (shouldn't happen, but for safety)
+        for param_name in implicit_masks.keys():
+            if param_name not in availability_masks:
+                availability_masks[param_name] = implicit_masks[param_name]
+
+        # Attach merged masks to target_params_batch
+        target_params_batch["_availability_masks"] = availability_masks
 
     def _extract_target_parameters_single(self, y_data):
         """Extract target parameters from a single sample (helper method)."""
@@ -1070,7 +1138,7 @@ class SMILImageRegressor(SMALFitter):
 
         elif self.scale_trans_mode == "separate":
             # In separate mode, use PCA weights directly as targets
-            if y_data["scale_weights"] is not None and y_data["trans_weights"] is not None:
+            if y_data.get("scale_weights") is not None and y_data.get("trans_weights") is not None:
                 # Use the PCA weights directly (5 parameters each)
                 targets["log_beta_scales"] = safe_to_tensor(y_data["scale_weights"], device=self.device)
                 targets["betas_trans"] = safe_to_tensor(y_data["trans_weights"], device=self.device)
@@ -1082,7 +1150,7 @@ class SMILImageRegressor(SMALFitter):
         elif self.scale_trans_mode == "entangled_with_betas":
             # For entangled mode, we still need to compute the per-joint values
             # but we'll use the same betas for all three PCA spaces
-            if y_data["scale_weights"] is not None and y_data["trans_weights"] is not None:
+            if y_data.get("scale_weights") is not None and y_data.get("trans_weights") is not None:
                 from smal_fitter.Unreal2Pytorch3D import sample_pca_transforms_from_dirs
 
                 translation_out, scale_out = sample_pca_transforms_from_dirs(
@@ -1099,7 +1167,7 @@ class SMILImageRegressor(SMALFitter):
                     torch.from_numpy(np.log(np.maximum(scale_out, 1e-8))).float().to(self.device)
                 )
                 targets["betas_trans"] = (
-                    torch.from_numpy(translation_out * y_data["translation_factor"]).float().to(self.device)
+                    torch.from_numpy(translation_out * y_data.get("translation_factor", 1.0)).float().to(self.device)
                 )
             else:
                 n_joints = len(config.dd["J_names"])

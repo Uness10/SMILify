@@ -70,6 +70,8 @@ from typing import Optional
 
 
 from smal_fitter.neuralSMIL.multiview_smil_regressor import MultiViewSMILImageRegressor, create_multiview_regressor
+from smal_fitter.neuralSMIL.multianimal import factory as multianimal_factory
+from smal_fitter.neuralSMIL.multianimal.multiview_regressor import create_multianimal_multiview_regressor
 from smal_fitter.neuralSMIL.smil_image_regressor import rotation_6d_to_axis_angle
 from smal_fitter.sleap_data.sleap_multiview_dataset import SLEAPMultiViewDataset, multiview_collate_fn
 from smal_fitter.fitter import SMALFitter
@@ -2392,6 +2394,14 @@ def main(config: dict):
     val_size = int(total_size * config["val_ratio"])
     test_size = total_size - train_size - val_size
 
+    # Multi-animal (N known specimens per sample). Disabled by default, in which
+    # case every helper below returns the single-animal object unchanged.
+    multi_animal = multianimal_factory.resolve_multi_animal_config(config)
+    if rank == 0:
+        print(multianimal_factory.describe(multi_animal))
+    dataset = multianimal_factory.wrap_dataset(dataset, multi_animal)
+    multiview_collate = multianimal_factory.resolve_collate_fn(multiview_collate_fn, multi_animal)
+
     train_set, val_set, test_set = torch.utils.data.random_split(
         dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(config["seed"])
     )
@@ -2429,7 +2439,7 @@ def main(config: dict):
         sampler=val_sampler,
         num_workers=config["num_workers"],
         pin_memory=config["pin_memory"],
-        collate_fn=multiview_collate_fn,
+        collate_fn=multiview_collate,
     )
 
     # Note: train_loader is created per-epoch to support fractional dataset sampling
@@ -2468,7 +2478,10 @@ def main(config: dict):
             joint_limit_reg_weight, float(_weight_updates.get("joint_limit_regularization", 0.0))
         )
 
-    model = create_multiview_regressor(
+    model = multianimal_factory.build_regressor(
+        multi_animal,
+        single_animal_factory=create_multiview_regressor,
+        multi_animal_factory=create_multianimal_multiview_regressor,
         device=device,
         batch_size=config["batch_size"],
         shape_family=config.get("shape_family", -1),
@@ -2612,7 +2625,7 @@ def main(config: dict):
             epoch=epoch,
             config=config,
             is_distributed=is_distributed,
-            collate_fn=multiview_collate_fn,
+            collate_fn=multiview_collate,
         )
 
         # Staged backbone unfreeze

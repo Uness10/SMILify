@@ -54,7 +54,11 @@ class MultiViewConfig(BaseTrainingConfig):
         """
         hidden_dim = self.model.get_adjusted_hidden_dim()
 
+        self.multi_animal.normalize()
+
         d = {
+            # Multi-animal (N known specimens per sample); disabled by default.
+            "multi_animal": self.multi_animal.to_dict(),
             # Training params
             "batch_size": self.training.batch_size,
             "num_epochs": self.training.num_epochs,

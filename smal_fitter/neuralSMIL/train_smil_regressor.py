@@ -60,6 +60,8 @@ import imageio
 
 from smal_fitter.neuralSMIL.smil_image_regressor import SMILImageRegressor, rotation_6d_to_axis_angle
 from smal_fitter.neuralSMIL.smil_datasets import UnifiedSMILDataset
+from smal_fitter.neuralSMIL.multianimal import factory as multianimal_factory
+from smal_fitter.neuralSMIL.multianimal.regressor import MultiAnimalSMILRegressor
 from smal_fitter.fitter import SMALFitter
 from smal_fitter.Unreal2Pytorch3D import return_placeholder_data
 import config
@@ -1451,6 +1453,13 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
     output_config = training_config["output_config"]
 
     # Single-view-from-multiview / camera-centric options
+    # Multi-animal (N known specimens per sample). Disabled by default, in which
+    # case every helper below returns the single-animal object unchanged.
+    multi_animal = multianimal_factory.resolve_multi_animal_config(training_config)
+    collate_fn = multianimal_factory.resolve_collate_fn(custom_collate_fn, multi_animal)
+    if not is_distributed or rank == 0:
+        print(multianimal_factory.describe(multi_animal))
+
     dataset_cfg = training_config.get("dataset", {})
     from_multiview = bool(dataset_cfg.get("from_multiview", False))
     frame_convention = dataset_cfg.get("frame_convention", "model_centric")
@@ -1758,7 +1767,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             shuffle=(not is_distributed and train_sampler is None),  # Don't shuffle when using sampler
             sampler=train_sampler,
             num_workers=num_workers,
-            collate_fn=custom_collate_fn,
+            collate_fn=collate_fn,
             pin_memory=pin_memory,
             persistent_workers=num_workers > 0,  # Only use persistent workers if multiprocessing
             prefetch_factor=prefetch_factor,
@@ -1769,7 +1778,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             shuffle=False,  # Never shuffle validation
             sampler=val_sampler,
             num_workers=num_workers,
-            collate_fn=custom_collate_fn,
+            collate_fn=collate_fn,
             pin_memory=pin_memory,
             persistent_workers=num_workers > 0,
             prefetch_factor=prefetch_factor,
@@ -1780,7 +1789,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             shuffle=False,  # Never shuffle test
             sampler=test_sampler,
             num_workers=num_workers,
-            collate_fn=custom_collate_fn,
+            collate_fn=collate_fn,
             pin_memory=pin_memory,
             persistent_workers=num_workers > 0,
             prefetch_factor=prefetch_factor,
@@ -1798,7 +1807,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             shuffle=(not is_distributed and train_sampler is None),
             sampler=train_sampler,
             num_workers=0,
-            collate_fn=custom_collate_fn,
+            collate_fn=collate_fn,
         )
         val_loader = DataLoader(
             val_set,
@@ -1806,7 +1815,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             shuffle=False,
             sampler=val_sampler,
             num_workers=0,
-            collate_fn=custom_collate_fn,
+            collate_fn=collate_fn,
         )
         test_loader = DataLoader(
             test_set,
@@ -1814,7 +1823,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             shuffle=False,
             sampler=test_sampler,
             num_workers=0,
-            collate_fn=custom_collate_fn,
+            collate_fn=collate_fn,
         )
 
     # Create placeholder data for SMALFitter initialization
@@ -1862,7 +1871,10 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
             joint_limit_reg_weight, float(_weight_updates.get("joint_limit_regularization", 0.0))
         )
 
-    model = SMILImageRegressor(
+    model = multianimal_factory.build_regressor(
+        multi_animal,
+        single_animal_factory=SMILImageRegressor,
+        multi_animal_factory=MultiAnimalSMILRegressor,
         device=device,
         data_batch=placeholder_data,
         batch_size=batch_size,
@@ -2115,7 +2127,7 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
                 pin_memory,
                 prefetch_factor,
                 is_distributed,
-                custom_collate_fn,
+                collate_fn,
             )
             or train_loader
         )
