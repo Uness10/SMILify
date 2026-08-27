@@ -65,7 +65,7 @@
 # One command builds the whole sweep:
 #
 #   cd "$HPCWORK/SMILify"
-#   conda activate "$HPCWORK/conda_envs/pytorch3d"
+#   conda activate pytorch3d
 #   mkdir -p logs configs_runs
 #
 #   SV_REF=<path to your singleview .pth> \
@@ -184,7 +184,30 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 REPO_DIR="${REPO_DIR:-$SLURM_SUBMIT_DIR}"
 # RWTH: $HPCWORK is the large per-user filesystem; $HOME has a hard quota that a
 # conda env plus the 21 GB dataset will blow through.
-ENV_PREFIX="${ENV_PREFIX:-$HPCWORK/conda_envs/pytorch3d}"
+# --- resolve the conda env ---------------------------------------------------
+# ENV_PREFIX is a full env PREFIX (a directory), not a name, and the layout
+# differs per install: a conda rooted at $HPCWORK puts envs in `conda/envs/`,
+# while pointing `envs_dirs` at $HPCWORK gives `conda_envs/`. Guessing one and
+# letting `conda activate` fail burns a queue slot for a one-line error, so
+# probe the known layouts and check bin/python actually exists first.
+if [[ -z "${ENV_PREFIX:-}" ]]; then
+    for cand in "$HPCWORK/conda/envs/pytorch3d" \
+                "$HPCWORK/conda_envs/pytorch3d" \
+                "$HPCWORK/miniconda3/envs/pytorch3d" \
+                "$HPCWORK/miniforge3/envs/pytorch3d" \
+                "$HOME/.conda/envs/pytorch3d"; do
+        [[ -x "$cand/bin/python" ]] && { ENV_PREFIX="$cand"; break; }
+    done
+fi
+if [[ ! -x "${ENV_PREFIX:-}/bin/python" ]]; then
+    echo "ERROR: no conda env found." >&2
+    echo "       ENV_PREFIX='${ENV_PREFIX:-<unset>}' has no bin/python, and none of the" >&2
+    echo "       known layouts under HPCWORK=$HPCWORK matched either." >&2
+    echo "       Find yours on the login node:  conda env list" >&2
+    echo "       Then submit with:" >&2
+    echo "         ENV_PREFIX=<full prefix path> sbatch --export=ALL,ENV_PREFIX ... $0" >&2
+    exit 1
+fi
 
 # --- activate conda ----------------------------------------------------------
 # Batch jobs don't reliably source ~/.bashrc, so locate conda.sh explicitly.

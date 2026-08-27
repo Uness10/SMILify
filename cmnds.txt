@@ -11,12 +11,52 @@
 # Run everything from the repo root on $HPCWORK.
 # =============================================================================
 
-cd "$HPCWORK/SMILify"
-conda activate "$HPCWORK/conda_envs/pytorch3d"
+cd "$HPCWORK/SMILify"          # or wherever your checkout lives — see the quota note below
+conda activate pytorch3d
 mkdir -p logs configs_runs
 
-export ENV_PREFIX=$HPCWORK/conda_envs/pytorch3d
+# ENV_PREFIX is the env's full PREFIX (a directory), not its name. On this
+# account that is /hpcwork/mkd34160/conda/envs/pytorch3d — note `conda/envs`,
+# not `conda_envs`. The sbatch files now probe both layouts and check that
+# bin/python exists before calling `conda activate`, so exporting it is optional;
+# do it anyway if you keep more than one env around.
+export ENV_PREFIX="$(conda info --envs | awk '$1=="pytorch3d"{print $NF}')"
+echo "ENV_PREFIX=$ENV_PREFIX"     # sanity: must be a directory containing bin/python
+
 export ACCT=rwth2151
+
+
+# -----------------------------------------------------------------------------
+# WHERE THE CHECKPOINTS LAND — check this before the training array
+# -----------------------------------------------------------------------------
+# REPO_DIR defaults to SLURM_SUBMIT_DIR, so `runs/singleview_lam*/checkpoints/`
+# is written relative to wherever you submit from. Submitting from a checkout on
+# $HOME (e.g. ~/test/SMILify) puts them on the quota'd filesystem: 4 lambdas x
+# ~25 periodic checkpoints (50 epochs at save_checkpoint_every=2) of a ViT-Large
+# model is on the order of 100 GB, and $HOME will stop the run partway through
+# with a write error rather than a clean failure.
+#
+# Either submit from a checkout on $HPCWORK, or point the run dirs there
+# explicitly after building the configs (step 2):
+#
+#   python - <<'PY'
+#   import json, glob, os
+#   for f in glob.glob("configs_runs/singleview_lam*.json"):
+#       cfg = json.load(open(f))
+#       tag = os.path.basename(f)[:-5]                     # singleview_lam1e-3
+#       run = f"{os.environ['HPCWORK']}/smilify_runs/{tag}"
+#       cfg["output"].update(checkpoint_dir=f"{run}/checkpoints",
+#                            plots_dir=f"{run}/plots",
+#                            visualizations_dir=f"{run}/visualizations",
+#                            train_visualizations_dir=f"{run}/visualizations_train")
+#       json.dump(cfg, open(f, "w"), indent=2)
+#       print(f, "->", run)
+#   PY
+#
+# The eval sbatch then needs SV_CON pointed at the same place:
+#   SV_CON=$HPCWORK/smilify_runs/singleview_lam1e-3/checkpoints/best_model.pth
+#
+# df -h $HOME $HPCWORK   # check headroom first
 
 # The single-view checkpoint the whole study branches from, and the JSON that
 # PRODUCED it. Do not let prepare_resume_config.py fall back to the checkpoint's

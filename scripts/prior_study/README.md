@@ -194,7 +194,7 @@ Substitute your project for `<proj>` (`rwth####` / `p0######`).
 
 ```bash
 cd "$HPCWORK/SMILify"
-conda activate "$HPCWORK/conda_envs/pytorch3d"
+conda activate pytorch3d
 python hpc_files/download_backbone_weights.py   # ViT weights; c23g nodes are offline
 mkdir -p logs configs_runs
 ```
@@ -202,6 +202,26 @@ mkdir -p logs configs_runs
 Keep the repo on `$HPCWORK` — `$HOME`'s quota will not hold a conda env plus the
 21 GB dataset. If a job later reports `could not locate conda.sh`, pass it
 explicitly: `CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh" sbatch --export=ALL,CONDA_SH ...`
+
+**This matters more at 50 epochs than it did at 10.** `REPO_DIR` defaults to
+`SLURM_SUBMIT_DIR`, so `runs/singleview_lam*/checkpoints/` is written relative to
+wherever you submit from. Four lambdas × ~25 periodic checkpoints (50 epochs at
+`save_checkpoint_every = 2`) of a ViT-Large model is on the order of 100 GB. From
+a `$HOME` checkout the sweep dies partway through on a write error, not a clean
+failure. Either submit from `$HPCWORK`, or repoint `output.*` in the prepared
+configs — see the quota block at the top of `cmnds.txt`.
+
+**The env prefix.** `ENV_PREFIX` is the env's full *prefix* (a directory), not
+its name, and the layout differs per install: `conda/envs/<name>` for a conda
+rooted at `$HPCWORK`, `conda_envs/<name>` if `envs_dirs` was pointed there. All
+three sbatch files probe both and verify `bin/python` exists before calling
+`conda activate`, so a wrong guess fails on the login node's terms rather than
+after a queue wait. Override explicitly when you keep several envs:
+
+```bash
+ENV_PREFIX="$(conda info --envs | awk '$1=="pytorch3d"{print $NF}')" \
+    sbatch --export=ALL,ENV_PREFIX ...
+```
 
 ### 1. Build the sweep configs (login node)
 
