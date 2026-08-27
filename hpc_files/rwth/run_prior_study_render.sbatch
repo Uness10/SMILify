@@ -24,6 +24,12 @@
 #     2   sv_constrained @ 1e-3  prior_study_results/lam1e-3/sv_constrained/clip_sv_constrained.npz
 #     3   sv_constrained @ 1e-2  prior_study_results/lam1e-2/sv_constrained/clip_sv_constrained.npz
 #     4   sv_constrained @ 1e-1  prior_study_results/lam1e-1/sv_constrained/clip_sv_constrained.npz
+#     5   sv_constrained @ 100   prior_study_results/sv_constrained/clip_sv_constrained.npz
+#                                (the EARLIER w=100 run — pre-sweep flat layout,
+#                                 and NOT epoch-matched to tasks 1-4)
+#
+# Tasks 0 and 5 are the two arms that exist before the sweep has trained, so
+# `--array=0,5` gives a reference-vs-w=100 comparison today.
 #
 # ---------------------------------------------------------------------------
 # WHY THE .npz AND NOT THE RAW CLIPS
@@ -65,6 +71,16 @@
 # The reference alone, as soon as its eval has run (no training needed):
 #   sbatch --array=0 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
 #
+# The earlier w=100 arm, which is already on disk:
+#   sbatch --array=5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
+#   bash scripts/prior_study/stack_renders.sh      # -> reference | w=100
+#
+# An arm in some other location entirely (ARM names the output folder, NPZ the
+# input, LABEL the burned-in caption — all three override any task's defaults):
+#   ARM=lam100_rerun NPZ=some/other/clip.npz LABEL="lambda = 100 (rerun)" \
+#     sbatch --array=5 --account=rwth2151 --export=ALL,ARM,NPZ,LABEL \
+#       hpc_files/rwth/run_prior_study_render.sbatch
+#
 # Chained after the eval array:
 #   sbatch --array=0-4 --dependency=afterany:$eid --account=rwth2151 \
 #       hpc_files/rwth/run_prior_study_render.sbatch
@@ -97,16 +113,32 @@ RENDER_ROOT="${RENDER_ROOT:-$RESULTS_ROOT/renders}"
 
 TASK="${SLURM_ARRAY_TASK_ID:-0}"
 if (( TASK == 0 )); then
-    ARM="sv_reference"
+    ARM="${ARM:-sv_reference}"
     NPZ="${NPZ:-$RESULTS_ROOT/sv_reference/clip_sv_reference.npz}"
-    LABEL="reference (no limit prior)"
+    LABEL="${LABEL:-reference (no limit prior)}"
 elif (( TASK >= 1 && TASK <= 4 )); then
     LAMBDA="${LAMBDAS[$((TASK - 1))]}"
-    ARM="lam${LAMBDA}"
+    ARM="${ARM:-lam${LAMBDA}}"
     NPZ="${NPZ:-$RESULTS_ROOT/lam${LAMBDA}/sv_constrained/clip_sv_constrained.npz}"
-    LABEL="lambda = ${LAMBDA}"
+    LABEL="${LABEL:-lambda = ${LAMBDA}}"
+elif (( TASK == 5 )); then
+    # The EARLIER w=100 run, which predates the sweep and therefore lives in the
+    # flat pre-sweep layout (prior_study_results/sv_constrained/) rather than
+    # under a lam<L>/ root. Kept as its own task so the one arm that already
+    # exists can be rendered and compared against the reference today, without
+    # waiting for the sweep to train.
+    #
+    # It is NOT epoch-matched to the sweep: it continued the reference for the
+    # handful of epochs that fit its old 12 h budget, while every sweep arm gets
+    # EXTRA_EPOCHS (50). The label carries that so it cannot be forgotten once
+    # the panel is sitting in a grid next to four arms that trained 6x longer.
+    LAMBDA="100"
+    ARM="${ARM:-lam100}"
+    NPZ="${NPZ:-$RESULTS_ROOT/sv_constrained/clip_sv_constrained.npz}"
+    LABEL="${LABEL:-lambda = 100  [older run, fewer epochs]}"
 else
-    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-4)." >&2
+    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-5)." >&2
+    echo "       0 = reference, 1-4 = the lambda sweep, 5 = the earlier w=100 arm." >&2
     exit 1
 fi
 
@@ -200,9 +232,13 @@ if [[ ! -f "$NPZ" ]]; then
     echo "ERROR: exported poses not found: $NPZ" >&2
     echo "       This arm has not been evaluated yet — run_prior_study.sh writes the" >&2
     echo "       clip_*.npz during the eval stage. Submit the matching eval task first:" >&2
-    if (( TASK == 0 )); then
-        echo "         sbatch --array=0 --account=rwth2151 --export=ALL,SV_REF \\" >&2
-        echo "             hpc_files/rwth/run_prior_study_eval.sbatch" >&2
+    if (( TASK == 5 )); then
+        echo "         This is the PRE-SWEEP w=100 arm, expected in the flat layout" >&2
+        echo "         $RESULTS_ROOT/sv_constrained/. If your copy lives elsewhere, point" >&2
+        echo "         at it directly rather than moving files:" >&2
+        echo "           NPZ=<path to clip_sv_constrained.npz> sbatch --array=5 \\" >&2
+        echo "             --account=rwth2151 --export=ALL,NPZ \\" >&2
+        echo "             hpc_files/rwth/run_prior_study_render.sbatch" >&2
     else
         echo "         sbatch --array=$TASK --account=rwth2151 --export=ALL,SV_REF \\" >&2
         echo "             hpc_files/rwth/run_prior_study_eval.sbatch" >&2

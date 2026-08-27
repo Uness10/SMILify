@@ -193,8 +193,35 @@ python scripts/prior_study/pick_segments.py \
 #       --out prior_study_results/renders/segments_even.json
 
 # --- 6b. Render every arm over those windows (1 GPU each, ~minutes).
-sbatch --array=0-4 --account=$ACCT --export=ALL,ENV_PREFIX \
+#
+# RIGHT NOW only two arms exist on the cluster: the reference (rendered) and the
+# earlier w=100 run, whose poses are in the PRE-SWEEP flat layout
+# prior_study_results/sv_constrained/. That is array task 5:
+
+sbatch --array=5 --account=$ACCT --export=ALL,ENV_PREFIX \
     hpc_files/rwth/run_prior_study_render.sbatch
+
+bash scripts/prior_study/stack_renders.sh    # -> reference | lambda=100
+
+# Its clip has the same 50630 frames as the reference's, so the segments.json
+# already built from the reference addresses the same instants — nothing to
+# redo. If the .npz sits somewhere else, point at it instead of moving files:
+#   NPZ=<path>/clip_sv_constrained.npz sbatch --array=5 --account=$ACCT \
+#       --export=ALL,ENV_PREFIX,NPZ hpc_files/rwth/run_prior_study_render.sbatch
+#
+# CAVEAT for this pair: sv_reference is epoch 386 and the w=100 arm is
+# checkpoint_epoch_394 — 8 continued epochs, and best_model.pth was never
+# written, so run_prior_study.sh fell back to the newest periodic checkpoint.
+# So the difference you see is "w=100 plus 8 epochs", not w=100 alone, and it is
+# a much shorter continuation than the 50 epochs each sweep arm will get.
+#
+# Once the sweep has trained, the four sweep arms:
+#   sbatch --array=0-4 --account=$ACCT --export=ALL,ENV_PREFIX \
+#       hpc_files/rwth/run_prior_study_render.sbatch
+#
+# stack_renders.sh drops arms with no renders on disk, so the same command works
+# at every stage; it prints a warning when lam100 and the sweep arms share a grid,
+# because that grid mixes the weight with the training length.
 
 # Reference alone, as soon as its eval has landed:
 #   sbatch --array=0 --account=$ACCT --export=ALL,ENV_PREFIX \

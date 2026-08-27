@@ -21,7 +21,9 @@
 # Env:
 #   RENDER_ROOT   default: prior_study_results/renders
 #   ARMS          space-separated arm folder names, in display order
-#                 default: sv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1
+#                 default: sv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1 lam100
+#                 (arms with no renders on disk are dropped, so this works
+#                 before the sweep has trained)
 #   CLIPS         space-separated segment names (default: every segment found
 #                 under the FIRST arm folder)
 #   PANEL_H       panel height in px (default: 480)
@@ -35,7 +37,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 RENDER_ROOT="${RENDER_ROOT:-prior_study_results/renders}"
-read -r -a ARM_ARR <<< "${ARMS:-sv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1}"
+# lam100 (the earlier w=100 run) is last so the panels read left-to-right in
+# increasing prior strength. Arms with no renders are dropped, so before the
+# sweep has trained this default already gives you reference | w=100.
+read -r -a ARM_ARR <<< "${ARMS:-sv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1 lam100}"
 PANEL_H="${PANEL_H:-480}"
 CRF="${CRF:-20}"
 OUT_DIR="$RENDER_ROOT/comparison"
@@ -80,10 +85,30 @@ echo "  clips : ${CLIP_STEMS[*]}"
 echo "  out   : $OUT_DIR"
 echo "=================================================================="
 
+# lam100 predates the sweep and trained for far fewer epochs than the sweep arms
+# will. Side by side in one grid that difference is invisible, so say it here
+# rather than letting the grid imply the panels differ only in lambda.
+_has_lam100=0
+_has_sweep=0
+for a in "${PRESENT[@]}"; do
+    [[ "$a" == "lam100" ]] && _has_lam100=1
+    [[ "$a" == lam1e-* ]] && _has_sweep=1
+done
+if (( _has_lam100 == 1 && _has_sweep == 1 )); then
+    echo
+    echo " NOTE: lam100 is the EARLIER run and is NOT epoch-matched to the sweep arms."
+    echo "       Reading its panel against theirs mixes the weight with the training"
+    echo "       length. Compare it against sv_reference (which it was continued from),"
+    echo "       and compare the sweep arms among themselves."
+    echo "       Each arm's render.json records the checkpoint it came from."
+    echo
+fi
+
 # Panel caption: the arm folder name plus what it means.
 label_for() {
     case "$1" in
         sv_reference|mv_reference) echo "reference (no limit prior)" ;;
+        lam100)                    echo "lambda = 100 (older run)" ;;
         lam*)                      echo "lambda = ${1#lam}" ;;
         *)                         echo "$1" ;;
     esac

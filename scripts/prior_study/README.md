@@ -372,6 +372,32 @@ sbatch --array=0-4 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbat
 bash scripts/prior_study/stack_renders.sh
 ```
 
+**The earlier `w = 100` arm is array task 5.** Its poses predate the sweep and
+live in the flat pre-sweep layout `prior_study_results/sv_constrained/`, so it
+gets its own task rather than a `lam<L>/` root — which means the two arms that
+exist before any sweep training can be compared today:
+
+```bash
+sbatch --array=5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
+bash scripts/prior_study/stack_renders.sh     # -> reference | lambda = 100
+```
+
+It is **not epoch-matched to the sweep**: it continued the reference for the few
+epochs its old 12 h budget allowed (epoch 386 → 394, and `best_model.pth` was
+never written so the newest periodic checkpoint was used), while every sweep arm
+gets 50. Its burned-in label says so, and `stack_renders.sh` prints a warning
+whenever it shares a grid with the sweep arms. Read it against `sv_reference`,
+which it was continued from; read the sweep arms against each other.
+
+`ARM`, `NPZ` and `LABEL` override any task's defaults, for an arm stored
+somewhere else:
+
+```bash
+ARM=lam100_rerun NPZ=some/other/clip.npz LABEL="lambda = 100 (rerun)" \
+  sbatch --array=5 --account=rwth2151 --export=ALL,ARM,NPZ,LABEL \
+    hpc_files/rwth/run_prior_study_render.sbatch
+```
+
 **`--select worst`** ranks windows by how far the *reference* strays outside the
 authored ranges and takes the top ones. A window where the reference was already
 in range cannot show the prior doing anything, however good the prior is —
