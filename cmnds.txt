@@ -1,0 +1,13 @@
+export SV_REF=$(python -c "import json;print(json.load(open('configs_runs/singleview_constrained.json'))['training']['resume_checkpoint'])")
+export MV_REF=$(python -c "import json;print(json.load(open('configs_runs/multiview_constrained.json'))['training']['resume_checkpoint'])")
+export ENV_PREFIX=/hpcwork/mkd34160/conda/envs/pytorch3d
+
+sbatch --array=0,2 --account=rwth2151 --export=ALL hpc_files/rwth/run_prior_study_eval.sbatch
+
+jid=$(sbatch --parsable --account=rwth2151 --export=ALL hpc_files/rwth/run_prior_study_train.sbatch)
+
+sbatch --array=1,3 --dependency=afterok:$jid --account=rwth2151 --export=ALL hpc_files/rwth/run_prior_study_eval.sbatch
+
+python scripts/prior_study/compare_arms.py \
+    --results-root prior_study_results --out prior_study_results/comparison \
+    --extra-epochs 10 --joint-limit-weight 100.0
