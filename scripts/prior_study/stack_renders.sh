@@ -5,25 +5,29 @@
 #
 #   bash scripts/prior_study/stack_renders.sh
 #
-# Reads   prior_study_results/renders/<arm>/<clip>_inference.mp4
-# Writes  prior_study_results/renders/comparison/<clip>_compare.mp4
+# Reads   prior_study_results/renders/<arm>/<segment>.mp4
+# Writes  prior_study_results/renders/comparison/<segment>_compare.mp4
+#
+# The segments come from pick_segments.py and are identical across arms, so
+# panel k of every frame is the same instant of the same animal.
 #
 # Login node, ffmpeg only — no GPU, seconds per clip.
 #
-# Layout: up to 3 arms in a row, more than 3 in a 2-row grid, each panel labelled
-# with its arm and lambda. Panels are scaled to a common height first: the arms
-# render at identical settings so they should already match, but a mismatched
-# --video_export_mode between runs would otherwise make hstack fail with a
-# cryptic filter error.
+# Layout: up to 3 arms in a row, more than 3 in a 2-row grid. Panels are scaled
+# to a common height first: the arms render at identical settings so they should
+# already match, but an --image-size that differed between render runs would
+# otherwise make xstack fail with a cryptic filter error.
 #
 # Env:
 #   RENDER_ROOT   default: prior_study_results/renders
 #   ARMS          space-separated arm folder names, in display order
 #                 default: sv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1
-#   CLIPS         space-separated clip stems (default: every stem found under
-#                 the FIRST arm folder)
+#   CLIPS         space-separated segment names (default: every segment found
+#                 under the FIRST arm folder)
 #   PANEL_H       panel height in px (default: 480)
 #   CRF           x264 quality, lower = better (default: 20)
+#   LABELS_ON=1   also burn an ffmpeg caption per panel. Off by default because
+#                 render_clip_npz.py already draws one (arm, frame, violations).
 
 set -euo pipefail
 
@@ -46,7 +50,7 @@ command -v ffmpeg >/dev/null 2>&1 || {
 # --- which arms actually rendered? -------------------------------------------
 PRESENT=()
 for arm in "${ARM_ARR[@]}"; do
-    if [[ -d "$RENDER_ROOT/$arm" ]] && compgen -G "$RENDER_ROOT/$arm/*_inference.mp4" >/dev/null; then
+    if [[ -d "$RENDER_ROOT/$arm" ]] && compgen -G "$RENDER_ROOT/$arm/seg*.mp4" >/dev/null; then
         PRESENT+=("$arm")
     else
         echo "  [skip] $arm — no renders under $RENDER_ROOT/$arm/"
@@ -62,9 +66,9 @@ CLIP_STEMS=()
 if [[ -n "${CLIPS:-}" ]]; then
     read -r -a CLIP_STEMS <<< "$CLIPS"
 else
-    for f in "$RENDER_ROOT/${PRESENT[0]}"/*_inference.mp4; do
+    for f in "$RENDER_ROOT/${PRESENT[0]}"/seg*.mp4; do
         b="$(basename "$f")"
-        CLIP_STEMS+=("${b%_inference.mp4}")
+        CLIP_STEMS+=("${b%.mp4}")
     done
 fi
 
@@ -89,12 +93,12 @@ for STEM in "${CLIP_STEMS[@]}"; do
     INPUTS=()
     LABELS=()
     for arm in "${PRESENT[@]}"; do
-        f="$RENDER_ROOT/$arm/${STEM}_inference.mp4"
+        f="$RENDER_ROOT/$arm/${STEM}.mp4"
         if [[ -f "$f" ]]; then
             INPUTS+=("$f")
             LABELS+=("$(label_for "$arm")")
         else
-            echo "  [warn] $arm is missing ${STEM}_inference.mp4 — dropping it from this clip's grid" >&2
+            echo "  [warn] $arm is missing ${STEM}.mp4 — dropping it from this segment's grid" >&2
         fi
     done
 
@@ -114,11 +118,16 @@ for STEM in "${CLIP_STEMS[@]}"; do
 
     # Build the filtergraph: scale each input to a common height, burn in its
     # label, then xstack into the grid.
+    # render_clip_npz.py already burns the arm label, frame index and per-frame
+    # violation count into each panel, so drawtext here would double up. Set
+    # LABELS=1 to add it anyway (e.g. for panels rendered with --no-hud).
     FILTER=""
     for ((i = 0; i < n; i++)); do
         FILTER+="[${i}:v]scale=-2:${PANEL_H},"
-        FILTER+="drawtext=text='${LABELS[$i]//\'/}':x=10:y=10:fontsize=22:fontcolor=white:"
-        FILTER+="box=1:boxcolor=black@0.6:boxborderw=6,"
+        if [[ "${LABELS_ON:-0}" == "1" ]]; then
+            FILTER+="drawtext=text='${LABELS[$i]//\'/}':x=10:y=10:fontsize=22:fontcolor=white:"
+            FILTER+="box=1:boxcolor=black@0.6:boxborderw=6,"
+        fi
         FILTER+="setsar=1[v${i}];"
     done
 
@@ -155,9 +164,10 @@ for STEM in "${CLIP_STEMS[@]}"; do
     then
         echo "  ok"
     else
-        echo "  [FAILED] $STEM — if the error mentions drawtext, this ffmpeg was built" >&2
-        echo "           without libfreetype; re-run with the labels dropped:" >&2
-        echo "           (or conda install -c conda-forge ffmpeg, which includes it)" >&2
+        echo "  [FAILED] $STEM" >&2
+        echo "           If the error mentions drawtext, this ffmpeg lacks libfreetype —" >&2
+        echo "           drop LABELS_ON (the panels already carry their own HUD), or" >&2
+        echo "           conda install -c conda-forge ffmpeg, which includes it." >&2
     fi
 done
 
@@ -165,9 +175,13 @@ echo
 echo "=================================================================="
 echo " Comparison videos in $OUT_DIR"
 echo
+echo " Each panel carries its own HUD: arm label, frame index, and how many of the"
+echo " 129 authored joint-axes are out of range IN THAT FRAME. Watch that counter"
+echo " across panels — it is the same quantity the violation table aggregates."
+echo
 echo " What to look for, in the order it is worth looking:"
-echo "   1. Leg segments that fold the wrong way in the reference panel and stop"
-echo "      doing so as lambda rises — that is the prior working."
+echo "   1. The out-of-range counter falling from left to right while the pose"
+echo "      still tracks the animal — that is the prior working."
 echo "   2. Legs that stop moving, or a body that drifts off the animal, at the"
 echo "      HIGH end of the sweep — that is the prior overriding the data, and it"
 echo "      should show up as worse MPJPE/PCK in sweep/sweep.md too."

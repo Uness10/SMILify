@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --time=02:00:00
+#SBATCH --time=01:00:00
 #SBATCH --job-name=jl_render
 #SBATCH --array=0-4
 #SBATCH --output=logs/%x_%A_%a.out
@@ -13,75 +13,73 @@
 # ---------------------------------------------------------------------------
 # JOINT-LIMIT PRIOR STUDY — qualitative renders (RWTH CLAIX-2023, c23g)
 #
-# Renders the SAME video clips through every arm so the change the prior makes
-# can be judged by eye, not only through the violation table. One array task per
-# arm, each looping over every clip:
+# Renders each arm's ALREADY-EXPORTED poses (prior_study_results/<arm>/clip_*.npz,
+# written by export_poses.py during the eval stage) over the SAME frame windows,
+# so the change the prior makes can be judged by eye.
 #
-#   task  arm                    checkpoint
+#   task  arm                    npz
 #   ----  ---------------------  --------------------------------------------
-#     0   sv_reference           $SV_REF (downloaded, unmodified)
-#     1   sv_constrained @ 1e-4  runs/singleview_lam1e-4/checkpoints/best_model.pth
-#     2   sv_constrained @ 1e-3  runs/singleview_lam1e-3/checkpoints/best_model.pth
-#     3   sv_constrained @ 1e-2  runs/singleview_lam1e-2/checkpoints/best_model.pth
-#     4   sv_constrained @ 1e-1  runs/singleview_lam1e-1/checkpoints/best_model.pth
-#
-# Output (one folder per arm, one MP4 + one animation .npz/.json per clip):
-#
-#   prior_study_results/renders/
-#     sv_reference/<clip>_inference.mp4        <- side-by-side: input | fitted mesh
-#     sv_reference/<clip>_anim.npz             <- raw predicted parameters
-#     lam1e-4/<clip>_inference.mp4
-#     ...
-#
-# Then stack them into one comparison video per clip on the LOGIN NODE (ffmpeg
-# only, no GPU, seconds):
-#
-#   bash scripts/prior_study/stack_renders.sh
+#     0   sv_reference           prior_study_results/sv_reference/clip_sv_reference.npz
+#     1   sv_constrained @ 1e-4  prior_study_results/lam1e-4/sv_constrained/clip_sv_constrained.npz
+#     2   sv_constrained @ 1e-3  prior_study_results/lam1e-3/sv_constrained/clip_sv_constrained.npz
+#     3   sv_constrained @ 1e-2  prior_study_results/lam1e-2/sv_constrained/clip_sv_constrained.npz
+#     4   sv_constrained @ 1e-1  prior_study_results/lam1e-1/sv_constrained/clip_sv_constrained.npz
 #
 # ---------------------------------------------------------------------------
-# WHICH CLIPS
+# WHY THE .npz AND NOT THE RAW CLIPS
 # ---------------------------------------------------------------------------
-# Give the clips one of three ways (checked in this order):
+# The .npz files hold the predictions the study actually SCORED — same test
+# split, same order, same frames behind every MPJPE / PCK / violation number.
+# Rendering them means the pictures and the tables describe one thing. Re-running
+# inference on raw video would answer a different question (how the model behaves
+# on those clips) and would line up with nothing in the results.
 #
-#   CLIP_LIST=clips.txt      a file with one absolute clip path per line
-#                            (lines starting with # are ignored)
-#   CLIPS="a.mp4,b.mp4"      comma-separated paths
-#   CLIPS_DIR=/path/to/clips all *.mp4/*.avi/*.mov directly inside that folder,
-#                            capped at MAX_CLIPS (default 4)
+# It is also far cheaper: no checkpoint, no dataset, no backbone — just SMAL
+# forward plus rasterisation, minutes per arm instead of hours.
 #
-# Pick clips that show the behaviour the prior is supposed to fix — a walking
-# sequence where the reference bends a coxa the wrong way is worth ten clips of
-# the animal standing still. The violation table in
-# prior_study_results/sv_reference/analysis/limit_violations.csv names the axes
-# that violate most; choose clips where those joints are moving.
+# ---------------------------------------------------------------------------
+# BEFORE SUBMITTING — pick the windows ONCE, on the login node
+# ---------------------------------------------------------------------------
+# Every arm must render the SAME frames or the grid is not a comparison. The
+# windows are chosen once, from the REFERENCE arm, and shared:
+#
+#   python scripts/prior_study/pick_segments.py \
+#       --npz  prior_study_results/sv_reference/clip_sv_reference.npz \
+#       --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+#       --segments 3 --length 300 --select worst \
+#       --out prior_study_results/renders/segments.json
+#
+# --select worst aims the renders at the windows where the reference violates
+# the authored limits most — the frames the prior is supposed to fix. A window
+# where the reference was already in range cannot show the prior doing anything.
+# Use --select even for an unbiased look alongside it.
+#
+# CPU only, seconds. This job refuses to start if segments.json is missing,
+# rather than inventing its own windows.
 #
 # ---------------------------------------------------------------------------
 # SUBMIT
 # ---------------------------------------------------------------------------
-#   SV_REF=<downloaded singleview .pth> \
-#   CLIPS_DIR=$HPCWORK/clips \
-#     sbatch --account=rwth2151 --export=ALL,SV_REF,CLIPS_DIR \
+#   sbatch --array=0-4 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
+#
+# The reference alone, as soon as its eval has run (no training needed):
+#   sbatch --array=0 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
+#
+# Chained after the eval array:
+#   sbatch --array=0-4 --dependency=afterany:$eid --account=rwth2151 \
 #       hpc_files/rwth/run_prior_study_render.sbatch
 #
-# Reference only, right now (no training needed) — do this FIRST to confirm the
-# clips decode and the crop mode is right before spending four more GPU hours:
-#
-#   SV_REF=... CLIPS_DIR=... MAX_FRAMES=120 \
-#     sbatch --array=0 --account=rwth2151 --export=ALL,SV_REF,CLIPS_DIR,MAX_FRAMES \
-#       hpc_files/rwth/run_prior_study_render.sbatch
-#
-# Chained after the sweep training array:
-#
-#   sbatch --array=0-4 --dependency=afterok:$jid --account=rwth2151 \
-#       --export=ALL,SV_REF,CLIPS_DIR hpc_files/rwth/run_prior_study_render.sbatch
+# Then stack them into one labelled video per window (login node, ffmpeg):
+#   bash scripts/prior_study/stack_renders.sh
 #
 # Env knobs:
-#   MAX_FRAMES      frames per clip, -1 = all          (default: 300)
-#   FPS             output fps, empty = same as input  (default: input's)
-#   CROP_MODE       centred | default | bbox_crop      (default: centred)
-#   EXPORT_MODE     side_by_side | overlay             (default: side_by_side)
-#   CAM_SMOOTHING   camera moving-average window       (default: 0 = off)
-#   RENDER_ROOT     output root  (default: prior_study_results/renders)
+#   SEGMENTS_FILE  default: prior_study_results/renders/segments.json
+#   RENDER_ROOT    output root (default: prior_study_results/renders)
+#   CAMERA         orbit | predicted        (default: orbit)
+#   IMAGE_SIZE     square px               (default: 512)
+#   ELEV / AZIM    orbit camera angles     (default: 15 / 45)
+#   SCALING        auto|mesh_scale|ue|none (default: auto)
+#   BATCH_SIZE     frames per render call  (default: 16)
 #
 # NOTE: intentionally no `set -u` (conda activate hooks reference unset vars).
 set -eo pipefail
@@ -94,18 +92,19 @@ if [[ -z "${SLURM_JOB_ACCOUNT:-}" ]]; then
 fi
 
 LAMBDAS=(1e-4 1e-3 1e-2 1e-1)
+RESULTS_ROOT="${RESULTS_ROOT:-prior_study_results}"
+RENDER_ROOT="${RENDER_ROOT:-$RESULTS_ROOT/renders}"
 
 TASK="${SLURM_ARRAY_TASK_ID:-0}"
-LAMBDA=""
 if (( TASK == 0 )); then
     ARM="sv_reference"
-    CHECKPOINT="${SV_REF:-}"
-    WHAT="downloaded single-view checkpoint (set SV_REF=<path>)"
+    NPZ="${NPZ:-$RESULTS_ROOT/sv_reference/clip_sv_reference.npz}"
+    LABEL="reference (no limit prior)"
 elif (( TASK >= 1 && TASK <= 4 )); then
     LAMBDA="${LAMBDAS[$((TASK - 1))]}"
     ARM="lam${LAMBDA}"
-    CHECKPOINT="${SV_CON:-runs/singleview_lam${LAMBDA}/checkpoints/best_model.pth}"
-    WHAT="single-view continuation at lambda=$LAMBDA"
+    NPZ="${NPZ:-$RESULTS_ROOT/lam${LAMBDA}/sv_constrained/clip_sv_constrained.npz}"
+    LABEL="lambda = ${LAMBDA}"
 else
     echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-4)." >&2
     exit 1
@@ -138,154 +137,75 @@ fi
 source "$CONDA_SH"
 conda activate "$ENV_PREFIX"
 
-# MUST run from the repo root. run_singleview_inference.py re-derives the SMIL
-# model from the path stored inside the checkpoint's own config
-# (apply_smal_file_override -> open(smal_file)), and that path is RELATIVE
-# ("3D_model_prep/SMILy_STICK*.pkl"). From any other directory it raises
-# FileNotFoundError before the first frame is decoded. There is no --smal_file
-# override on this entry point, unlike run_multiview_inference.py.
+# Run from the repo root: SMAL_FILE and the results tree are addressed relatively.
 cd "$REPO_DIR"
 
-MAX_FRAMES="${MAX_FRAMES:-300}"
-CROP_MODE="${CROP_MODE:-centred}"
-EXPORT_MODE="${EXPORT_MODE:-side_by_side}"
-CAM_SMOOTHING="${CAM_SMOOTHING:-0}"
-RENDER_ROOT="${RENDER_ROOT:-prior_study_results/renders}"
+SEGMENTS_FILE="${SEGMENTS_FILE:-$RENDER_ROOT/segments.json}"
+SMAL_FILE="${SMAL_FILE:-3D_model_prep/SMILy_STICK_limits_authored.pkl}"
+CAMERA="${CAMERA:-orbit}"
+IMAGE_SIZE="${IMAGE_SIZE:-512}"
+ELEV="${ELEV:-15}"
+AZIM="${AZIM:-45}"
+SCALING="${SCALING:-auto}"
+BATCH_SIZE="${BATCH_SIZE:-16}"
 OUT_DIR="$RENDER_ROOT/$ARM"
-
-# --- resolve the checkpoint --------------------------------------------------
-if [[ -z "$CHECKPOINT" ]]; then
-    echo "ERROR: no checkpoint for arm '$ARM'." >&2
-    echo "       This arm needs $WHAT." >&2
-    exit 1
-fi
-# best_model.pth is only written when val_loss beats the value RESTORED from the
-# resumed checkpoint, so a continuation can finish without ever writing one.
-# Same fallback run_prior_study.sh applies, so the render and the metrics score
-# the SAME weights.
-if [[ ! -e "$CHECKPOINT" && "$(basename "$CHECKPOINT")" == "best_model.pth" ]]; then
-    CKPT_DIR="$(dirname "$CHECKPOINT")"
-    FALLBACK="$(ls -t "$CKPT_DIR"/checkpoint_epoch_*.pth 2>/dev/null | head -n1 || true)"
-    if [[ -n "$FALLBACK" ]]; then
-        echo "  [note] $CHECKPOINT not found (val loss never beat the resumed best)."
-        echo "         Falling back to newest periodic checkpoint: $FALLBACK"
-        CHECKPOINT="$FALLBACK"
-    fi
-fi
-[[ -e "$CHECKPOINT" ]] || { echo "ERROR: checkpoint not found: $CHECKPOINT" >&2; exit 1; }
-
-# --- resolve the clip list ---------------------------------------------------
-CLIP_PATHS=()
-if [[ -n "${CLIP_LIST:-}" ]]; then
-    [[ -f "$CLIP_LIST" ]] || { echo "ERROR: CLIP_LIST not found: $CLIP_LIST" >&2; exit 1; }
-    while IFS= read -r line; do
-        [[ -z "$line" || "$line" == \#* ]] && continue
-        CLIP_PATHS+=("$line")
-    done < "$CLIP_LIST"
-elif [[ -n "${CLIPS:-}" ]]; then
-    IFS=',' read -r -a CLIP_PATHS <<< "$CLIPS"
-elif [[ -n "${CLIPS_DIR:-}" ]]; then
-    [[ -d "$CLIPS_DIR" ]] || { echo "ERROR: CLIPS_DIR not a directory: $CLIPS_DIR" >&2; exit 1; }
-    MAX_CLIPS="${MAX_CLIPS:-4}"
-    while IFS= read -r f; do CLIP_PATHS+=("$f"); done < <(
-        find "$CLIPS_DIR" -maxdepth 1 -type f \
-             \( -iname '*.mp4' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.mkv' \) \
-        | sort | head -n "$MAX_CLIPS"
-    )
-else
-    echo "ERROR: no clips given. Set one of CLIP_LIST=<file>, CLIPS=<a.mp4,b.mp4>," >&2
-    echo "       or CLIPS_DIR=<folder>. See the header of this file." >&2
-    exit 1
-fi
-
-if (( ${#CLIP_PATHS[@]} == 0 )); then
-    echo "ERROR: clip list resolved to zero files." >&2
-    exit 1
-fi
-
-# Fail before touching the GPU if any clip is missing — a half-rendered arm
-# makes an uneven comparison grid that is easy to misread.
-missing=0
-for c in "${CLIP_PATHS[@]}"; do
-    [[ -f "$c" ]] || { echo "  [MISSING] $c" >&2; missing=1; }
-done
-(( missing == 0 )) || { echo "One or more clips are missing. Aborting." >&2; exit 1; }
-
-mkdir -p "$OUT_DIR"
 
 echo "=================================================================="
 echo "Job ${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID} task $TASK on $(hostname) — $(date)"
-echo "  arm        : $ARM${LAMBDA:+ (lambda=$LAMBDA)} — $WHAT"
-echo "  checkpoint : $CHECKPOINT"
-echo "  clips      : ${#CLIP_PATHS[@]}"
-printf '                 %s\n' "${CLIP_PATHS[@]}"
-echo "  out dir    : $OUT_DIR"
-echo "  max frames : $MAX_FRAMES per clip"
-echo "  crop mode  : $CROP_MODE   (MUST match the training preprocessing)"
-echo "  export mode: $EXPORT_MODE"
+echo "  arm      : $ARM — $LABEL"
+echo "  npz      : $NPZ"
+echo "  segments : $SEGMENTS_FILE"
+echo "  camera   : $CAMERA   image size ${IMAGE_SIZE}px"
+echo "  out dir  : $OUT_DIR"
 echo "=================================================================="
-python -c "import torch; print(f'  torch: {torch.__version__}, {torch.cuda.device_count()} GPU(s) visible')"
 
-# Record which weights produced these frames. Without it, a folder of MP4s is
-# indistinguishable from any other folder of MP4s three weeks later.
-python - "$OUT_DIR/render.json" "$ARM" "$CHECKPOINT" "$LAMBDA" "$MAX_FRAMES" "$CROP_MODE" <<'PY'
-import json, sys, torch
-out, arm, ckpt, lam, max_frames, crop = sys.argv[1:7]
-epoch = "?"
-try:
-    epoch = torch.load(ckpt, map_location="cpu", weights_only=False).get("epoch", "?")
-except Exception as e:      # noqa: BLE001 - provenance must never fail the render
-    print(f"  [warn] could not read epoch from checkpoint: {e}")
-json.dump({"arm": arm, "checkpoint": ckpt, "checkpoint_epoch": epoch,
-           "joint_limit_weight": float(lam) if lam else 0.0,
-           "max_frames": int(max_frames), "crop_mode": crop},
-          open(out, "w"), indent=2)
-print(f"  provenance -> {out} (checkpoint epoch {epoch})")
-PY
-
-# --- render every clip -------------------------------------------------------
-FAILED=()
-for CLIP in "${CLIP_PATHS[@]}"; do
-    STEM="$(basename "${CLIP%.*}")"
-    echo
-    echo "------------------------------------------------------------------"
-    echo " [$ARM] $STEM"
-    echo "------------------------------------------------------------------"
-
-    EXTRA=()
-    [[ -n "${FPS:-}" ]] && EXTRA+=(--fps "$FPS")
-
-    # --export_animation writes <stem>.npz + .json with the RAW (pre-smoothing)
-    # parameters. Keep them: they let the same clip be re-plotted against the
-    # authored limits later without re-running the GPU.
-    if python -m smal_fitter.neuralSMIL.run_singleview_inference \
-        --checkpoint "$CHECKPOINT" \
-        --input_video "$CLIP" \
-        --output_folder "$OUT_DIR" \
-        --crop_mode "$CROP_MODE" \
-        --video_export_mode "$EXPORT_MODE" \
-        --max_frames "$MAX_FRAMES" \
-        --camera_smoothing "$CAM_SMOOTHING" \
-        --export_animation "$OUT_DIR/${STEM}_anim" \
-        "${EXTRA[@]}" 2>&1 | tee "$OUT_DIR/${STEM}_render.log"
-    then
-        echo "  -> $OUT_DIR/${STEM}_inference.mp4"
-    else
-        echo "  [FAILED] $STEM — see $OUT_DIR/${STEM}_render.log" >&2
-        FAILED+=("$STEM")
-    fi
-done
-
-echo
-echo "=================================================================="
-if (( ${#FAILED[@]} > 0 )); then
-    echo " $ARM: ${#FAILED[@]} of ${#CLIP_PATHS[@]} clip(s) FAILED: ${FAILED[*]}" >&2
-    echo " The stacked comparison will be missing this arm for those clips." >&2
+# --- the two things that make this job produce a non-comparison --------------
+if [[ ! -f "$SEGMENTS_FILE" ]]; then
+    echo "ERROR: $SEGMENTS_FILE not found." >&2
+    echo "       Every arm must render the SAME windows, so they are chosen once on the" >&2
+    echo "       login node before any render job runs:" >&2
+    echo >&2
+    echo "         python scripts/prior_study/pick_segments.py \\" >&2
+    echo "             --npz $RESULTS_ROOT/sv_reference/clip_sv_reference.npz \\" >&2
+    echo "             --smal-file $SMAL_FILE \\" >&2
+    echo "             --segments 3 --length 300 --select worst \\" >&2
+    echo "             --out $SEGMENTS_FILE" >&2
     exit 1
 fi
-echo " $ARM: rendered ${#CLIP_PATHS[@]} clip(s) into $OUT_DIR"
+
+if [[ ! -f "$NPZ" ]]; then
+    echo "ERROR: exported poses not found: $NPZ" >&2
+    echo "       This arm has not been evaluated yet — run_prior_study.sh writes the" >&2
+    echo "       clip_*.npz during the eval stage. Submit the matching eval task first:" >&2
+    if (( TASK == 0 )); then
+        echo "         sbatch --array=0 --account=rwth2151 --export=ALL,SV_REF \\" >&2
+        echo "             hpc_files/rwth/run_prior_study_eval.sbatch" >&2
+    else
+        echo "         sbatch --array=$TASK --account=rwth2151 --export=ALL,SV_REF \\" >&2
+        echo "             hpc_files/rwth/run_prior_study_eval.sbatch" >&2
+    fi
+    exit 1
+fi
+
+python -c "import torch; print(f'  torch: {torch.__version__}, {torch.cuda.device_count()} GPU(s) visible')"
+
+python scripts/prior_study/render_clip_npz.py \
+    --npz "$NPZ" \
+    --smal-file "$SMAL_FILE" \
+    --segments-file "$SEGMENTS_FILE" \
+    --out-dir "$OUT_DIR" \
+    --label "$LABEL" \
+    --camera "$CAMERA" \
+    --image-size "$IMAGE_SIZE" \
+    --elev "$ELEV" --azim "$AZIM" \
+    --scaling "$SCALING" \
+    --batch-size "$BATCH_SIZE"
+
 echo
-echo " Once every arm has finished, build the comparison videos on the login node:"
+echo "=================================================================="
+echo " $ARM rendered into $OUT_DIR"
+echo
+echo " Once every arm has finished, stack them on the login node:"
 echo "   bash scripts/prior_study/stack_renders.sh"
 echo "=================================================================="
 echo "Done ($ARM) — $(date)"

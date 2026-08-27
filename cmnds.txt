@@ -5,7 +5,8 @@
 # Design changed from the previous run:
 #   - constrained arms now train 50 additional epochs (was 10)
 #   - one arm per lambda in {1e-4, 1e-3, 1e-2, 1e-1}, SINGLE-VIEW only
-#   - renders of the same clips through every arm, for qualitative comparison
+#   - renders of the SAME exported-pose windows through every arm, for
+#     qualitative comparison (from clip_*.npz, no re-inference)
 #
 # Run everything from the repo root on $HPCWORK.
 # =============================================================================
@@ -124,40 +125,58 @@ sbatch --array=1-4 --dependency=afterany:$jid --account=$ACCT \
 
 
 # -----------------------------------------------------------------------------
-# 6. QUALITATIVE RENDERS — the same clips through every arm
+# 6. QUALITATIVE RENDERS — from the exported poses, not from raw video
 # -----------------------------------------------------------------------------
-# Point it at the clips. Choose sequences where the joints that VIOLATE in the
-# reference are actually moving — a walking bout beats ten clips of the animal
-# standing still. The reference's violation table names those joints:
-#   sort -t, -k4 -gr prior_study_results/sv_reference/analysis/limit_violations.csv | head
+# The eval stage already wrote each arm's predictions to
+#   prior_study_results/<arm>/clip_*.npz   (+ the .json sidecar already in git)
+# Those ARE the frames the study scored. Rendering them means the pictures and
+# the tables describe the same predictions, and it costs minutes on one GPU —
+# no checkpoint, no dataset, no backbone.
 
-export CLIPS_DIR=<folder of .mp4/.avi clips on the cluster>
-#   or: export CLIP_LIST=clips.txt      (one absolute path per line)
-#   or: export CLIPS=/path/a.mp4,/path/b.mp4
+# --- 6a. Pick the windows ONCE (login node, CPU, seconds).
+# Every arm must render the SAME frames or the grid is not a comparison.
+# --select worst aims them at the windows where the REFERENCE violates the
+# authored limits most — the frames the prior is supposed to fix.
 
-# --- 6a. Smoke test on the reference alone, 120 frames, BEFORE spending the
-#         rest. Confirms the clips decode, the crop mode matches training, and
-#         the mesh lands on the animal.
-MAX_FRAMES=120 sbatch --array=0 --account=$ACCT \
-    --export=ALL,SV_REF,CLIPS_DIR,MAX_FRAMES,ENV_PREFIX \
+python scripts/prior_study/pick_segments.py \
+    --npz prior_study_results/sv_reference/clip_sv_reference.npz \
+    --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+    --segments 3 --length 300 --select worst \
+    --out prior_study_results/renders/segments.json
+
+# Read its output before going further. If it reports that the reference never
+# leaves the authored ranges, no render can show the prior correcting anything
+# and the sweep's answer is already in — see step 0.
+#
+# Add an unbiased set alongside the worst-case one:
+#   python scripts/prior_study/pick_segments.py ... --select even \
+#       --out prior_study_results/renders/segments_even.json
+
+# --- 6b. Render every arm over those windows (1 GPU each, ~minutes).
+sbatch --array=0-4 --account=$ACCT --export=ALL,ENV_PREFIX \
     hpc_files/rwth/run_prior_study_render.sbatch
 
-# Look at prior_study_results/renders/sv_reference/<clip>_inference.mp4 before
-# continuing. If the mesh is offset or the animal is cropped out, the fix is
-# CROP_MODE (must match the training preprocessing), not more frames.
+# Reference alone, as soon as its eval has landed:
+#   sbatch --array=0 --account=$ACCT --export=ALL,ENV_PREFIX \
+#       hpc_files/rwth/run_prior_study_render.sbatch
+#
+# Default camera is `orbit`: root-centred, so the predicted translation is
+# dropped and only ARTICULATION varies between panels — which is what a joint
+# limit changes, and what makes two arms comparable frame by frame.
+# For the model's own view (checks the fit still lands on the animal):
+#   CAMERA=predicted sbatch --array=0-4 --account=$ACCT \
+#       --export=ALL,ENV_PREFIX,CAMERA hpc_files/rwth/run_prior_study_render.sbatch
 
-# --- 6b. All five arms, 300 frames each, after training finishes.
-sbatch --array=0-4 --dependency=afterany:$jid --account=$ACCT \
-    --export=ALL,SV_REF,CLIPS_DIR,ENV_PREFIX \
-    hpc_files/rwth/run_prior_study_render.sbatch
-
-# --- 6c. Stack them into one labelled comparison video per clip (login node,
-#         ffmpeg only, seconds). This is the artefact to actually watch.
+# --- 6c. Stack into one comparison video per window (login node, ffmpeg).
 bash scripts/prior_study/stack_renders.sh
-#   -> prior_study_results/renders/comparison/<clip>_compare.mp4
-#      panels: reference | 1e-4 | 1e-3 | 1e-2 | 1e-1, same frames, same scale
+#   -> prior_study_results/renders/comparison/<segment>_compare.mp4
+#      panels: reference | 1e-4 | 1e-3 | 1e-2 | 1e-1, identical frames
+#
+# Each panel carries a HUD: arm, frame index, and how many of the 129 authored
+# joint-axes are out of range IN THAT FRAME. Watch that counter fall across
+# panels — it is the per-frame version of the number in limit_violations.csv.
 
-# Just two arms side by side (easier to judge than five panels):
+# Just two arms side by side (easier to judge than five):
 #   ARMS="sv_reference lam1e-2" bash scripts/prior_study/stack_renders.sh
 
 
@@ -167,7 +186,9 @@ bash scripts/prior_study/stack_renders.sh
 #   prior_study_results/sweep/sweep.md          <- the lambda curve (HEADLINE)
 #   prior_study_results/sweep/sweep.csv
 #   prior_study_results/lam<L>/comparison/comparison.md   <- reference vs that lambda
-#   prior_study_results/renders/comparison/*.mp4          <- the qualitative side
+#   prior_study_results/renders/comparison/*_compare.mp4  <- the qualitative side
+#   prior_study_results/renders/<arm>/render.json         <- per-segment mean
+#                                                            axes-out-of-range
 #
 # Win condition: a lambda that lowers the violation rate while leaving MPJPE and
 # PCK flat. A lambda that lowers violations AND accuracy is the prior overriding

@@ -168,12 +168,14 @@ per-axis CSV and the build script. The `.pkl` matches that CSV exactly.
 | `run_prior_study.sh` | One arm, end to end: benchmark → export → analyse into `prior_study_results/<label>/`. Detects the modality from the checkpoint. |
 | `prepare_lambda_sweep.sh` | Builds every config of the sweep in one call — `prepare_resume_config.py` once per lambda, all at the same `--extra-epochs`, plus the two post-patches that matter at 50 epochs (`save_checkpoint_every`, curriculum hygiene). |
 | `compare_arms.py` | Joins a reference/constrained pair into `comparison.md` + `arms.csv`. Unchanged; the sweep gives each lambda its own root so this keeps working on the fixed pair names. |
-| `stack_renders.sh` | ffmpeg-only, login node. Stacks the per-arm clip renders into one labelled comparison video per clip. |
+| `pick_segments.py` | CPU only. Chooses which frame windows of the exported test split every arm renders — once, from the reference — so the panels line up. `--select worst` aims them at the frames the reference actually violates. |
+| `render_clip_npz.py` | Renders one arm's exported `clip_*.npz` to MP4. No inference: SMAL forward + rasterisation of the predictions that were already scored. Burns a per-frame out-of-range counter into each frame. |
+| `stack_renders.sh` | ffmpeg-only, login node. Stacks the per-arm segment renders into one comparison video per window. |
 | `preflight_study.py` | Login-node guard for the two silent invalidations: config/checkpoint architecture drift (which resets the epoch counter to 0) and seed/ratio disagreement between arms (which scores them on different frames). |
 | `analyze_baseline_pose.py` | The analysis engine: angle distributions, ROM, limit violations, trajectories. Unchanged. |
 | `../../hpc_files/rwth/run_prior_study_train.sbatch` | Array `0-3` = the single-view lambda sweep (`4-7` = the same lambdas on multi-view), 4× H100 each, `torchrun`. Refuses to launch if the config's weight is not the lambda its task id is for. |
 | `../../hpc_files/rwth/run_prior_study_eval.sbatch` | Array `0-4` = reference + the four lambdas (`5-9` = multi-view), 1 GPU each. Writes each lambda to its own root and rebuilds `sweep/sweep.md` at the end. |
-| `../../hpc_files/rwth/run_prior_study_render.sbatch` | Array `0-4`, 1 GPU each. Renders the same video clips through every arm for the qualitative comparison. |
+| `../../hpc_files/rwth/run_prior_study_render.sbatch` | Array `0-4`, 1 GPU each. Renders every arm's exported poses over the shared windows. Refuses to start without `segments.json`. |
 
 ### What was removed
 
@@ -324,55 +326,77 @@ Monitor: `squeue --me` / `tail -f logs/jl_train_<jobid>_<task>.out`
 ### 3b. Qualitative renders
 
 The tables say *how much* the violation rate moved; they do not say whether the
-result looks like a stick insect. Render the same clips through every arm and
-watch them side by side.
+result looks like a stick insect.
+
+**Render the exported poses, not raw video.** `export_poses.py` already ran every
+arm over the test split and wrote `prior_study_results/<arm>/clip_*.npz`. Those
+are the predictions behind every MPJPE / PCK / violation number in the tables, in
+the same frame order for every arm. Rendering them means the pictures and the
+numbers describe one thing — and it costs minutes on one GPU, with no checkpoint,
+dataset or backbone loaded. Re-running inference on raw clips would answer a
+different question and line up with nothing.
 
 ```bash
-export CLIPS_DIR=<folder of .mp4/.avi clips on the cluster>
-#   or CLIP_LIST=clips.txt (one absolute path per line)
-#   or CLIPS=/path/a.mp4,/path/b.mp4
+# 1. Pick the windows ONCE, from the REFERENCE arm (login node, CPU, seconds).
+#    Every arm must render the same frames or the grid is not a comparison.
+python scripts/prior_study/pick_segments.py \
+    --npz prior_study_results/sv_reference/clip_sv_reference.npz \
+    --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+    --segments 3 --length 300 --select worst \
+    --out prior_study_results/renders/segments.json
 
-# smoke test: reference only, 120 frames — confirms the clips decode, the crop
-# mode matches training, and the mesh lands on the animal
-MAX_FRAMES=120 sbatch --array=0 --account=rwth2151 \
-    --export=ALL,SV_REF,CLIPS_DIR,MAX_FRAMES \
-    hpc_files/rwth/run_prior_study_render.sbatch
+# 2. Render every arm over those windows.
+sbatch --array=0-4 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
 
-# all five arms, after training
-sbatch --array=0-4 --dependency=afterany:$jid --account=rwth2151 \
-    --export=ALL,SV_REF,CLIPS_DIR \
-    hpc_files/rwth/run_prior_study_render.sbatch
-
-# stack into one labelled comparison video per clip (login node, ffmpeg, seconds)
+# 3. Stack into one comparison video per window (login node, ffmpeg).
 bash scripts/prior_study/stack_renders.sh
 ```
 
-**Choosing clips.** Pick sequences where the joints that violate in the
-reference are actually moving — a walking bout beats ten clips of the animal
-standing still. The reference's own table names them:
+**`--select worst`** ranks windows by how far the *reference* strays outside the
+authored ranges and takes the top ones. A window where the reference was already
+in range cannot show the prior doing anything, however good the prior is —
+picking windows at random is the most common way a qualitative comparison comes
+back "looks the same" for a reason that has nothing to do with the prior. Run
+`--select even` alongside it for an unbiased look.
 
-```bash
-sort -t, -k4 -gr prior_study_results/sv_reference/analysis/limit_violations.csv | head
+If `pick_segments.py` reports that the reference never leaves the authored ranges
+anywhere in the clip, stop: no render can show a correction, and the sweep's
+answer is already in the violation table.
+
+**Cameras.** The default `--camera orbit` is a fixed camera on the *root-centred*
+mesh: the predicted translation is dropped, so the animal stays in frame and only
+its articulation varies between panels. That is what a joint-limit prior changes,
+and holding the body still is what makes two arms comparable frame by frame. One
+distance is computed across all segments and reused for every arm, so identical
+poses cannot look different because a panel zoomed. `CAMERA=predicted` uses the
+sidecar camera and the predicted translation — the model's own view, better for
+checking the fit still lands on the animal, worse for judging pose.
+
+**The HUD.** Every frame carries the arm label, the frame index, and how many of
+the 129 authored joint-axes are out of range *in that frame*, plus the worst
+offender and its overshoot. Five panels of a stick insect are otherwise very hard
+to tell apart, and the eye invents differences the numbers do not support. The
+counter is the per-frame version of what `limit_violations.csv` aggregates, so
+the video and the table can be read against each other.
+
+Output:
+
+```
+prior_study_results/renders/
+  segments.json                       <- the shared windows
+  sv_reference/seg00_f012345.mp4      <- one MP4 per window per arm
+  sv_reference/render.json            <- provenance + mean axes out of range
+  lam1e-4/ lam1e-3/ lam1e-2/ lam1e-1/
+  comparison/seg00_f012345_compare.mp4  <- all arms, identical frames, labelled
 ```
 
-**Two caveats on this entry point.**
-
-- The render must run from the repo root. `run_singleview_inference.py`
-  re-derives the SMIL model from the path stored inside the checkpoint's own
-  config, and that path is relative (`3D_model_prep/...`). There is no
-  `--smal_file` override here, unlike `run_multiview_inference.py`.
-- `--crop_mode` must match the training preprocessing (`centred` for these
-  checkpoints). A mismatch produces a plausible-looking video in which the model
-  is fitting a differently-framed animal, which is exactly the kind of error a
-  qualitative comparison will not catch.
-
-Renders land in `prior_study_results/renders/<arm>/`, one MP4 plus an animation
-`.npz`/`.json` per clip and a `render.json` recording which checkpoint and epoch
-produced them. `stack_renders.sh` writes
-`prior_study_results/renders/comparison/<clip>_compare.mp4`.
-
-For a two-panel comparison (easier to judge than five):
+Two arms side by side (easier to judge than five):
 `ARMS="sv_reference lam1e-2" bash scripts/prior_study/stack_renders.sh`
+
+**If a `predicted`-camera render comes out at visibly the wrong size**, the npz
+cannot record which vertex-scaling branch the trainer used (`use_ue_scaling` vs
+the `mesh_scale` head). `SCALING=ue` is the other option. The `orbit` camera
+auto-frames, so it is unaffected.
 
 ### 4. Results
 
@@ -400,11 +424,11 @@ prior_study_results/
     sweep.md                                <- HEADLINE: the lambda curve
     sweep.csv                               <- one row per (mode, lambda)
   renders/
-    sv_reference/<clip>_inference.mp4       <- side-by-side: input | fitted mesh
-    sv_reference/<clip>_anim.npz            <- raw predicted parameters
-    sv_reference/render.json                <- which checkpoint/epoch produced them
+    segments.json                           <- the windows every arm renders
+    sv_reference/seg00_f012345.mp4          <- one MP4 per window, HUD burned in
+    sv_reference/render.json                <- provenance + axes out of range
     lam1e-4/ ...
-    comparison/<clip>_compare.mp4           <- all arms, same frames, labelled
+    comparison/seg00_f012345_compare.mp4    <- all arms, identical frames
 ```
 
 Each lambda gets its own root because `compare_arms.py` builds its delta table
@@ -443,11 +467,17 @@ bash -n scripts/prior_study/run_prior_study.sh
 bash -n scripts/prior_study/prepare_lambda_sweep.sh
 bash -n scripts/prior_study/stack_renders.sh
 
+# segment picking on the real reference export — CPU, no GPU, seconds
+python scripts/prior_study/pick_segments.py \
+    --npz prior_study_results/sv_reference/clip_sv_reference.npz \
+    --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+    --segments 3 --length 300 --out /tmp/segments.json
+
 # the stacking filtergraph, on synthetic clips — no GPU, no checkpoints
 mkdir -p /tmp/r/{sv_reference,lam1e-2}
 for a in sv_reference lam1e-2; do
-  ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=640x360:rate=25:duration=2" \
-      -pix_fmt yuv420p /tmp/r/$a/clipA_inference.mp4
+  ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=512x512:rate=30:duration=2" \
+      -pix_fmt yuv420p /tmp/r/$a/seg00_f000000.mp4
 done
 RENDER_ROOT=/tmp/r ARMS="sv_reference lam1e-2" bash scripts/prior_study/stack_renders.sh
 ```
@@ -484,5 +514,8 @@ In order of likelihood, before concluding the hypothesis is wrong:
 If the tables move but the renders look identical — or the reverse — trust the
 renders for *plausibility* and the tables for *magnitude*. A prior that fixes a
 handful of frames deep in the test split will show in the violation rate and
-never appear in a 300-frame clip; a prior that freezes the legs will be obvious
-on screen while the mean violation rate looks fine.
+never appear in a 300-frame window; a prior that freezes the legs will be obvious
+on screen while the mean violation rate looks fine. Because the renders come from
+the same `.npz` the tables are computed from, a disagreement between them is
+always about *which frames you are looking at*, never about two different models
+— check the per-frame counter in the HUD against `limit_violations.csv`.
