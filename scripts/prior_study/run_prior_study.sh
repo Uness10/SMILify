@@ -28,6 +28,10 @@
 #   SMAL_FILE    model .pkl carrying joint_limits (default: 3D_model_prep/SMILy_STICK_limits_authored.pkl)
 #   LABEL        arm label                       (default: derived from the checkpoint path)
 #   OUT_DIR      results root                    (default: prior_study_results/<LABEL>)
+#   BENCH_TAG    unique tag for the benchmark dir (default: LABEL). Set it per
+#                arm when several arms benchmark CONCURRENTLY (the lambda sweep
+#                does) — benchmark_model names its output dir from the checkpoint
+#                stem, which is "best_model" for every swept arm.
 #   ORIG_W/H     native image size for PCK       (default: 1530/1530)
 #   MAX_FRAMES   cap exported frames, 0=all      (default: 0)
 #   BATCH_SIZE / NUM_WORKERS                     (default: checkpoint config / 4)
@@ -103,6 +107,14 @@ PY
 
 LABEL="${LABEL:-$(basename "$(dirname "$(dirname "$CHECKPOINT")")")}"
 OUT_DIR="${OUT_DIR:-prior_study_results/${LABEL}}"
+# benchmark_model derives its output directory from getcwd() + the checkpoint
+# stem (benchmark_model.py:1085) and offers no override. Every arm of the lambda
+# sweep resumes into a file called best_model.pth, so two arms benchmarking
+# CONCURRENTLY would write into the same benchmark_singleview_best_model_on_*/
+# directory and interleave their reports and .npy dumps — silently, since each
+# job still finds a benchmark_report.txt afterwards. BENCH_TAG makes the
+# directory unique per arm; the eval sbatch sets it to <label>_<lambda>.
+BENCH_TAG="${BENCH_TAG:-$LABEL}"
 mkdir -p "$OUT_DIR"
 EXPORT_STEM="$OUT_DIR/clip_${LABEL}"
 
@@ -146,7 +158,16 @@ if n_con_nonroot == 0:
 PY
 
 # ---------------------------------------------------------- 1. benchmark -----
-CKPT_STEM="$(basename "${CHECKPOINT%.*}")"
+# Feed the benchmark a per-arm-named symlink rather than the checkpoint itself,
+# so the directory it derives from the stem carries BENCH_TAG and cannot collide
+# with a sibling arm. The symlink resolves to exactly the same weights, so this
+# changes the output path and nothing else. arm.json below still records the
+# real checkpoint path.
+BENCH_LINK_DIR="$OUT_DIR/.bench_ckpt"
+mkdir -p "$BENCH_LINK_DIR"
+CKPT_STEM="${BENCH_TAG}"
+BENCH_CHECKPOINT="$BENCH_LINK_DIR/${CKPT_STEM}.pth"
+ln -sfn "$(cd "$(dirname "$CHECKPOINT")" && pwd)/$(basename "$CHECKPOINT")" "$BENCH_CHECKPOINT"
 DS_STEM="$(basename "${DATASET%.*}")"
 BENCH_DIR="benchmark_${MODE}_${CKPT_STEM}_on_${DS_STEM}"
 BENCH_REPORT=""
@@ -159,7 +180,7 @@ if [[ "$SKIP_BENCH" != "1" ]]; then
   # Multi-view: pin the view set so the two arms are scored on identical inputs.
   [[ "$MODE" == "multiview" ]] && BENCH_EXTRA+=(--no_random_view_sampling)
   python -m smal_fitter.neuralSMIL.benchmark_model \
-      --checkpoint "$CHECKPOINT" \
+      --checkpoint "$BENCH_CHECKPOINT" \
       --dataset_path "$DATASET" \
       --smal-file "$SMAL_FILE" \
       --orig_width "$ORIG_W" --orig_height "$ORIG_H" \

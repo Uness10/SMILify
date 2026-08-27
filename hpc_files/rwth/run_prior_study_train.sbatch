@@ -4,86 +4,127 @@
 #SBATCH --gres=gpu:4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=96
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 #SBATCH --job-name=jl_train
-#SBATCH --array=0-1
+#SBATCH --array=0-3
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 
 # ---------------------------------------------------------------------------
 # JOINT-LIMIT PRIOR STUDY — training stage (RWTH CLAIX-2023, c23g)
 #
-# Fine-tunes BOTH modalities from their downloaded checkpoints with the joint-
-# limit penalty enabled, as a 2-task array:
+# LAMBDA SWEEP. Each array task fine-tunes ONE checkpoint for
+# EXTRA_EPOCHS (default 50) additional epochs at ONE joint-limit weight.
 #
-#     SLURM_ARRAY_TASK_ID=0  ->  singleview  (configs_runs/singleview_constrained.json)
-#     SLURM_ARRAY_TASK_ID=1  ->  multiview   (configs_runs/multiview_constrained.json)
+#   task  mode        lambda   config
+#   ----  ----------  -------  --------------------------------------------
+#     0   singleview  1e-4     configs_runs/singleview_lam1e-4.json
+#     1   singleview  1e-3     configs_runs/singleview_lam1e-3.json
+#     2   singleview  1e-2     configs_runs/singleview_lam1e-2.json
+#     3   singleview  1e-1     configs_runs/singleview_lam1e-1.json
+#     4   multiview   1e-4     configs_runs/multiview_lam1e-4.json
+#     5   multiview   1e-3     configs_runs/multiview_lam1e-3.json
+#     6   multiview   1e-2     configs_runs/multiview_lam1e-2.json
+#     7   multiview   1e-1     configs_runs/multiview_lam1e-1.json
+#
+# The DEFAULT array (0-3) is the single-view sweep — the modality where the
+# problem is underdetermined and the prior has the most to do. Tasks 4-7 exist
+# so the same sweep can be run on multi-view later (`--array=4-7`) without
+# editing this file; they are NOT submitted by default.
 #
 # Each task gets its own node with 4x H100 and runs torchrun --standalone.
-# The study has ONLY the constrained arm: the reference is each downloaded
-# checkpoint evaluated as-is, which the eval sbatch handles. Nothing here trains
-# an unconstrained arm.
+# There is still no unconstrained arm: the reference is each downloaded
+# checkpoint evaluated as-is, which the eval sbatch handles.
 #
 # ---------------------------------------------------------------------------
-# BEFORE SUBMITTING — prepare both configs on the LOGIN NODE
+# WALL TIME — read this before submitting
 # ---------------------------------------------------------------------------
-# prepare_resume_config.py reads each checkpoint's epoch and turns "10 more
-# epochs" into the absolute end epoch the trainers expect (num_epochs is an END
-# epoch, not a count — see the pre-flight below).
+# The account cap (rwth2151) is MaxWall 1-00:00:00, so 24 h is the most a single
+# job can ask for. The previous +10-epoch runs were budgeted at 12 h; if they
+# used most of that, 50 epochs will NOT fit and every task will be killed at
+# 24 h mid-run.
+#
+#   grep -h "Epoch .* completed\|epoch time\|Elapsed" logs/jl_train_*_*.out | tail
+#
+# Multiply the observed per-epoch time by 50 and compare against 24 h BEFORE
+# submitting four of these. If it does not fit, the options in order of
+# preference are:
+#   1. lower EXTRA_EPOCHS (the sweep is about lambda, not about epoch count —
+#      as long as every arm gets the SAME number, the comparison holds);
+#   2. drop dataset.dataset_fraction for the sweep and restore it for the
+#      winning lambda;
+#   3. chain a second job with --dependency=afterany and re-run
+#      prepare_resume_config.py against the newest periodic checkpoint.
+#
+# For (3) to lose as little as possible, the sweep prep script sets
+# output.save_checkpoint_every = 2, so a timeout costs at most two epochs.
+#
+# ---------------------------------------------------------------------------
+# BEFORE SUBMITTING — prepare all four configs on the LOGIN NODE
+# ---------------------------------------------------------------------------
+# One command builds the whole sweep:
 #
 #   cd "$HPCWORK/SMILify"
 #   conda activate "$HPCWORK/conda_envs/pytorch3d"
 #   mkdir -p logs configs_runs
 #
-#   # single-view
-#   python scripts/prior_study/prepare_resume_config.py \
-#       --checkpoint  <path to your singleview .pth> \
-#       --base-config <the JSON that produced it> \
-#       --extra-epochs 10 --label constrained \
-#       --joint-limit-weight 100.0 \
-#       --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
-#       --data-path SMILySTICKS_centred_reprojected_FIXED.h5 \
-#       --out configs_runs/singleview_constrained.json
+#   SV_REF=<path to your singleview .pth> \
+#   SV_BASE_CONFIG=<the JSON that produced it> \
+#   EXTRA_EPOCHS=50 \
+#     bash scripts/prior_study/prepare_lambda_sweep.sh singleview
 #
-#   # multi-view
+# That is a loop over prepare_resume_config.py, once per lambda:
+#
 #   python scripts/prior_study/prepare_resume_config.py \
-#       --checkpoint  <path to your multiview .pth> \
-#       --base-config smal_fitter/neuralSMIL/configs/examples/multiview_SMILySTICKS_3D_ViT_Large_AUG_FIXED.json \
-#       --extra-epochs 10 --label constrained \
-#       --joint-limit-weight 100.0 \
+#       --checkpoint  "$SV_REF" \
+#       --base-config "$SV_BASE_CONFIG" \
+#       --extra-epochs 50 --label lam1e-3 \
+#       --joint-limit-weight 1e-3 \
 #       --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
 #       --data-path SMILySTICKS_centred_reprojected_FIXED.h5 \
-#       --out configs_runs/multiview_constrained.json
+#       --out configs_runs/singleview_lam1e-3.json
+#
+# prepare_resume_config.py reads each checkpoint's epoch and turns "50 more
+# epochs" into the absolute end epoch the trainers expect (num_epochs is an END
+# epoch, not a count — see the pre-flight below).
 #
 # The script refuses to write if the checkpoint's modality disagrees with the
 # base config, or if the model and dataset describe different skeletons.
 #
-# THEN pre-flight both configs together — this catches the failures that do not
-# crash (architecture drift, mismatched test splits):
+# THEN pre-flight all four configs together — this catches the failures that do
+# not crash (architecture drift, mismatched test splits):
 #
 #   python scripts/prior_study/preflight_study.py \
-#       --config configs_runs/singleview_constrained.json --reference "$SV_REF" \
-#       --config configs_runs/multiview_constrained.json  --reference "$MV_REF"
+#       --config configs_runs/singleview_lam1e-4.json --reference "$SV_REF" \
+#       --config configs_runs/singleview_lam1e-3.json --reference "$SV_REF" \
+#       --config configs_runs/singleview_lam1e-2.json --reference "$SV_REF" \
+#       --config configs_runs/singleview_lam1e-1.json --reference "$SV_REF"
 #
 # Exit code 0 means safe to submit. The same architecture check runs again below
 # per array task, but running it on the login node lets you fix a bad
-# --base-config in seconds instead of after a queue wait.
+# --base-config in seconds instead of after four queue waits.
 #
 # ---------------------------------------------------------------------------
 # SUBMIT (from the repo root — the #SBATCH --output path resolves at submit
 # time, so logs/ must already exist)
 # ---------------------------------------------------------------------------
-#   jid=$(sbatch --parsable --account=<your_project> \
+#   jid=$(sbatch --parsable --account=rwth2151 --export=ALL \
 #           hpc_files/rwth/run_prior_study_train.sbatch)
-#   sbatch --dependency=afterok:$jid --account=<your_project> \
-#           hpc_files/rwth/run_prior_study_eval.sbatch
+#   sbatch --array=1-4 --dependency=afterok:$jid --account=rwth2151 \
+#           --export=ALL,SV_REF hpc_files/rwth/run_prior_study_eval.sbatch
 #
-# Run one modality only:
-#   sbatch --array=0 --account=<proj> hpc_files/rwth/run_prior_study_train.sbatch
+# Run one lambda only:
+#   sbatch --array=1 --account=rwth2151 hpc_files/rwth/run_prior_study_train.sbatch
+#
+# Run the multi-view sweep later:
+#   sbatch --array=4-7 --account=rwth2151 hpc_files/rwth/run_prior_study_train.sbatch
+#
+# Throttle to two concurrent tasks (each takes a whole 4-GPU node):
+#   sbatch --array=0-3%2 --account=rwth2151 hpc_files/rwth/run_prior_study_train.sbatch
 #
 # Override a config without editing this file:
-#   SV_CONFIG=configs_runs/other.json sbatch --account=<proj> \
-#       --export=ALL,SV_CONFIG hpc_files/rwth/run_prior_study_train.sbatch
+#   CONFIG=configs_runs/other.json sbatch --array=0 --account=rwth2151 \
+#       --export=ALL,CONFIG hpc_files/rwth/run_prior_study_train.sbatch
 #
 # Monitor:  squeue --me   /   tail -f logs/jl_train_<jobid>_<taskid>.out
 # Cancel :  scancel <jobid>
@@ -96,21 +137,40 @@ set -eo pipefail
 # --- account guard -----------------------------------------------------------
 # SLURM_JOB_ACCOUNT is set by the scheduler once the job is accepted, so an
 # empty value here means neither --account nor a default association applied.
+# The `default` association caps you at 100 submitted jobs and 7 days; rwth2151
+# gives 1000 submitted / 24 h. A four-task sweep fits either way, but the wall
+# clock does not — submit with --account=rwth2151.
 if [[ -z "${SLURM_JOB_ACCOUNT:-}" ]]; then
     echo "ERROR: no SLURM account. Submit with:" >&2
-    echo "  sbatch --account=<your_rwth_project> $0" >&2
+    echo "  sbatch --account=rwth2151 $0" >&2
     exit 1
 fi
 
-# --- which arm is this array task? -------------------------------------------
+# --- which point of the sweep is this array task? ----------------------------
+# Task -> (mode, lambda). Tasks 0-3 are the single-view sweep (the default
+# --array), 4-7 the same four lambdas on multi-view.
+LAMBDAS=(1e-4 1e-3 1e-2 1e-1)
+
 TASK="${SLURM_ARRAY_TASK_ID:-0}"
-case "$TASK" in
-    0) MODE="singleview"; CONFIG="${SV_CONFIG:-configs_runs/singleview_constrained.json}"
-       TRAIN_MODULE="smal_fitter.neuralSMIL.train_smil_regressor" ;;
-    1) MODE="multiview";  CONFIG="${MV_CONFIG:-configs_runs/multiview_constrained.json}"
-       TRAIN_MODULE="smal_fitter.neuralSMIL.train_multiview_regressor" ;;
-    *) echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0 or 1)." >&2; exit 1 ;;
-esac
+if (( TASK < 0 || TASK > 7 )); then
+    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-7)." >&2
+    echo "       0-3 = singleview x {${LAMBDAS[*]}}, 4-7 = multiview x the same." >&2
+    exit 1
+fi
+
+if (( TASK < 4 )); then
+    MODE="singleview"
+    TRAIN_MODULE="smal_fitter.neuralSMIL.train_smil_regressor"
+    LAMBDA="${LAMBDAS[$TASK]}"
+else
+    MODE="multiview"
+    TRAIN_MODULE="smal_fitter.neuralSMIL.train_multiview_regressor"
+    LAMBDA="${LAMBDAS[$((TASK - 4))]}"
+fi
+
+# Tag matches prepare_lambda_sweep.sh: "lam1e-3", "lam1e-2", ...
+TAG="lam${LAMBDA}"
+CONFIG="${CONFIG:-configs_runs/${MODE}_${TAG}.json}"
 
 # Backbone weights must already be cached (hpc_files/download_backbone_weights.py
 # on the login node); c23g compute nodes have no outbound network.
@@ -152,8 +212,9 @@ cd "$REPO_DIR"
 
 echo "=================================================================="
 echo "Job ${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID} task $TASK on $(hostname) — $(date)"
-echo "  arm    : CONSTRAINED / $MODE"
+echo "  arm    : CONSTRAINED / $MODE / lambda=$LAMBDA"
 echo "  cluster: RWTH CLAIX-2023 | partition ${SLURM_JOB_PARTITION:-?} | account $SLURM_JOB_ACCOUNT"
+echo "  wall   : ${SLURM_JOB_END_TIME:+ends $(date -d @"$SLURM_JOB_END_TIME" 2>/dev/null)}"
 echo "  repo   : $REPO_DIR"
 echo "  env    : $CONDA_PREFIX"
 echo "  config : $CONFIG"
@@ -162,8 +223,9 @@ python -c "import torch; print(f'  torch  : {torch.__version__}, CUDA {torch.ver
 
 if [[ ! -f "$CONFIG" ]]; then
     echo "ERROR: config not found: $CONFIG" >&2
-    echo "       Run scripts/prior_study/prepare_resume_config.py on the login node first" >&2
-    echo "       (see the header of this file for the exact two commands)." >&2
+    echo "       Build the sweep on the login node first:" >&2
+    echo "         SV_REF=<ckpt> SV_BASE_CONFIG=<json> EXTRA_EPOCHS=50 \\" >&2
+    echo "           bash scripts/prior_study/prepare_lambda_sweep.sh $MODE" >&2
     exit 1
 fi
 
@@ -171,19 +233,19 @@ fi
 # Each check below corresponds to a way this job can "succeed" while producing a
 # result that does not answer the question. All of them are cheap and run before
 # the GPUs are touched.
-python - "$CONFIG" "$MODE" <<'PY' || exit 1
-import json, os, pickle, sys
+python - "$CONFIG" "$MODE" "$LAMBDA" <<'PY' || exit 1
+import json, math, os, pickle, sys
 import numpy as np
 import torch
 
-cfg_path, expected_mode = sys.argv[1], sys.argv[2]
+cfg_path, expected_mode, expected_lambda = sys.argv[1], sys.argv[2], float(sys.argv[3])
 cfg = json.load(open(cfg_path))
 
 # 1. mode -------------------------------------------------------------------
 mode = cfg.get("mode")
 if mode != expected_mode:
     sys.exit(f"ERROR: config mode is '{mode}' but this array task trains '{expected_mode}'.\n"
-             f"       Array task 0 = singleview, task 1 = multiview.")
+             f"       Array tasks 0-3 = singleview, 4-7 = multiview.")
 
 # 2. the num_epochs trap ----------------------------------------------------
 # training.num_epochs is an ABSOLUTE end epoch and the trainers resume at
@@ -204,7 +266,14 @@ print(f"  num_epochs (end)  : {num_epochs}")
 if num_epochs is None or num_epochs <= start:
     sys.exit(f"ERROR: num_epochs ({num_epochs}) <= start epoch ({start}) — this would train 0 epochs.\n"
              f"       Re-run prepare_resume_config.py with --extra-epochs N.")
-print(f"  -> will train {num_epochs - start} epoch(s)")
+n_train = num_epochs - start
+print(f"  -> will train {n_train} epoch(s)")
+
+# 2b. every sweep arm must get the SAME number of epochs --------------------
+# A lambda sweep in which the arms trained for different lengths compares
+# lambda AND training length at once. Nothing here can enforce it across tasks,
+# so record it loudly in the log where compare_arms' provenance can be checked.
+print(f"  SWEEP INVARIANT   : this arm trains {n_train} epochs — every other lambda MUST match.")
 
 # 3. the checkpoint really is this modality ---------------------------------
 sd = ck.get("model_state_dict", ck)
@@ -212,12 +281,33 @@ ckpt_mode = "multiview" if "view_embeddings.weight" in sd else "singleview"
 if ckpt_mode != expected_mode:
     sys.exit(f"ERROR: {ckpt_path} is a {ckpt_mode} checkpoint but the config says {expected_mode}.")
 
-# 4. the arm really is constrained ------------------------------------------
+# 4. the arm really carries THIS task's lambda ------------------------------
+# The sweep's whole failure mode: four configs prepared in a loop, one of them
+# built from a stale --joint-limit-weight, and the resulting table shows two
+# identical rows at different labels.
 w = (cfg.get("loss_curriculum", {}).get("base_weights", {}) or {}).get("joint_limit_regularization", 0.0)
-print(f"  joint_limit_regularization: {w}")
+print(f"  joint_limit_regularization: {w}  (array task expects {expected_lambda})")
 if not w:
-    sys.exit("ERROR: joint_limit_regularization is 0 — this study has only a CONSTRAINED arm.\n"
-             "       Re-run prepare_resume_config.py with --joint-limit-weight 100.0.")
+    sys.exit("ERROR: joint_limit_regularization is 0 — this study has only CONSTRAINED arms.\n"
+             "       Re-run prepare_resume_config.py with --joint-limit-weight <lambda>.")
+if not math.isclose(float(w), expected_lambda, rel_tol=1e-9):
+    sys.exit(f"ERROR: config weight {w} != the lambda this array task is for ({expected_lambda}).\n"
+             f"       {cfg_path} was prepared for a different sweep point. Two arms of the\n"
+             f"       sweep would silently train at the same lambda.")
+
+# 4b. curriculum must not overwrite the swept weight ------------------------
+# base_weights is the starting point; loss_curriculum.curriculum_stages replaces
+# weights at given epochs. If any stage the continuation will pass through sets
+# joint_limit_regularization, the swept lambda is discarded partway through.
+stages = cfg.get("loss_curriculum", {}).get("curriculum_stages", {}) or {}
+clobber = sorted(
+    int(ep) for ep, d in stages.items()
+    if isinstance(d, dict) and "joint_limit_regularization" in d and start <= int(ep) < num_epochs
+)
+if clobber:
+    sys.exit(f"ERROR: curriculum_stages at epoch(s) {clobber} override "
+             f"joint_limit_regularization inside this run's range [{start}, {num_epochs}).\n"
+             f"       The swept lambda would be discarded mid-run. Remove those entries.")
 
 # 5. the model carries limits for the hinge to act on -----------------------
 smal_file = (cfg.get("smal_model", {}) or {}).get("smal_file")
@@ -255,7 +345,21 @@ print(f"  authored limits   : {n_con_nonroot}/{n_axes_nonroot} non-root axes con
 # (smil_image_regressor.py:1445). Free axes contribute exact zeros to that mean,
 # so the fraction of authored axes scales the effective prior strength.
 print(f"  NOTE: the penalty is a mean over ALL {n_axes_nonroot} non-root axes, so the effective")
-print(f"        prior strength is w x {coverage / 100.0:.2f}. At w={w} that is an effective {w * coverage / 100.0:.1f}.")
+print(f"        prior strength is w x {coverage / 100.0:.2f}. At w={w} that is an effective {w * coverage / 100.0:.4g}.")
+
+# 6b. is this lambda even on the same scale as the other losses? ------------
+# The sweep runs 3-6 orders of magnitude below the w=100 the earlier study used.
+# Print the comparison so a log reader can see at a glance whether the hinge can
+# possibly win against the keypoint terms, rather than discovering it afterwards.
+bw = cfg.get("loss_curriculum", {}).get("base_weights", {}) or {}
+peers = {k: bw.get(k) for k in ("keypoint_2d", "keypoint_3d", "joint_angle_regularization") if bw.get(k) is not None}
+if peers:
+    print(f"  peer weights      : " + ", ".join(f"{k}={v}" for k, v in peers.items()))
+    kp = bw.get("keypoint_3d") or bw.get("keypoint_2d")
+    if kp:
+        print(f"  -> effective limit weight is {w * coverage / 100.0 / float(kp):.3g}x the keypoint weight.")
+        print(f"     If the ratio is <<1 the hinge cannot move the pose; that is a RESULT for this")
+        print(f"     lambda, not a bug — it is what the sweep is measuring.")
 
 # 7. DDP batch arithmetic ---------------------------------------------------
 # batch_size is PER PROCESS under DDP, so 4 GPUs quadruple the effective batch
@@ -264,6 +368,8 @@ print(f"        prior strength is w x {coverage / 100.0:.2f}. At w={w} that is a
 bs = tr.get("batch_size")
 print(f"  batch_size {bs} per GPU x 4 GPUs -> effective {bs * 4 if bs else '?'} "
       f"(batch_size is PER PROCESS under DDP)")
+print(f"  save_checkpoint_every: {cfg.get('output', {}).get('save_checkpoint_every')} "
+      f"(a wall-clock timeout costs at most this many epochs)")
 print(f"  checkpoints -> {cfg.get('output', {}).get('checkpoint_dir')}")
 PY
 
@@ -273,7 +379,7 @@ PY
 # load_state_dict(strict=False), returning epoch=0 when anything was dropped
 # (train_multiview_regressor.py:2073+2095). So a wrong --base-config silently
 # re-initialises layers AND resets the epoch counter — at which point
-# "num_epochs: 251" means 251 epochs from scratch, not 10, and the job burns the
+# "num_epochs: 404" means 404 epochs from scratch, not 50, and the job burns the
 # entire wall clock producing a model that answers no question.
 #
 # The epoch arithmetic above reads the checkpoint's stored epoch, so it is blind
@@ -292,13 +398,20 @@ python scripts/prior_study/preflight_study.py --config "$CONFIG" || {
 # Run torchrun directly rather than under srun: the batch script already runs on
 # the allocated node with all 4 GPUs visible, and srun+torchrun double-launching
 # is a common source of duplicated ranks.
+#
+# --rdzv-backend on a distinct port per array task: with --array=0-3%2 two tasks
+# can land on the SAME node, and two --standalone rendezvous both default to
+# 29400 there, so the second job fails to bind.
+RDZV_PORT=$((29400 + TASK))
+
 TORCHRUN="torchrun"
 command -v torchrun >/dev/null 2>&1 || TORCHRUN="python -m torch.distributed.run"
 
 $TORCHRUN \
-    --standalone \
+    --rdzv-backend=c10d \
+    --rdzv-endpoint="localhost:${RDZV_PORT}" \
     --nnodes=1 \
     --nproc_per_node=4 \
     -m "$TRAIN_MODULE" --config "$CONFIG"
 
-echo "Done ($MODE) — $(date)"
+echo "Done ($MODE, lambda=$LAMBDA) — $(date)"

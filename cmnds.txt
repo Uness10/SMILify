@@ -1,13 +1,190 @@
-export SV_REF=$(python -c "import json;print(json.load(open('configs_runs/singleview_constrained.json'))['training']['resume_checkpoint'])")
-export MV_REF=$(python -c "import json;print(json.load(open('configs_runs/multiview_constrained.json'))['training']['resume_checkpoint'])")
-export ENV_PREFIX=/hpcwork/mkd34160/conda/envs/pytorch3d
+# =============================================================================
+# JOINT-LIMIT PRIOR STUDY — lambda sweep + qualitative renders
+# RWTH CLAIX-2023, account rwth2151 (MaxWall 24 h, MaxSubmit 1000, MaxJobs 800)
+#
+# Design changed from the previous run:
+#   - constrained arms now train 50 additional epochs (was 10)
+#   - one arm per lambda in {1e-4, 1e-3, 1e-2, 1e-1}, SINGLE-VIEW only
+#   - renders of the same clips through every arm, for qualitative comparison
+#
+# Run everything from the repo root on $HPCWORK.
+# =============================================================================
 
-sbatch --array=0,2 --account=rwth2151 --export=ALL hpc_files/rwth/run_prior_study_eval.sbatch
+cd "$HPCWORK/SMILify"
+conda activate "$HPCWORK/conda_envs/pytorch3d"
+mkdir -p logs configs_runs
 
-jid=$(sbatch --parsable --account=rwth2151 --export=ALL hpc_files/rwth/run_prior_study_train.sbatch)
+export ENV_PREFIX=$HPCWORK/conda_envs/pytorch3d
+export ACCT=rwth2151
 
-sbatch --array=1,3 --dependency=afterok:$jid --account=rwth2151 --export=ALL hpc_files/rwth/run_prior_study_eval.sbatch
+# The single-view checkpoint the whole study branches from, and the JSON that
+# PRODUCED it. Do not let prepare_resume_config.py fall back to the checkpoint's
+# embedded config — it carries stale defaults.
+export SV_REF=<path to the downloaded single-view .pth>
+export SV_BASE_CONFIG=<the JSON that produced it>
 
-python scripts/prior_study/compare_arms.py \
-    --results-root prior_study_results --out prior_study_results/comparison \
-    --extra-epochs 10 --joint-limit-weight 100.0
+
+# -----------------------------------------------------------------------------
+# 0. SANITY CHECK FIRST — is there anything for the prior to fix?
+# -----------------------------------------------------------------------------
+# Score the reference on its own. It needs no training, so it runs immediately
+# and in parallel with everything else. Its violation table is the single most
+# informative number in the study: if the reference is already inside the
+# authored ranges, the hinge is near-zero by construction at EVERY lambda and
+# the sweep will find nothing. That answer costs one GPU-hour, not twenty.
+
+sbatch --array=0 --account=$ACCT --export=ALL,SV_REF,ENV_PREFIX \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+# When it lands:
+#   column -s, -t prior_study_results/sv_reference/analysis/limit_violations.csv | head -20
+
+
+# -----------------------------------------------------------------------------
+# 1. WALL-CLOCK CHECK — will 50 epochs fit in 24 h?
+# -----------------------------------------------------------------------------
+# 24 h is the account cap; there is no longer QOS available on this association.
+# The previous +10-epoch runs were budgeted at 12 h. Find the per-epoch time in
+# their logs and multiply by 50 BEFORE submitting four of these.
+
+grep -h "Epoch\|epoch" logs/jl_train_*_*.out | grep -i "time\|elapsed\|completed" | tail -20
+
+# If 50 epochs does not fit, in order of preference:
+#   a) lower EXTRA_EPOCHS — the sweep is about lambda, and the comparison holds
+#      as long as every arm gets the SAME count;
+#   b) drop dataset.dataset_fraction for the sweep, restore it for the winner;
+#   c) chain a continuation job with --dependency=afterany and re-run
+#      prepare_resume_config.py against the newest checkpoint_epoch_*.pth.
+# The prep script sets save_checkpoint_every=2 so (c) costs at most 2 epochs.
+
+
+# -----------------------------------------------------------------------------
+# 2. BUILD THE FOUR SWEEP CONFIGS (login node)
+# -----------------------------------------------------------------------------
+# One call per lambda, all with the same --extra-epochs. Writes
+# configs_runs/singleview_lam{1e-4,1e-3,1e-2,1e-1}.json — exactly the names the
+# training array derives from its task id.
+
+EXTRA_EPOCHS=50 bash scripts/prior_study/prepare_lambda_sweep.sh singleview
+
+# Check the arithmetic it prints for EVERY lambda before continuing:
+#   [prepare] resume from epoch N+1, train 50 epoch(s) -> training.num_epochs = N+51
+#   [prepare] arm: CONSTRAINED (w=<lambda>)
+#   [patch]   save_checkpoint_every: 5 -> 2
+#
+# num_epochs is an ABSOLUTE END epoch, not a count. A checkpoint at epoch 354
+# with num_epochs=50 trains ZERO epochs and exits looking successful — which is
+# why "50 epochs" is passed as --extra-epochs and never typed into the JSON.
+
+grep -H '"num_epochs"\|joint_limit_regularization' configs_runs/singleview_lam*.json
+
+
+# -----------------------------------------------------------------------------
+# 3. PRE-FLIGHT (login node) — do not skip
+# -----------------------------------------------------------------------------
+# Catches the two failures that do NOT crash: architecture drift (which resets
+# the epoch counter to 0, turning "50 epochs" into 400 from scratch) and test
+# splits that disagree between arms (which scores them on different frames).
+
+python scripts/prior_study/preflight_study.py \
+    --config configs_runs/singleview_lam1e-4.json --reference "$SV_REF" \
+    --config configs_runs/singleview_lam1e-3.json --reference "$SV_REF" \
+    --config configs_runs/singleview_lam1e-2.json --reference "$SV_REF" \
+    --config configs_runs/singleview_lam1e-1.json --reference "$SV_REF"
+
+
+# -----------------------------------------------------------------------------
+# 4. TRAIN THE SWEEP — 4 tasks, one whole 4xH100 node each
+# -----------------------------------------------------------------------------
+# %2 throttles to two concurrent tasks. Four full nodes at once is within the
+# account limits (MaxJobs 800), but the queue wait for two is usually shorter
+# than for four, and a mistake caught on task 0 costs half as much.
+
+jid=$(sbatch --parsable --array=0-3%2 --account=$ACCT --export=ALL,ENV_PREFIX \
+        hpc_files/rwth/run_prior_study_train.sbatch)
+echo "training array: $jid"
+
+# One lambda only:
+#   sbatch --array=1 --account=$ACCT --export=ALL,ENV_PREFIX hpc_files/rwth/run_prior_study_train.sbatch
+# The multi-view sweep later, at whichever lambda wins:
+#   sbatch --array=4-7 --account=$ACCT --export=ALL,ENV_PREFIX hpc_files/rwth/run_prior_study_train.sbatch
+
+
+# -----------------------------------------------------------------------------
+# 5. SCORE THE SWEEP
+# -----------------------------------------------------------------------------
+# Tasks 1-4 = the four lambdas (task 0, the reference, already ran in step 0).
+# afterany rather than afterok: a training task killed at the 24 h wall still
+# left periodic checkpoints worth scoring, and run_prior_study.sh falls back to
+# the newest one when best_model.pth was never written.
+
+sbatch --array=1-4 --dependency=afterany:$jid --account=$ACCT \
+    --export=ALL,SV_REF,ENV_PREFIX,EXTRA_EPOCHS=50 \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+
+# -----------------------------------------------------------------------------
+# 6. QUALITATIVE RENDERS — the same clips through every arm
+# -----------------------------------------------------------------------------
+# Point it at the clips. Choose sequences where the joints that VIOLATE in the
+# reference are actually moving — a walking bout beats ten clips of the animal
+# standing still. The reference's violation table names those joints:
+#   sort -t, -k4 -gr prior_study_results/sv_reference/analysis/limit_violations.csv | head
+
+export CLIPS_DIR=<folder of .mp4/.avi clips on the cluster>
+#   or: export CLIP_LIST=clips.txt      (one absolute path per line)
+#   or: export CLIPS=/path/a.mp4,/path/b.mp4
+
+# --- 6a. Smoke test on the reference alone, 120 frames, BEFORE spending the
+#         rest. Confirms the clips decode, the crop mode matches training, and
+#         the mesh lands on the animal.
+MAX_FRAMES=120 sbatch --array=0 --account=$ACCT \
+    --export=ALL,SV_REF,CLIPS_DIR,MAX_FRAMES,ENV_PREFIX \
+    hpc_files/rwth/run_prior_study_render.sbatch
+
+# Look at prior_study_results/renders/sv_reference/<clip>_inference.mp4 before
+# continuing. If the mesh is offset or the animal is cropped out, the fix is
+# CROP_MODE (must match the training preprocessing), not more frames.
+
+# --- 6b. All five arms, 300 frames each, after training finishes.
+sbatch --array=0-4 --dependency=afterany:$jid --account=$ACCT \
+    --export=ALL,SV_REF,CLIPS_DIR,ENV_PREFIX \
+    hpc_files/rwth/run_prior_study_render.sbatch
+
+# --- 6c. Stack them into one labelled comparison video per clip (login node,
+#         ffmpeg only, seconds). This is the artefact to actually watch.
+bash scripts/prior_study/stack_renders.sh
+#   -> prior_study_results/renders/comparison/<clip>_compare.mp4
+#      panels: reference | 1e-4 | 1e-3 | 1e-2 | 1e-1, same frames, same scale
+
+# Just two arms side by side (easier to judge than five panels):
+#   ARMS="sv_reference lam1e-2" bash scripts/prior_study/stack_renders.sh
+
+
+# -----------------------------------------------------------------------------
+# 7. READ THE RESULTS
+# -----------------------------------------------------------------------------
+#   prior_study_results/sweep/sweep.md          <- the lambda curve (HEADLINE)
+#   prior_study_results/sweep/sweep.csv
+#   prior_study_results/lam<L>/comparison/comparison.md   <- reference vs that lambda
+#   prior_study_results/renders/comparison/*.mp4          <- the qualitative side
+#
+# Win condition: a lambda that lowers the violation rate while leaving MPJPE and
+# PCK flat. A lambda that lowers violations AND accuracy is the prior overriding
+# the data. Flat everywhere, with a flat reference violation table, means the
+# model was already inside the authored ranges — see step 0.
+#
+# CAVEAT to state alongside every number: the reference arm received ZERO extra
+# epochs, so reference-vs-lambda mixes the prior with 50 epochs of continued
+# training. Comparisons BETWEEN lambdas are clean — they share the epoch count.
+# The control that would separate them is one more prepare_lambda_sweep.sh call
+# with LAMBDAS="0", which is four lines of work if a reviewer asks.
+
+
+# -----------------------------------------------------------------------------
+# MONITORING
+# -----------------------------------------------------------------------------
+# squeue --me
+# sacct -j $jid --format=JobID,JobName%18,State,Elapsed,MaxRSS,NodeList
+# tail -f logs/jl_train_${jid}_0.out
+# scancel $jid
