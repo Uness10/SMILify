@@ -1,1 +1,0 @@
-[compare] WARNING: sv_reference has no limit_violations.csv — it was analysed against a .pkl with no joint_limits (?). Re-run that arm with SMAL_FILE=3D_model_prep/SMILy_STICK_limits_authored.pkl.

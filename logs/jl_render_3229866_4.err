@@ -1,0 +1,5 @@
+ERROR: exported poses not found: prior_study_results/lam1e-1/sv_constrained/clip_sv_constrained.npz
+       This arm has not been evaluated yet — run_prior_study.sh writes the
+       clip_*.npz during the eval stage. Submit the matching eval task first:
+         sbatch --array=4 --account=rwth2151 --export=ALL,SV_REF \
+             hpc_files/rwth/run_prior_study_eval.sbatch

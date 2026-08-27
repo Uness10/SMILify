@@ -1,0 +1,31 @@
+{
+  "label": "reference (no limit prior)",
+  "npz": "prior_study_results/sv_reference/clip_sv_reference.npz",
+  "source_checkpoint": "singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth",
+  "segments_file": "prior_study_results/renders/segments.json",
+  "camera": "orbit",
+  "scaling": "mesh_scale",
+  "image_size": 512,
+  "fps": 30.0,
+  "n_authored_axes": 129,
+  "segments": [
+    {
+      "name": "seg00_f000887",
+      "start": 887,
+      "length": 300,
+      "mean_axes_out_of_range": 30.413333333333334
+    },
+    {
+      "name": "seg01_f001970",
+      "start": 1970,
+      "length": 300,
+      "mean_axes_out_of_range": 27.653333333333332
+    },
+    {
+      "name": "seg02_f003690",
+      "start": 3690,
+      "length": 300,
+      "mean_axes_out_of_range": 31.096666666666668
+    }
+  ]
+}
