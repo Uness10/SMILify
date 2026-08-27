@@ -1,0 +1,29 @@
+{
+  "source_npz": "prior_study_results/sv_reference/clip_sv_reference.npz",
+  "source_checkpoint": "singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth",
+  "source_input": "SMILySTICKS_centred_reprojected_FIXED.h5[test:singleview]",
+  "n_frames": 50630,
+  "fps": 30.0,
+  "select": "worst",
+  "smal_file": "3D_model_prep/SMILy_STICK_limits_authored.pkl",
+  "segments": [
+    {
+      "name": "seg00_f000887",
+      "start": 887,
+      "length": 300,
+      "mean_overshoot_deg": 3.6468226705655478
+    },
+    {
+      "name": "seg01_f001970",
+      "start": 1970,
+      "length": 300,
+      "mean_overshoot_deg": 3.3134330196209536
+    },
+    {
+      "name": "seg02_f003690",
+      "start": 3690,
+      "length": 300,
+      "mean_overshoot_deg": 3.314241789644942
+    }
+  ]
+}
