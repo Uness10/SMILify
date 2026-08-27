@@ -1,0 +1,31 @@
+{
+  "label": "lambda = 100  [older run, fewer epochs]",
+  "npz": "prior_study_results/sv_constrained/clip_sv_constrained.npz",
+  "source_checkpoint": "runs/singleview_constrained/checkpoints/checkpoint_epoch_394.pth",
+  "segments_file": "prior_study_results/renders/segments.json",
+  "camera": "orbit",
+  "scaling": "mesh_scale",
+  "image_size": 512,
+  "fps": 30.0,
+  "n_authored_axes": 129,
+  "segments": [
+    {
+      "name": "seg00_f000887",
+      "start": 887,
+      "length": 300,
+      "mean_axes_out_of_range": 0.0
+    },
+    {
+      "name": "seg01_f001970",
+      "start": 1970,
+      "length": 300,
+      "mean_axes_out_of_range": 0.0
+    },
+    {
+      "name": "seg02_f003690",
+      "start": 3690,
+      "length": 300,
+      "mean_axes_out_of_range": 0.0
+    }
+  ]
+}
