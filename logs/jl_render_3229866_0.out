@@ -1,0 +1,43 @@
+==================================================================
+Job 3229866 task 0 on n23g0025.hpc.itc.rwth-aachen.de — Thu Aug 27 15:35:20 CEST 2026
+  arm      : sv_reference — reference (no limit prior)
+  npz      : prior_study_results/sv_reference/clip_sv_reference.npz
+  segments : prior_study_results/renders/segments.json
+  camera   : orbit   image size 512px
+  out dir  : prior_study_results/renders/sv_reference
+==================================================================
+  torch: 2.3.1, 1 GPU(s) visible
+==================================================================
+ render clip_sv_reference.npz  ->  prior_study_results/renders/sv_reference
+   label     : reference (no limit prior)
+   frames    : 50630, joints 55, fps 30.0
+   source    : singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth
+   device    : cuda   image_size 512   camera orbit
+   scaling   : mesh_scale  (mesh_scale present in npz)
+   segments  : 3 from prior_study_results/renders/segments.json
+==================================================================
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+   orbit     : mesh radius 0.0353, distance 0.1150, fov 45.0
+
+  seg00_f000887: frames 887..1187
+    16/300 frames    32/300 frames    48/300 frames    64/300 frames    80/300 frames    96/300 frames    112/300 frames    128/300 frames    144/300 frames    160/300 frames    176/300 frames    192/300 frames    208/300 frames    224/300 frames    240/300 frames    256/300 frames    272/300 frames    288/300 frames    300/300 frames
+    -> prior_study_results/renders/sv_reference/seg00_f000887.mp4  (mean 30.41 of 129 axes out of range)
+
+  seg01_f001970: frames 1970..2270
+    16/300 frames    32/300 frames    48/300 frames    64/300 frames    80/300 frames    96/300 frames    112/300 frames    128/300 frames    144/300 frames    160/300 frames    176/300 frames    192/300 frames    208/300 frames    224/300 frames    240/300 frames    256/300 frames    272/300 frames    288/300 frames    300/300 frames
+    -> prior_study_results/renders/sv_reference/seg01_f001970.mp4  (mean 27.65 of 129 axes out of range)
+
+  seg02_f003690: frames 3690..3990
+    16/300 frames    32/300 frames    48/300 frames    64/300 frames    80/300 frames    96/300 frames    112/300 frames    128/300 frames    144/300 frames    160/300 frames    176/300 frames    192/300 frames    208/300 frames    224/300 frames    240/300 frames    256/300 frames    272/300 frames    288/300 frames    300/300 frames
+    -> prior_study_results/renders/sv_reference/seg02_f003690.mp4  (mean 31.10 of 129 axes out of range)
+
+  wrote 3 clip(s) + render.json into prior_study_results/renders/sv_reference
+
+==================================================================
+ sv_reference rendered into prior_study_results/renders/sv_reference
+
+ Once every arm has finished, stack them on the login node:
+   bash scripts/prior_study/stack_renders.sh
+==================================================================
+Done (sv_reference) — Thu Aug 27 15:37:05 CEST 2026
