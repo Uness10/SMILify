@@ -1,8 +1,0 @@
-==================================================================
-Job 3229866 task 4 on n23g0030.hpc.itc.rwth-aachen.de — Thu Aug 27 15:35:20 CEST 2026
-  arm      : lam1e-1 — lambda = 1e-1
-  npz      : prior_study_results/lam1e-1/sv_constrained/clip_sv_constrained.npz
-  segments : prior_study_results/renders/segments.json
-  camera   : orbit   image size 512px
-  out dir  : prior_study_results/renders/lam1e-1
-==================================================================
