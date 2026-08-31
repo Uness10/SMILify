@@ -38,6 +38,20 @@ holding the body still is what makes two arms comparable frame by frame.
 the model's own view. Use it to check that the fit still lands on the animal;
 it is worse for judging pose because translation drift moves the subject around.
 
+The global rotation
+-------------------
+``--global-rot zero`` (the default under ``--camera orbit``) replaces the root
+rotation with identity. These are CAMERA-CENTRIC checkpoints: ``global_rot`` is
+the animal's orientation *relative to the camera that saw it*, so it changes
+wildly between rows that come from different cameras and would swamp the pose
+differences the study is about. Nothing is lost by dropping it — the authored
+``.pkl`` pins the root joint to ``[0, 0]``, the fitter drops it via the ``[3:]``
+slice, and every violation statistic here excludes it.
+
+``--global-rot keep`` shows the animal turning as the model predicted it. Only
+meaningful on a single-camera track (see ``pick_segments.py``); across mixed
+cameras it is the spin, not the animal.
+
 The HUD
 -------
 Each frame is captioned with the arm label, the frame index, and how many
@@ -128,6 +142,25 @@ def violation_hud(
 # ----------------------------------------------------------------------- render
 
 
+def apply_global_rot(poses: np.ndarray, zero: bool) -> np.ndarray:
+    """Optionally replace the root rotation (row 0) with identity.
+
+    Row 0 of ``poses`` is the global rotation, and on a camera-centric
+    checkpoint it is the animal's orientation *relative to whichever camera
+    produced that row*. Rows that come from different cameras therefore differ
+    by a large arbitrary rotation that has nothing to do with the pose — the
+    "spinning" that raw export order produces. It is excluded from every
+    joint-limit statistic here (the authored .pkl pins the root to ``[0, 0]``
+    and the fitter drops it via the ``[3:]`` slice), so zeroing it costs the
+    study nothing. Returns a copy; never mutates the caller's array.
+    """
+    if not zero:
+        return poses
+    out = np.array(poses, copy=True)
+    out[:, 0, :] = 0.0
+    return out
+
+
 class ClipRenderer:
     """SMAL forward + PyTorch3D colour render, driven by exported parameters.
 
@@ -166,10 +199,12 @@ class ClipRenderer:
         mesh_scale: Optional[np.ndarray],
         scaling: str,
         root_centred: bool,
+        zero_global_rot: bool = False,
     ):
         torch = self.torch
         t = lambda a: torch.as_tensor(np.ascontiguousarray(a), dtype=torch.float32, device=self.device)  # noqa: E731
 
+        poses = apply_global_rot(poses, zero_global_rot)
         theta = t(poses)  # (B, J, 3) — SMAL takes root + posable joints together
         beta_t = t(betas)
         with torch.no_grad():
@@ -276,6 +311,17 @@ def main() -> int:
         "--margin", type=float, default=1.35, help="orbit distance = mesh radius x this / tan(fov/2) (default: 1.35)"
     )
     p.add_argument(
+        "--global-rot",
+        choices=["zero", "keep", "auto"],
+        default="auto",
+        help="zero = replace the root rotation with identity (canonical body frame). "
+        "These are camera-centric checkpoints, so global_rot is the animal's orientation "
+        "relative to the camera that saw that row — across rows from different cameras it "
+        "swamps everything else, and it is excluded from every violation statistic anyway. "
+        "keep = show the predicted turning (only meaningful on a single-camera track). "
+        "auto (default) = zero under --camera orbit, keep under --camera predicted.",
+    )
+    p.add_argument(
         "--scaling",
         choices=["auto", "mesh_scale", "ue", "none"],
         default="auto",
@@ -314,14 +360,30 @@ def main() -> int:
     segs_doc = json.loads(args.segments_file.read_text())
     segments = segs_doc["segments"]
 
+    # Segments carry explicit npz row indices (a per-camera track in frame
+    # order). Older files carry start+length; expand those so both work.
+    for s in segments:
+        if "indices" not in s:
+            s["indices"] = list(range(int(s["start"]), min(int(s["start"]) + int(s["length"]), F)))
+    seg_idx = {s["name"]: np.asarray(s["indices"], dtype=np.int64) for s in segments}
+    # Per-row dataset frame numbers, when pick_segments recovered them.
+    seg_frames = {s["name"]: s["frames"] for s in segments if s.get("frames")} or None
+
+    zero_global = args.global_rot == "zero" or (args.global_rot == "auto" and args.camera == "orbit")
+
     print("=" * 66)
     print(f" render {args.npz.name}  ->  {args.out_dir}")
     print(f"   label     : {label}")
     print(f"   frames    : {F}, joints {J}, fps {fps}")
     print(f"   source    : {sidecar.get('source_checkpoint')}")
     print(f"   device    : {device}   image_size {args.image_size}   camera {args.camera}")
+    print(f"   global rot: {'ZEROED (canonical body frame)' if zero_global else 'kept as predicted'}")
     print(f"   scaling   : {scaling}" + ("  (mesh_scale present in npz)" if msc is not None else ""))
     print(f"   segments  : {len(segments)} from {args.segments_file}")
+    if not segs_doc.get("time_ordered", False):
+        print("   WARNING   : this segments.json is NOT time-ordered. Consecutive npz rows are")
+        print("               one instant seen from several cameras, so the result is a spin,")
+        print("               not motion. Re-run pick_segments.py with --dataset <the HDF5>.")
     print("=" * 66)
 
     # The windows come from the reference arm's clip. If this arm is shorter,
@@ -345,10 +407,10 @@ def main() -> int:
     # between panels and make identical poses look different.
     R = T = fov = None
     if args.camera == "orbit":
-        probe_idx = []
+        probe_idx: List[int] = []
         for s in segments:
-            st, ln = int(s["start"]), int(s["length"])
-            probe_idx.extend(range(st, min(st + ln, F), max(ln // 16, 1)))
+            rows = seg_idx[s["name"]]
+            probe_idx.extend(rows[:: max(len(rows) // 16, 1)].tolist())
         probe_idx = probe_idx[:256] or [0]
         v = renderer.forward_batch(
             poses[probe_idx],
@@ -359,6 +421,7 @@ def main() -> int:
             msc[probe_idx] if msc is not None else None,
             scaling,
             root_centred=True,
+            zero_global_rot=zero_global,
         )
         radius = float(v.norm(dim=-1).max().item())
         dist = radius * args.margin / np.tan(np.deg2rad(args.orbit_fov) / 2.0)
@@ -378,8 +441,10 @@ def main() -> int:
     written = []
 
     for seg in segments:
-        name, start, length = seg["name"], int(seg["start"]), int(seg["length"])
-        end = min(start + length, F)
+        name = seg["name"]
+        rows = seg_idx[name]
+        if rows.max(initial=-1) >= F:
+            raise SystemExit(f"ERROR: segment {name} references row {rows.max()} but this npz has {F}.")
         out_path = args.out_dir / f"{name}.mp4"
         writer = cv2.VideoWriter(
             str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (args.image_size, args.image_size)
@@ -387,34 +452,48 @@ def main() -> int:
         if not writer.isOpened():
             raise SystemExit(f"ERROR: could not open VideoWriter for {out_path}")
 
-        print(f"\n  {name}: frames {start}..{end}")
-        for b0 in range(start, end, args.batch_size):
-            b1 = min(b0 + args.batch_size, end)
-            sl = slice(b0, b1)
+        where = (
+            f"camera {seg['camera']}, frames {seg['frame_first']}..{seg['frame_last']}"
+            if seg.get("camera")
+            else f"rows {rows[0]}..{rows[-1]} (NOT time-ordered)"
+        )
+        print(f"\n  {name}: {len(rows)} frames — {where}")
+
+        for b0 in range(0, len(rows), args.batch_size):
+            idx = rows[b0 : b0 + args.batch_size]
             verts = renderer.forward_batch(
-                poses[sl],
-                (betas_pf[sl] if betas_pf is not None else np.repeat(betas_avg[None], b1 - b0, 0)),
-                trans[sl],
-                lbs[sl] if lbs is not None else None,
-                btr[sl] if btr is not None else None,
-                msc[sl] if msc is not None else None,
+                poses[idx],
+                (betas_pf[idx] if betas_pf is not None else np.repeat(betas_avg[None], len(idx), 0)),
+                trans[idx],
+                lbs[idx] if lbs is not None else None,
+                btr[idx] if btr is not None else None,
+                msc[idx] if msc is not None else None,
                 scaling,
                 root_centred=(args.camera == "orbit"),
+                zero_global_rot=zero_global,
             )
             frames = renderer.render_batch(verts, R, T, fov)
-            for k, f_idx in enumerate(range(b0, b1)):
+            for k, f_idx in enumerate(idx.tolist()):
                 frame = cv2.cvtColor(frames[k], cv2.COLOR_RGB2BGR)
                 if not args.no_hud:
-                    lines = [label, f"frame {f_idx}"]
+                    lines = [label]
+                    # Prefer the real dataset frame number over the npz row: the
+                    # row index is an artefact of the export order and says
+                    # nothing about when in the recording this is.
+                    if seg_frames is not None and name in seg_frames:
+                        pos = int(np.searchsorted(rows, f_idx))
+                        lines.append(f"{seg['camera']}  frame {seg_frames[name][pos]}")
+                    else:
+                        lines.append(f"row {f_idx}")
                     if n_authored:
                         lines.append(f"out of range: {int(n_viol[f_idx])}/{n_authored} axes")
                         if worst_name[f_idx]:
                             lines.append(f"worst: {worst_name[f_idx]} +{worst_deg[f_idx]:.1f} deg")
                     frame = draw_hud(frame, lines)
                 writer.write(frame)
-            print(f"    {b1 - start}/{end - start} frames", end="\r", flush=True)
+            print(f"    {min(b0 + args.batch_size, len(rows))}/{len(rows)} frames", end="\r", flush=True)
         writer.release()
-        seg_viol = n_viol[start:end]
+        seg_viol = n_viol[rows]
         print(f"\n    -> {out_path}  (mean {seg_viol.mean():.2f} of {n_authored} axes out of range)")
         written.append(out_path)
 
@@ -431,15 +510,19 @@ def main() -> int:
                 "scaling": scaling,
                 "image_size": args.image_size,
                 "fps": fps,
+                "global_rot": "zeroed" if zero_global else "kept",
+                "time_ordered": bool(segs_doc.get("time_ordered", False)),
                 "n_authored_axes": n_authored,
                 "segments": [
                     {
                         "name": s["name"],
-                        "start": int(s["start"]),
-                        "length": int(s["length"]),
-                        "mean_axes_out_of_range": float(
-                            n_viol[int(s["start"]) : min(int(s["start"]) + int(s["length"]), F)].mean()
-                        ),
+                        "n_frames": len(seg_idx[s["name"]]),
+                        "camera": s.get("camera"),
+                        "session": s.get("session"),
+                        "frame_first": s.get("frame_first"),
+                        "frame_last": s.get("frame_last"),
+                        "median_frame_gap": s.get("median_frame_gap"),
+                        "mean_axes_out_of_range": float(n_viol[seg_idx[s["name"]]].mean()),
                     }
                     for s in segments
                 ],

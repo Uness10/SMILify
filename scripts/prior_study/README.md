@@ -361,8 +361,9 @@ different question and line up with nothing.
 #    Every arm must render the same frames or the grid is not a comparison.
 python scripts/prior_study/pick_segments.py \
     --npz prior_study_results/sv_reference/clip_sv_reference.npz \
+    --dataset SMILySTICKS_centred_reprojected_FIXED.h5 \
     --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
-    --segments 3 --length 300 --select worst \
+    --segments 3 --length 300 --select worst --one-per-camera \
     --out prior_study_results/renders/segments.json
 
 # 2. Render every arm over those windows.
@@ -397,6 +398,42 @@ ARM=lam100_rerun NPZ=some/other/clip.npz LABEL="lambda = 100 (rerun)" \
   sbatch --array=5 --account=rwth2151 --export=ALL,ARM,NPZ,LABEL \
     hpc_files/rwth/run_prior_study_render.sbatch
 ```
+
+### The npz is not in time order — `--dataset` is what fixes it
+
+**Consecutive rows of `clip_*.npz` are one instant seen from several cameras.**
+`_build_single_view_index` enumerates the single-view items sample-major over
+`(sample, view)`, and the camera-centric split keeps whole samples together
+(`export_poses.build_singleview_test_split`), preserving that order. So the raw
+row sequence cycles the cameras around a stationary animal. Rendered as video it
+spins like a top — and because these are camera-centric checkpoints, each row's
+`global_rot` is measured against *its own* camera, which amplifies it.
+
+`pick_segments.py --dataset <the HDF5>` undoes the interleave: it rebuilds the
+exact item list the export walked, maps every npz row back to its
+`(sample, view)`, and groups rows into per-camera tracks ordered by frame index.
+A segment is then a run from ONE camera in ONE session — an actual animation.
+The reconstruction is verified against the npz's row count and refuses if the
+split parameters disagree, so a silently mislabelled set of windows is not
+possible. Pass `--seed` / `--train-ratio` / `--val-ratio` if yours are not
+42 / 0.85 / 0.05.
+
+Two consequences worth knowing:
+
+- **Tracks are time-sparse.** The test split holds ~10 % of view-items, so the
+  frames of a track are in order but with gaps. `pick_segments.py` reports the
+  median gap and the `--fps` that gives roughly real-time playback; at the
+  sidecar's 30 fps the motion runs about ten times fast.
+- **The root rotation is dropped by default.** `render_clip_npz.py --global-rot
+  zero` (the default under `--camera orbit`) replaces `global_rot` with identity,
+  putting every frame in a canonical body frame. It costs nothing: the authored
+  `.pkl` pins the root to `[0, 0]`, the fitter drops it via the `[3:]` slice, and
+  every violation statistic already excludes it. Use `--global-rot keep` to see
+  the predicted turning — meaningful now that segments are single-camera tracks.
+
+The render job refuses a `segments.json` built without `--dataset`
+(`ALLOW_UNORDERED_SEGMENTS=1` overrides), because a spinning render misleads at
+a glance in a way a wrong number does not.
 
 **`--select worst`** ranks windows by how far the *reference* strays outside the
 authored ranges and takes the top ones. A window where the reference was already
@@ -471,10 +508,10 @@ prior_study_results/
     sweep.csv                               <- one row per (mode, lambda)
   renders/
     segments.json                           <- the windows every arm renders
-    sv_reference/seg00_f012345.mp4          <- one MP4 per window, HUD burned in
+    sv_reference/seg00_<camera>_f012345.mp4 <- one MP4 per track, HUD burned in
     sv_reference/render.json                <- provenance + axes out of range
     lam1e-4/ ...
-    comparison/seg00_f012345_compare.mp4    <- all arms, identical frames
+    comparison/seg00_<camera>_f012345_compare.mp4  <- all arms, identical frames
 ```
 
 Each lambda gets its own root because `compare_arms.py` builds its delta table

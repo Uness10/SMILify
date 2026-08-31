@@ -175,14 +175,33 @@ sbatch --array=1-4 --dependency=afterany:$jid --account=$ACCT \
 
 # --- 6a. Pick the windows ONCE (login node, CPU, seconds).
 # Every arm must render the SAME frames or the grid is not a comparison.
-# --select worst aims them at the windows where the REFERENCE violates the
+# --select worst aims them at the tracks where the REFERENCE violates the
 # authored limits most — the frames the prior is supposed to fix.
+# --one-per-camera spreads the set across viewpoints instead of stacking on the
+# single worst track.
 
 python scripts/prior_study/pick_segments.py \
     --npz prior_study_results/sv_reference/clip_sv_reference.npz \
+    --dataset SMILySTICKS_centred_reprojected_FIXED.h5 \
     --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
-    --segments 3 --length 300 --select worst \
+    --segments 3 --length 300 --select worst --one-per-camera \
     --out prior_study_results/renders/segments.json
+
+# --dataset is what makes these ANIMATIONS. Consecutive rows of the .npz are one
+# instant seen from several cameras, not consecutive time: single-view items are
+# enumerated sample-major over (sample, view) and the camera-centric split keeps
+# whole samples together, so raw row order cycles the cameras and the animal
+# appears to spin. With --dataset the script rebuilds that item list, maps every
+# row back to its (sample, view), and emits per-camera tracks in frame order.
+#
+# It verifies the reconstruction: if the rebuilt split does not have exactly as
+# many items as the npz has rows, it refuses. If your seed / ratios differ from
+# 42 / 0.85 / 0.05, pass --seed --train-ratio --val-ratio from the config that
+# produced the reference checkpoint.
+#
+# The test split is ~10% of view-items, so tracks are time-SPARSE: frames are in
+# order but with gaps. pick_segments.py prints the --fps that gives roughly
+# real-time playback; pass it through as FPS=<n> to the render job.
 
 # Read its output before going further. If it reports that the reference never
 # leaves the authored ranges, no render can show the prior correcting anything

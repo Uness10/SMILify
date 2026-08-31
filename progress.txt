@@ -1,0 +1,13 @@
+Comparison Study:
+- Authored Join limits from the 3 papers
+- Run the constrained experiment, got premilinary results
+- Rendered some clips
+- Next steps: Relaunch the study with lam=1e-1,1e-2,1e-3,1e-4 and epch=50-70
+    One caveat: For now can only do single view cuz: high nbr of epochs + limit of 24h per  (last study was mv: ~8h , sv:~4)
+
+Multianimal work:
+- Extended the existing architecure to match the new pipeline
+- No tested yet
+-  data ?
+-Next steps: Train, test and report metrics
+

@@ -51,9 +51,17 @@
 #
 #   python scripts/prior_study/pick_segments.py \
 #       --npz  prior_study_results/sv_reference/clip_sv_reference.npz \
+#       --dataset SMILySTICKS_centred_reprojected_FIXED.h5 \
 #       --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
-#       --segments 3 --length 300 --select worst \
+#       --segments 3 --length 300 --select worst --one-per-camera \
 #       --out prior_study_results/renders/segments.json
+#
+# --dataset is NOT optional in practice. Consecutive rows of the .npz are one
+# instant seen from several cameras, not consecutive time: the single-view items
+# are enumerated sample-major over (sample, view) and the camera-centric split
+# keeps whole samples together, so raw row order cycles the cameras and the
+# animal appears to spin. pick_segments.py needs the HDF5 to undo that
+# interleave and emit real per-camera tracks in frame order.
 #
 # --select worst aims the renders at the windows where the reference violates
 # the authored limits most — the frames the prior is supposed to fix. A window
@@ -92,6 +100,18 @@
 #   SEGMENTS_FILE  default: prior_study_results/renders/segments.json
 #   RENDER_ROOT    output root (default: prior_study_results/renders)
 #   CAMERA         orbit | predicted        (default: orbit)
+#   GLOBAL_ROT     zero | keep | auto      (default: auto = zero under orbit).
+#                  These are camera-centric checkpoints, so the root rotation is
+#                  the animal's orientation relative to the camera that saw that
+#                  row. Zeroing it puts every frame in a canonical body frame and
+#                  costs nothing: the authored .pkl pins the root to [0,0] and
+#                  every violation statistic already excludes it. GLOBAL_ROT=keep
+#                  shows the predicted turning — only meaningful now that the
+#                  segments are single-camera tracks.
+#   FPS            output fps (default: the sidecar's, 30). The test split is
+#                  ~10% of view-items, so a track is time-sparse and 30 fps plays
+#                  ~10x faster than life; pick_segments.py prints the fps that
+#                  gives approximately real-time motion.
 #   IMAGE_SIZE     square px               (default: 512)
 #   ELEV / AZIM    orbit camera angles     (default: 15 / 45)
 #   SCALING        auto|mesh_scale|ue|none (default: auto)
@@ -197,7 +217,9 @@ cd "$REPO_DIR"
 
 SEGMENTS_FILE="${SEGMENTS_FILE:-$RENDER_ROOT/segments.json}"
 SMAL_FILE="${SMAL_FILE:-3D_model_prep/SMILy_STICK_limits_authored.pkl}"
+DATASET="${DATASET:-SMILySTICKS_centred_reprojected_FIXED.h5}"
 CAMERA="${CAMERA:-orbit}"
+GLOBAL_ROT="${GLOBAL_ROT:-auto}"
 IMAGE_SIZE="${IMAGE_SIZE:-512}"
 ELEV="${ELEV:-15}"
 AZIM="${AZIM:-45}"
@@ -222,10 +244,31 @@ if [[ ! -f "$SEGMENTS_FILE" ]]; then
     echo >&2
     echo "         python scripts/prior_study/pick_segments.py \\" >&2
     echo "             --npz $RESULTS_ROOT/sv_reference/clip_sv_reference.npz \\" >&2
+    echo "             --dataset $DATASET \\" >&2
     echo "             --smal-file $SMAL_FILE \\" >&2
-    echo "             --segments 3 --length 300 --select worst \\" >&2
+    echo "             --segments 3 --length 300 --select worst --one-per-camera \\" >&2
     echo "             --out $SEGMENTS_FILE" >&2
+    echo >&2
+    echo "       --dataset matters: without it the segments are raw npz row windows," >&2
+    echo "       which interleave the cameras and make the animal appear to spin." >&2
     exit 1
+fi
+
+# A segments.json built without --dataset renders a spin, not motion. Refuse by
+# default rather than producing a video that misleads at a glance.
+if ! python -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('time_ordered') else 1)" \
+        "$SEGMENTS_FILE"; then
+    if [[ "${ALLOW_UNORDERED_SEGMENTS:-0}" == "1" ]]; then
+        echo "[render] WARNING: segments are NOT time-ordered (ALLOW_UNORDERED_SEGMENTS=1)." >&2
+        echo "         The output shows the camera jumping around the animal, not the animal moving." >&2
+    else
+        echo "ERROR: $SEGMENTS_FILE was built without --dataset, so its segments are raw npz" >&2
+        echo "       row windows. Consecutive rows are one instant seen from several cameras," >&2
+        echo "       so the render would spin the animal instead of animating it." >&2
+        echo "       Re-run pick_segments.py with --dataset $DATASET, or set" >&2
+        echo "       ALLOW_UNORDERED_SEGMENTS=1 if you really want the raw ordering." >&2
+        exit 1
+    fi
 fi
 
 if [[ ! -f "$NPZ" ]]; then
@@ -258,6 +301,8 @@ python scripts/prior_study/render_clip_npz.py \
     --image-size "$IMAGE_SIZE" \
     --elev "$ELEV" --azim "$AZIM" \
     --scaling "$SCALING" \
+    --global-rot "$GLOBAL_ROT" \
+    ${FPS:+--fps "$FPS"} \
     --batch-size "$BATCH_SIZE"
 
 echo
