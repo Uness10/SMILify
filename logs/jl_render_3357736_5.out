@@ -1,0 +1,44 @@
+==================================================================
+Job 3357736 task 5 on n23g0019.hpc.itc.rwth-aachen.de — Mon Aug 31 12:50:25 CEST 2026
+  arm      : lam100 — lambda = 100  [older run, fewer epochs]
+  npz      : prior_study_results/sv_constrained/clip_sv_constrained.npz
+  segments : prior_study_results/renders/segments.json
+  camera   : orbit   image size 512px
+  out dir  : prior_study_results/renders/lam100
+==================================================================
+  torch: 2.3.1, 1 GPU(s) visible
+==================================================================
+ render clip_sv_constrained.npz  ->  prior_study_results/renders/lam100
+   label     : lambda = 100  [older run, fewer epochs]
+   frames    : 50630, joints 55, fps 4.3
+   source    : runs/singleview_constrained/checkpoints/checkpoint_epoch_394.pth
+   device    : cuda   image_size 512   camera orbit
+   global rot: ZEROED (canonical body frame)
+   scaling   : mesh_scale  (mesh_scale present in npz)
+   segments  : 3 from prior_study_results/renders/segments.json
+==================================================================
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+   orbit     : mesh radius 0.0713, distance 0.2323, fov 45.0
+
+  seg00_A_f006631: 300 frames — camera A, frames 6631..9533
+    16/300 frames    32/300 frames    48/300 frames    64/300 frames    80/300 frames    96/300 frames    112/300 frames    128/300 frames    144/300 frames    160/300 frames    176/300 frames    192/300 frames    208/300 frames    224/300 frames    240/300 frames    256/300 frames    272/300 frames    288/300 frames    300/300 frames
+    -> prior_study_results/renders/lam100/seg00_A_f006631.mp4  (mean 0.00 of 129 axes out of range)
+
+  seg01_D_f006506: 300 frames — camera D, frames 6506..9407
+    16/300 frames    32/300 frames    48/300 frames    64/300 frames    80/300 frames    96/300 frames    112/300 frames    128/300 frames    144/300 frames    160/300 frames    176/300 frames    192/300 frames    208/300 frames    224/300 frames    240/300 frames    256/300 frames    272/300 frames    288/300 frames    300/300 frames
+    -> prior_study_results/renders/lam100/seg01_D_f006506.mp4  (mean 0.00 of 129 axes out of range)
+
+  seg02_A_f008855: 300 frames — camera A, frames 8855..11786
+    16/300 frames    32/300 frames    48/300 frames    64/300 frames    80/300 frames    96/300 frames    112/300 frames    128/300 frames    144/300 frames    160/300 frames    176/300 frames    192/300 frames    208/300 frames    224/300 frames    240/300 frames    256/300 frames    272/300 frames    288/300 frames    300/300 frames
+    -> prior_study_results/renders/lam100/seg02_A_f008855.mp4  (mean 0.00 of 129 axes out of range)
+
+  wrote 3 clip(s) + render.json into prior_study_results/renders/lam100
+
+==================================================================
+ lam100 rendered into prior_study_results/renders/lam100
+
+ Once every arm has finished, stack them on the login node:
+   bash scripts/prior_study/stack_renders.sh
+==================================================================
+Done (lam100) — Mon Aug 31 12:50:49 CEST 2026

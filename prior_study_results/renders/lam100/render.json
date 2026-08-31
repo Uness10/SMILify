@@ -6,25 +6,39 @@
   "camera": "orbit",
   "scaling": "mesh_scale",
   "image_size": 512,
-  "fps": 30.0,
+  "fps": 4.3,
+  "global_rot": "zeroed",
+  "time_ordered": true,
   "n_authored_axes": 129,
   "segments": [
     {
-      "name": "seg00_f000887",
-      "start": 887,
-      "length": 300,
+      "name": "seg00_A_f006631",
+      "n_frames": 300,
+      "camera": "A",
+      "session": "orestes_draegeri_female_adult",
+      "frame_first": 6631,
+      "frame_last": 9533,
+      "median_frame_gap": 7.0,
       "mean_axes_out_of_range": 0.0
     },
     {
-      "name": "seg01_f001970",
-      "start": 1970,
-      "length": 300,
+      "name": "seg01_D_f006506",
+      "n_frames": 300,
+      "camera": "D",
+      "session": "orestes_draegeri_female_adult",
+      "frame_first": 6506,
+      "frame_last": 9407,
+      "median_frame_gap": 7.0,
       "mean_axes_out_of_range": 0.0
     },
     {
-      "name": "seg02_f003690",
-      "start": 3690,
-      "length": 300,
+      "name": "seg02_A_f008855",
+      "n_frames": 300,
+      "camera": "A",
+      "session": "sungaya_inexpectata_instar_7",
+      "frame_first": 8855,
+      "frame_last": 11786,
+      "median_frame_gap": 7.0,
       "mean_axes_out_of_range": 0.0
     }
   ]
