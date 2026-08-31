@@ -66,14 +66,38 @@ if (( ${#PRESENT[@]} < 2 )); then
     exit 1
 fi
 
-# --- which clips? ------------------------------------------------------------
+# --- which segments? ---------------------------------------------------------
+# Prefer the names in segments.json over globbing the arm folder. Re-running
+# pick_segments.py changes the names (they carry the camera and first frame), so
+# a glob would pick up MP4s left over from an earlier selection and try to stack
+# a segment only some arms have. The JSON is the current truth.
+SEGMENTS_FILE="${SEGMENTS_FILE:-$RENDER_ROOT/segments.json}"
 CLIP_STEMS=()
 if [[ -n "${CLIPS:-}" ]]; then
     read -r -a CLIP_STEMS <<< "$CLIPS"
+elif [[ -f "$SEGMENTS_FILE" ]]; then
+    while IFS= read -r n; do CLIP_STEMS+=("$n"); done < <(
+        python -c "import json,sys; [print(s['name']) for s in json.load(open(sys.argv[1]))['segments']]" \
+            "$SEGMENTS_FILE"
+    )
+    echo "  segments from $SEGMENTS_FILE"
 else
     for f in "$RENDER_ROOT/${PRESENT[0]}"/seg*.mp4; do
         b="$(basename "$f")"
         CLIP_STEMS+=("${b%.mp4}")
+    done
+fi
+
+# Renders left over from a previous pick_segments.py run are not an error, but
+# they are confusing when half the folder is stale — say so once.
+if [[ -f "$SEGMENTS_FILE" && -z "${CLIPS:-}" ]]; then
+    for arm in "${PRESENT[@]}"; do
+        stale=0
+        for f in "$RENDER_ROOT/$arm"/seg*.mp4; do
+            b="$(basename "$f")"; b="${b%.mp4}"
+            [[ " ${CLIP_STEMS[*]} " == *" $b "* ]] || stale=$((stale + 1))
+        done
+        (( stale > 0 )) && echo "  [note] $arm has $stale render(s) from an earlier segments.json — ignored."
     done
 fi
 
