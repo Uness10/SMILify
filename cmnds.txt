@@ -1,80 +1,71 @@
 # =============================================================================
-# JOINT-LIMIT PRIOR STUDY — lambda sweep + qualitative renders
+# JOINT-LIMIT PRIOR STUDY — SINGLE-VIEW lambda sweep + qualitative renders
 # RWTH CLAIX-2023, account rwth2151 (MaxWall 24 h, MaxSubmit 1000, MaxJobs 800)
 #
-# Design changed from the previous run:
-#   - constrained arms now train 50 additional epochs (was 10)
-#   - one arm per lambda in {1e-4, 1e-3, 1e-2, 1e-1}, SINGLE-VIEW only
-#   - renders of the SAME exported-pose windows through every arm, for
-#     qualitative comparison (from clip_*.npz, no re-inference)
+# Design:
+#   - 4 constrained arms, lambda in {1e-4, 1e-3, 1e-2, 1e-1}, SINGLE-VIEW only
+#   - every arm continues the SAME reference checkpoint for the SAME +50 epochs
+#   - renders of the SAME exported-pose windows through every arm
+#
+# GPU BUDGET — the four arms run CONCURRENTLY, one whole 4x H100 node each:
+#     16 H100 busy (--array=0-3, no % throttle)                    <- default
+#     32 H100 busy (--array=0-3 --nodes=2)                         <- opt-in
+# --nodes=2 halves the wall clock per arm. It also doubles the effective batch
+# (batch_size is PER PROCESS under DDP), so use the same --nodes for EVERY arm
+# and pass BATCH_SIZE=<orig/ranks> at prep time if you want the effective batch
+# to match the run that produced the reference checkpoint.
 #
 # Run everything from the repo root on $HPCWORK.
 # =============================================================================
 
-cd "$HPCWORK/SMILify"          # or wherever your checkout lives — see the quota note below
+cd "$HPCWORK/SMILify"          # or wherever your checkout lives
 conda activate pytorch3d
 mkdir -p logs configs_runs
 
+export ACCT=rwth2151
+
 # ENV_PREFIX is the env's full PREFIX (a directory), not its name. On this
 # account that is /hpcwork/mkd34160/conda/envs/pytorch3d — note `conda/envs`,
-# not `conda_envs`. The sbatch files now probe both layouts and check that
-# bin/python exists before calling `conda activate`, so exporting it is optional;
-# do it anyway if you keep more than one env around.
+# not `conda_envs`. The sbatch files probe both layouts, so exporting it is
+# optional; do it anyway if you keep more than one env around.
 export ENV_PREFIX="$(conda info --envs | awk '$1=="pytorch3d"{print $NF}')"
 echo "ENV_PREFIX=$ENV_PREFIX"     # sanity: must be a directory containing bin/python
 
-export ACCT=rwth2151
-
-
-# -----------------------------------------------------------------------------
-# WHERE THE CHECKPOINTS LAND — check this before the training array
-# -----------------------------------------------------------------------------
-# REPO_DIR defaults to SLURM_SUBMIT_DIR, so `runs/singleview_lam*/checkpoints/`
-# is written relative to wherever you submit from. Submitting from a checkout on
-# $HOME (e.g. ~/test/SMILify) puts them on the quota'd filesystem: 4 lambdas x
-# ~25 periodic checkpoints (50 epochs at save_checkpoint_every=2) of a ViT-Large
-# model is on the order of 100 GB, and $HOME will stop the run partway through
+# WHERE THE CHECKPOINTS LAND. prepare_lambda_sweep.sh writes the run dirs under
+# RUNS_ROOT and the eval array reads the SAME variable, so these can no longer
+# drift apart — but you must export it for both steps.
+#
+# 4 lambdas x ~25 periodic ViT-Large checkpoints (50 epochs at
+# save_checkpoint_every=2) is on the order of 100 GB. If your checkout is on
+# $HOME, point this at $HPCWORK or the quota will stop the run partway through
 # with a write error rather than a clean failure.
-#
-# Either submit from a checkout on $HPCWORK, or point the run dirs there
-# explicitly after building the configs (step 2):
-#
-#   python - <<'PY'
-#   import json, glob, os
-#   for f in glob.glob("configs_runs/singleview_lam*.json"):
-#       cfg = json.load(open(f))
-#       tag = os.path.basename(f)[:-5]                     # singleview_lam1e-3
-#       run = f"{os.environ['HPCWORK']}/smilify_runs/{tag}"
-#       cfg["output"].update(checkpoint_dir=f"{run}/checkpoints",
-#                            plots_dir=f"{run}/plots",
-#                            visualizations_dir=f"{run}/visualizations",
-#                            train_visualizations_dir=f"{run}/visualizations_train")
-#       json.dump(cfg, open(f, "w"), indent=2)
-#       print(f, "->", run)
-#   PY
-#
-# The eval sbatch then needs SV_CON pointed at the same place:
-#   SV_CON=$HPCWORK/smilify_runs/singleview_lam1e-3/checkpoints/best_model.pth
-#
-# df -h $HOME $HPCWORK   # check headroom first
+export RUNS_ROOT="$HPCWORK/smilify_runs"
+df -h "$HOME" "$HPCWORK"
 
 # The single-view checkpoint the whole study branches from, and the JSON that
 # PRODUCED it. Do not let prepare_resume_config.py fall back to the checkpoint's
-# embedded config — it carries stale defaults.
-export SV_REF=<path to the downloaded single-view .pth>
-export SV_BASE_CONFIG=<the JSON that produced it>
+# embedded config — it carries stale defaults (job 15521637 got a MOUSE
+# data_path for a STICK model that way, and trained without error).
+export SV_REF=singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth   # epoch 386
+export SV_BASE_CONFIG=singleview_SMILySTICKS_3D_ViT.json                 # <- confirm this exists
+
+ls -l "$SV_REF" "$SV_BASE_CONFIG" \
+      3D_model_prep/SMILy_STICK_limits_authored.pkl \
+      SMILySTICKS_centred_reprojected_FIXED.h5
 
 
 # -----------------------------------------------------------------------------
 # 0. SANITY CHECK FIRST — is there anything for the prior to fix?
 # -----------------------------------------------------------------------------
-# Score the reference on its own. It needs no training, so it runs immediately
-# and in parallel with everything else. Its violation table is the single most
-# informative number in the study: if the reference is already inside the
-# authored ranges, the hinge is near-zero by construction at EVERY lambda and
-# the sweep will find nothing. That answer costs one GPU-hour, not twenty.
+# Scores the reference on its own. Needs no training, so it runs immediately and
+# in parallel with everything else. Its violation table is the single most
+# informative number in the study.
+#
+# (Already answered for this reference: 96/162 axes violate, 14.76 % of frames,
+# max overshoot 77.7 deg — so there IS something to fix. Re-run only if the
+# reference or the authored .pkl changed.)
 
-sbatch --array=0 --account=$ACCT --export=ALL,SV_REF,ENV_PREFIX \
+sbatch --array=0 --account=$ACCT --export=ALL,SV_REF,ENV_PREFIX,RUNS_ROOT \
     hpc_files/rwth/run_prior_study_eval.sbatch
 
 # When it lands:
@@ -84,48 +75,56 @@ sbatch --array=0 --account=$ACCT --export=ALL,SV_REF,ENV_PREFIX \
 # -----------------------------------------------------------------------------
 # 1. WALL-CLOCK CHECK — will 50 epochs fit in 24 h?
 # -----------------------------------------------------------------------------
-# 24 h is the account cap; there is no longer QOS available on this association.
-# The previous +10-epoch runs were budgeted at 12 h. Find the per-epoch time in
-# their logs and multiply by 50 BEFORE submitting four of these.
+# 24 h is the account cap; no longer QOS is attached to this association.
 
 grep -h "Epoch\|epoch" logs/jl_train_*_*.out | grep -i "time\|elapsed\|completed" | tail -20
 
-# If 50 epochs does not fit, in order of preference:
-#   a) lower EXTRA_EPOCHS — the sweep is about lambda, and the comparison holds
-#      as long as every arm gets the SAME count;
-#   b) drop dataset.dataset_fraction for the sweep, restore it for the winner;
-#   c) chain a continuation job with --dependency=afterany and re-run
-#      prepare_resume_config.py against the newest checkpoint_epoch_*.pth.
-# The prep script sets save_checkpoint_every=2 so (c) costs at most 2 epochs.
+# Multiply the per-epoch time by 50 and compare against 24 h.
+#   fits on 1 node    -> use the default submit in step 4
+#   ~1.2-2x over      -> add --nodes=2 (step 4, variant B) — 8 ranks per arm
+#   still over        -> lower EXTRA_EPOCHS (the sweep is about lambda; the
+#                        comparison holds as long as EVERY arm gets the same
+#                        count), or drop dataset.dataset_fraction for the sweep
+#
+# save_checkpoint_every=2 means a job killed at the wall loses at most 2 epochs,
+# and the eval/render arrays chain with afterany so a timed-out arm is still
+# scored from its newest periodic checkpoint.
 
 
 # -----------------------------------------------------------------------------
-# 2. BUILD THE FOUR SWEEP CONFIGS (login node)
+# 2. BUILD THE FOUR SWEEP CONFIGS (login node, CPU, ~1 min)
 # -----------------------------------------------------------------------------
 # One call per lambda, all with the same --extra-epochs. Writes
 # configs_runs/singleview_lam{1e-4,1e-3,1e-2,1e-1}.json — exactly the names the
-# training array derives from its task id.
+# training array derives from its task id — with run dirs under $RUNS_ROOT.
+#
+# Add BATCH_SIZE=<n> to pin the per-rank batch. It must be the SAME for all four
+# arms; the value only matters relative to the reference run's regime:
+#   1 node  (4 ranks): BATCH_SIZE=<orig/4>  to reproduce the original effective batch
+#   2 nodes (8 ranks): BATCH_SIZE=<orig/8>
 
 EXTRA_EPOCHS=50 bash scripts/prior_study/prepare_lambda_sweep.sh singleview
 
 # Check the arithmetic it prints for EVERY lambda before continuing:
-#   [prepare] resume from epoch N+1, train 50 epoch(s) -> training.num_epochs = N+51
+#   [prepare] resume from epoch 387, train 50 epoch(s) -> training.num_epochs = 437
 #   [prepare] arm: CONSTRAINED (w=<lambda>)
 #   [patch]   save_checkpoint_every: 5 -> 2
 #
-# num_epochs is an ABSOLUTE END epoch, not a count. A checkpoint at epoch 354
+# num_epochs is an ABSOLUTE END epoch, not a count. A checkpoint at epoch 386
 # with num_epochs=50 trains ZERO epochs and exits looking successful — which is
 # why "50 epochs" is passed as --extra-epochs and never typed into the JSON.
 
-grep -H '"num_epochs"\|joint_limit_regularization' configs_runs/singleview_lam*.json
+grep -H '"num_epochs"\|joint_limit_regularization\|checkpoint_dir' configs_runs/singleview_lam*.json
+
+# All four num_epochs must be IDENTICAL and all four lambdas DISTINCT.
 
 
 # -----------------------------------------------------------------------------
 # 3. PRE-FLIGHT (login node) — do not skip
 # -----------------------------------------------------------------------------
 # Catches the two failures that do NOT crash: architecture drift (which resets
-# the epoch counter to 0, turning "50 epochs" into 400 from scratch) and test
-# splits that disagree between arms (which scores them on different frames).
+# the epoch counter to 0, turning "50 epochs" into 437 from scratch and burning
+# the whole wall clock) and test splits that disagree between arms.
 
 python scripts/prior_study/preflight_study.py \
     --config configs_runs/singleview_lam1e-4.json --reference "$SV_REF" \
@@ -133,52 +132,70 @@ python scripts/prior_study/preflight_study.py \
     --config configs_runs/singleview_lam1e-2.json --reference "$SV_REF" \
     --config configs_runs/singleview_lam1e-1.json --reference "$SV_REF"
 
+# And run the batch script's own pre-flight on the login node, for all 4 tasks,
+# with torchrun/srun stubbed out. Exit 0 here means the only thing left that can
+# fail is the GPU work itself.
+
+bash hpc_files/rwth/dryrun_sbatch.sh hpc_files/rwth/run_prior_study_train.sbatch 0 1 2 3
+
 
 # -----------------------------------------------------------------------------
-# 4. TRAIN THE SWEEP — 4 tasks, one whole 4xH100 node each
+# 4. TRAIN THE SWEEP — all four arms at once
 # -----------------------------------------------------------------------------
-# %2 throttles to two concurrent tasks. Four full nodes at once is within the
-# account limits (MaxJobs 800), but the queue wait for two is usually shorter
-# than for four, and a mistake caught on task 0 costs half as much.
+# VARIANT A (default): 4 tasks x 1 node x 4 H100 = 16 GPUs concurrently.
+# No % throttle: %2 would halve the GPUs in flight and roughly double the
+# calendar time to a full sweep.
 
-jid=$(sbatch --parsable --array=0-3%2 --account=$ACCT --export=ALL,ENV_PREFIX \
+jid=$(sbatch --parsable --array=0-3 --account=$ACCT \
+        --export=ALL,ENV_PREFIX,RUNS_ROOT \
         hpc_files/rwth/run_prior_study_train.sbatch)
 echo "training array: $jid"
 
-# One lambda only:
-#   sbatch --array=1 --account=$ACCT --export=ALL,ENV_PREFIX hpc_files/rwth/run_prior_study_train.sbatch
-# The multi-view sweep later, at whichever lambda wins:
-#   sbatch --array=4-7 --account=$ACCT --export=ALL,ENV_PREFIX hpc_files/rwth/run_prior_study_train.sbatch
+# VARIANT B (only if step 1 says 50 epochs will not fit on one node):
+# 4 tasks x 2 nodes x 4 H100 = 32 GPUs concurrently, ~half the wall clock each.
+# Longer queue wait, doubled effective batch — same --nodes for every arm.
+#
+#   jid=$(sbatch --parsable --array=0-3 --nodes=2 --time=24:00:00 --account=$ACCT \
+#           --export=ALL,ENV_PREFIX,RUNS_ROOT \
+#           hpc_files/rwth/run_prior_study_train.sbatch)
+#
+# One lambda only (task 0=1e-4, 1=1e-3, 2=1e-2, 3=1e-1):
+#   sbatch --array=2 --account=$ACCT --export=ALL,ENV_PREFIX,RUNS_ROOT \
+#       hpc_files/rwth/run_prior_study_train.sbatch
+#
+# Confirm all four landed on 4 GPUs each and agree on the epoch count:
+#   grep -h "gpus   :\|SWEEP INVARIANT\|joint_limit_regularization:" logs/jl_train_${jid}_*.out
 
 
 # -----------------------------------------------------------------------------
 # 5. SCORE THE SWEEP
 # -----------------------------------------------------------------------------
 # Tasks 1-4 = the four lambdas (task 0, the reference, already ran in step 0).
-# afterany rather than afterok: a training task killed at the 24 h wall still
-# left periodic checkpoints worth scoring, and run_prior_study.sh falls back to
-# the newest one when best_model.pth was never written.
+# afterany rather than afterok: an arm killed at the 24 h wall still left
+# periodic checkpoints worth scoring, and run_prior_study.sh falls back to the
+# newest one when best_model.pth was never written.
+#
+# RUNS_ROOT must be exported here too — it is how these tasks find the arms.
 
 sbatch --array=1-4 --dependency=afterany:$jid --account=$ACCT \
-    --export=ALL,SV_REF,ENV_PREFIX,EXTRA_EPOCHS=50 \
+    --export=ALL,SV_REF,ENV_PREFIX,RUNS_ROOT,EXTRA_EPOCHS=50 \
     hpc_files/rwth/run_prior_study_eval.sbatch
 
 
 # -----------------------------------------------------------------------------
 # 6. QUALITATIVE RENDERS — from the exported poses, not from raw video
 # -----------------------------------------------------------------------------
-# The eval stage already wrote each arm's predictions to
-#   prior_study_results/<arm>/clip_*.npz   (+ the .json sidecar already in git)
-# Those ARE the frames the study scored. Rendering them means the pictures and
-# the tables describe the same predictions, and it costs minutes on one GPU —
-# no checkpoint, no dataset, no backbone.
+# The eval stage wrote each arm's predictions to
+#   prior_study_results/<arm>/clip_*.npz
+# Those ARE the frames the study scored, so rendering them means the pictures
+# and the tables describe the same predictions. Minutes on one GPU — no
+# checkpoint, no dataset, no backbone.
 
 # --- 6a. Pick the windows ONCE (login node, CPU, seconds).
 # Every arm must render the SAME frames or the grid is not a comparison.
-# --select worst aims them at the tracks where the REFERENCE violates the
-# authored limits most — the frames the prior is supposed to fix.
-# --one-per-camera spreads the set across viewpoints instead of stacking on the
-# single worst track.
+# ALREADY DONE for this reference: prior_study_results/renders/segments.json
+# (3 windows x 300 frames, --select worst, one per camera). Re-run only if the
+# reference export changed:
 
 python scripts/prior_study/pick_segments.py \
     --npz prior_study_results/sv_reference/clip_sv_reference.npz \
@@ -187,69 +204,15 @@ python scripts/prior_study/pick_segments.py \
     --segments 3 --length 300 --select worst --one-per-camera \
     --out prior_study_results/renders/segments.json
 
-# --dataset is what makes these ANIMATIONS. Consecutive rows of the .npz are one
-# instant seen from several cameras, not consecutive time: single-view items are
-# enumerated sample-major over (sample, view) and the camera-centric split keeps
-# whole samples together, so raw row order cycles the cameras and the animal
-# appears to spin. With --dataset the script rebuilds that item list, maps every
-# row back to its (sample, view), and emits per-camera tracks in frame order.
-#
-# It verifies the reconstruction: if the rebuilt split does not have exactly as
-# many items as the npz has rows, it refuses. If your seed / ratios differ from
-# 42 / 0.85 / 0.05, pass --seed --train-ratio --val-ratio from the config that
-# produced the reference checkpoint.
-#
-# The test split is ~10% of view-items, so tracks are time-SPARSE: frames are in
-# order but with gaps. pick_segments.py prints the --fps that gives roughly
-# real-time playback; pass it through as FPS=<n> to the render job.
-
-# Read its output before going further. If it reports that the reference never
-# leaves the authored ranges, no render can show the prior correcting anything
-# and the sweep's answer is already in — see step 0.
-#
-# Add an unbiased set alongside the worst-case one:
-#   python scripts/prior_study/pick_segments.py ... --select even \
-#       --out prior_study_results/renders/segments_even.json
-
 # --- 6b. Render every arm over those windows (1 GPU each, ~minutes).
-#
-# RIGHT NOW only two arms exist on the cluster: the reference (rendered) and the
-# earlier w=100 run, whose poses are in the PRE-SWEEP flat layout
-# prior_study_results/sv_constrained/. That is array task 5:
+# Tasks 0-4 = reference + the four lambdas; task 5 = the old w=100 run.
 
-sbatch --array=5 --account=$ACCT --export=ALL,ENV_PREFIX \
+sbatch --array=0-4 --account=$ACCT --export=ALL,ENV_PREFIX \
     hpc_files/rwth/run_prior_study_render.sbatch
 
-bash scripts/prior_study/stack_renders.sh    # -> reference | lambda=100
-
-# Its clip has the same 50630 frames as the reference's, so the segments.json
-# already built from the reference addresses the same instants — nothing to
-# redo. If the .npz sits somewhere else, point at it instead of moving files:
-#   NPZ=<path>/clip_sv_constrained.npz sbatch --array=5 --account=$ACCT \
-#       --export=ALL,ENV_PREFIX,NPZ hpc_files/rwth/run_prior_study_render.sbatch
-#
-# CAVEAT for this pair: sv_reference is epoch 386 and the w=100 arm is
-# checkpoint_epoch_394 — 8 continued epochs, and best_model.pth was never
-# written, so run_prior_study.sh fell back to the newest periodic checkpoint.
-# So the difference you see is "w=100 plus 8 epochs", not w=100 alone, and it is
-# a much shorter continuation than the 50 epochs each sweep arm will get.
-#
-# Once the sweep has trained, the four sweep arms:
-#   sbatch --array=0-4 --account=$ACCT --export=ALL,ENV_PREFIX \
-#       hpc_files/rwth/run_prior_study_render.sbatch
-#
-# stack_renders.sh drops arms with no renders on disk, so the same command works
-# at every stage; it prints a warning when lam100 and the sweep arms share a grid,
-# because that grid mixes the weight with the training length.
-
-# Reference alone, as soon as its eval has landed:
-#   sbatch --array=0 --account=$ACCT --export=ALL,ENV_PREFIX \
-#       hpc_files/rwth/run_prior_study_render.sbatch
-#
-# Default camera is `orbit`: root-centred, so the predicted translation is
-# dropped and only ARTICULATION varies between panels — which is what a joint
-# limit changes, and what makes two arms comparable frame by frame.
-# For the model's own view (checks the fit still lands on the animal):
+# Default camera is `orbit`: root-centred, so predicted translation is dropped
+# and only ARTICULATION varies between panels — which is what a joint limit
+# changes. For the model's own view:
 #   CAMERA=predicted sbatch --array=0-4 --account=$ACCT \
 #       --export=ALL,ENV_PREFIX,CAMERA hpc_files/rwth/run_prior_study_render.sbatch
 
@@ -258,12 +221,14 @@ bash scripts/prior_study/stack_renders.sh
 #   -> prior_study_results/renders/comparison/<segment>_compare.mp4
 #      panels: reference | 1e-4 | 1e-3 | 1e-2 | 1e-1, identical frames
 #
-# Each panel carries a HUD: arm, frame index, and how many of the 129 authored
-# joint-axes are out of range IN THAT FRAME. Watch that counter fall across
-# panels — it is the per-frame version of the number in limit_violations.csv.
-
-# Just two arms side by side (easier to judge than five):
+# Each panel carries a HUD: arm, frame index, and how many authored joint-axes
+# are out of range IN THAT FRAME. Watch that counter fall across panels.
+#
+# Two arms side by side (easier to judge than five):
 #   ARMS="sv_reference lam1e-2" bash scripts/prior_study/stack_renders.sh
+#
+# stack_renders.sh warns when lam100 shares a grid with the sweep arms, because
+# that grid mixes the weight with the training length (w=100 got +8 epochs).
 
 
 # -----------------------------------------------------------------------------
@@ -273,19 +238,24 @@ bash scripts/prior_study/stack_renders.sh
 #   prior_study_results/sweep/sweep.csv
 #   prior_study_results/lam<L>/comparison/comparison.md   <- reference vs that lambda
 #   prior_study_results/renders/comparison/*_compare.mp4  <- the qualitative side
-#   prior_study_results/renders/<arm>/render.json         <- per-segment mean
-#                                                            axes-out-of-range
 #
 # Win condition: a lambda that lowers the violation rate while leaving MPJPE and
-# PCK flat. A lambda that lowers violations AND accuracy is the prior overriding
-# the data. Flat everywhere, with a flat reference violation table, means the
-# model was already inside the authored ranges — see step 0.
+# PCK flat. The w=100 run is the known failure mode at the other end —
+# violations 96 -> 5 axes but MPJPE 1.09 -> 1.88 mm, the prior overriding the
+# data. The sweep exists to find where that trade turns over.
 #
 # CAVEAT to state alongside every number: the reference arm received ZERO extra
 # epochs, so reference-vs-lambda mixes the prior with 50 epochs of continued
 # training. Comparisons BETWEEN lambdas are clean — they share the epoch count.
-# The control that would separate them is one more prepare_lambda_sweep.sh call
-# with LAMBDAS="0", which is four lines of work if a reviewer asks.
+# The control that separates them is one more prep call with LAMBDAS="0":
+#
+#   LAMBDAS="0" EXTRA_EPOCHS=50 bash scripts/prior_study/prepare_lambda_sweep.sh singleview
+#   CONFIG=configs_runs/singleview_lam0.json sbatch --array=0 --account=$ACCT \
+#       --export=ALL,ENV_PREFIX,RUNS_ROOT,CONFIG hpc_files/rwth/run_prior_study_train.sbatch
+#
+# (Note: the training sbatch's pre-flight refuses a zero weight by design —
+# it is written for a study with only constrained arms. Run the w=0 control
+# with torchrun by hand, or comment out check 4, if you decide you need it.)
 
 
 # -----------------------------------------------------------------------------

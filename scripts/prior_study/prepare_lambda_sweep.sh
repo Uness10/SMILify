@@ -54,6 +54,15 @@ read -r -a LAMBDA_ARR <<< "${LAMBDAS:-1e-4 1e-3 1e-2 1e-1}"
 SMAL_FILE="${SMAL_FILE:-3D_model_prep/SMILy_STICK_limits_authored.pkl}"
 DATASET="${DATASET:-SMILySTICKS_centred_reprojected_FIXED.h5}"
 SAVE_EVERY="${SAVE_EVERY:-2}"
+# Where the per-arm run dirs (checkpoints/plots/visualizations) go. The eval
+# sbatch reads the SAME variable to find each arm's checkpoints, so these two no
+# longer have to be kept in sync by hand: exporting RUNS_ROOT once before both
+# steps is enough. Default `runs` keeps the old behaviour.
+#
+# Set RUNS_ROOT="$HPCWORK/smilify_runs" if you submit from a checkout on $HOME:
+# 4 lambdas x ~25 periodic ViT-Large checkpoints is on the order of 100 GB and
+# $HOME's quota will stop the run partway through with a write error.
+RUNS_ROOT="${RUNS_ROOT:-runs}"
 
 if [[ "$MODE" == "singleview" ]]; then
     CKPT="${SV_REF:?set SV_REF=<path to the single-view .pth>}"
@@ -76,6 +85,7 @@ echo "  lambdas     : ${LAMBDA_ARR[*]}"
 echo "  extra epochs: $EXTRA_EPOCHS   (identical for every arm — the sweep invariant)"
 echo "  smal file   : $SMAL_FILE"
 echo "  dataset     : $DATASET"
+echo "  runs root   : $RUNS_ROOT  (export the same RUNS_ROOT for the eval array)"
 echo "=================================================================="
 
 WRITTEN=()
@@ -95,6 +105,7 @@ for LAMBDA in "${LAMBDA_ARR[@]}"; do
         --joint-limit-weight "$LAMBDA"
         --smal-file "$SMAL_FILE"
         --data-path "$DATASET"
+        --run-dir "$RUNS_ROOT/${MODE}_${TAG}"
         --out "$OUT"
     )
     [[ -n "$BASE_CONFIG" ]]          && ARGS+=(--base-config "$BASE_CONFIG")
@@ -155,11 +166,22 @@ for f in "${WRITTEN[@]}"; do
 done
 echo "$PREFLIGHT"
 echo
-echo " Then:"
+echo " Then submit all ${#WRITTEN[@]} arms at once — no % throttle, so every arm gets"
+echo " its own 4-GPU node concurrently:"
 if [[ "$MODE" == "singleview" ]]; then
-    echo "   jid=\$(sbatch --parsable --array=0-3 --account=rwth2151 --export=ALL \\"
+    ARRAY_SPEC="0-3"
 else
-    echo "   jid=\$(sbatch --parsable --array=4-7 --account=rwth2151 --export=ALL \\"
+    ARRAY_SPEC="4-7"
 fi
+echo "   jid=\$(sbatch --parsable --array=$ARRAY_SPEC --account=rwth2151 \\"
+echo "           --export=ALL,ENV_PREFIX,RUNS_ROOT \\"
 echo "           hpc_files/rwth/run_prior_study_train.sbatch)"
+echo
+echo " Add --nodes=2 to double the ranks per arm (halves the wall clock, doubles"
+echo " the effective batch — use the same value for every arm)."
+echo
+echo " The eval array must see the SAME RUNS_ROOT:"
+echo "   RUNS_ROOT=$RUNS_ROOT sbatch --array=1-4 --dependency=afterany:\$jid \\"
+echo "           --account=rwth2151 --export=ALL,SV_REF,ENV_PREFIX,RUNS_ROOT,EXTRA_EPOCHS \\"
+echo "           hpc_files/rwth/run_prior_study_eval.sbatch"
 echo "=================================================================="

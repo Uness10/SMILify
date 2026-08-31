@@ -18,15 +18,15 @@
 #   task  arm                    checkpoint
 #   ----  ---------------------  --------------------------------------------
 #     0   sv_reference           $SV_REF (downloaded, unmodified)
-#     1   sv_constrained @ 1e-4  runs/singleview_lam1e-4/checkpoints/best_model.pth
-#     2   sv_constrained @ 1e-3  runs/singleview_lam1e-3/checkpoints/best_model.pth
-#     3   sv_constrained @ 1e-2  runs/singleview_lam1e-2/checkpoints/best_model.pth
-#     4   sv_constrained @ 1e-1  runs/singleview_lam1e-1/checkpoints/best_model.pth
+#     1   sv_constrained @ 1e-4  $RUNS_ROOT/singleview_lam1e-4/checkpoints/best_model.pth
+#     2   sv_constrained @ 1e-3  $RUNS_ROOT/singleview_lam1e-3/checkpoints/best_model.pth
+#     3   sv_constrained @ 1e-2  $RUNS_ROOT/singleview_lam1e-2/checkpoints/best_model.pth
+#     4   sv_constrained @ 1e-1  $RUNS_ROOT/singleview_lam1e-1/checkpoints/best_model.pth
 #     5   mv_reference           $MV_REF (downloaded, unmodified)
-#     6   mv_constrained @ 1e-4  runs/multiview_lam1e-4/checkpoints/best_model.pth
-#     7   mv_constrained @ 1e-3  runs/multiview_lam1e-3/checkpoints/best_model.pth
-#     8   mv_constrained @ 1e-2  runs/multiview_lam1e-2/checkpoints/best_model.pth
-#     9   mv_constrained @ 1e-1  runs/multiview_lam1e-1/checkpoints/best_model.pth
+#     6   mv_constrained @ 1e-4  $RUNS_ROOT/multiview_lam1e-4/checkpoints/best_model.pth
+#     7   mv_constrained @ 1e-3  $RUNS_ROOT/multiview_lam1e-3/checkpoints/best_model.pth
+#     8   mv_constrained @ 1e-2  $RUNS_ROOT/multiview_lam1e-2/checkpoints/best_model.pth
+#     9   mv_constrained @ 1e-1  $RUNS_ROOT/multiview_lam1e-1/checkpoints/best_model.pth
 #
 # Default --array=0-4 is the single-view sweep. Use --array=5-9 for multi-view.
 #
@@ -93,10 +93,16 @@ fi
 
 LAMBDAS=(1e-4 1e-3 1e-2 1e-1)
 RESULTS_ROOT="${RESULTS_ROOT:-prior_study_results}"
+# Must match the RUNS_ROOT that prepare_lambda_sweep.sh was run with — it is what
+# decides where each arm's checkpoints were written. Relocating the run dirs to
+# $HPCWORK (quota) and forgetting to tell this script is how all four eval tasks
+# end up looking in an empty runs/ and reporting "checkpoint not found".
+RUNS_ROOT="${RUNS_ROOT:-runs}"
 
 # --- which arm is this array task? -------------------------------------------
 # The constrained checkpoints are written by the training job into
-# runs/<mode>_lam<lambda>/checkpoints/; run_prior_study.sh falls back to the
+# $RUNS_ROOT/<mode>_lam<lambda>/checkpoints/ (RUNS_ROOT defaults to `runs` and must
+# match the value prepare_lambda_sweep.sh used); run_prior_study.sh falls back to the
 # newest periodic checkpoint if best_model.pth was never written (val loss need
 # not beat the resumed best in a continuation).
 TASK="${SLURM_ARRAY_TASK_ID:-0}"
@@ -109,7 +115,7 @@ if (( TASK == 0 )); then
 elif (( TASK >= 1 && TASK <= 4 )); then
     MODE="singleview"; LABEL="sv_constrained"
     LAMBDA="${LAMBDAS[$((TASK - 1))]}"
-    CHECKPOINT="${SV_CON:-runs/singleview_lam${LAMBDA}/checkpoints/best_model.pth}"
+    CHECKPOINT="${SV_CON:-$RUNS_ROOT/singleview_lam${LAMBDA}/checkpoints/best_model.pth}"
     WHAT="single-view continuation at lambda=$LAMBDA"
     OUT_DIR="$RESULTS_ROOT/lam${LAMBDA}/sv_constrained"
 elif (( TASK == 5 )); then
@@ -120,7 +126,7 @@ elif (( TASK == 5 )); then
 elif (( TASK >= 6 && TASK <= 9 )); then
     MODE="multiview"; LABEL="mv_constrained"
     LAMBDA="${LAMBDAS[$((TASK - 6))]}"
-    CHECKPOINT="${MV_CON:-runs/multiview_lam${LAMBDA}/checkpoints/best_model.pth}"
+    CHECKPOINT="${MV_CON:-$RUNS_ROOT/multiview_lam${LAMBDA}/checkpoints/best_model.pth}"
     WHAT="multi-view continuation at lambda=$LAMBDA"
     OUT_DIR="$RESULTS_ROOT/lam${LAMBDA}/mv_constrained"
 else

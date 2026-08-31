@@ -61,8 +61,12 @@ for arm in "${ARM_ARR[@]}"; do
         echo "  [skip] $arm — no renders under $RENDER_ROOT/$arm/"
     fi
 done
-if (( ${#PRESENT[@]} < 2 )); then
-    echo "ERROR: need at least 2 arms with renders to compare; found ${#PRESENT[@]}." >&2
+# Only a hard stop here: the real check is against the CURRENT segments, below,
+# which can give a much more useful message.
+if (( ${#PRESENT[@]} < 1 )); then
+    echo "ERROR: no arm under $RENDER_ROOT/ has any renders at all." >&2
+    echo "       Run the render job first:" >&2
+    echo "         sbatch --array=0,5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch" >&2
     exit 1
 fi
 
@@ -88,20 +92,45 @@ else
     done
 fi
 
-# Renders left over from a previous pick_segments.py run are not an error, but
-# they are confusing when half the folder is stale — say so once.
-if [[ -f "$SEGMENTS_FILE" && -z "${CLIPS:-}" ]]; then
-    for arm in "${PRESENT[@]}"; do
-        stale=0
-        for f in "$RENDER_ROOT/$arm"/seg*.mp4; do
-            b="$(basename "$f")"; b="${b%.mp4}"
-            [[ " ${CLIP_STEMS[*]} " == *" $b "* ]] || stale=$((stale + 1))
-        done
-        (( stale > 0 )) && echo "  [note] $arm has $stale render(s) from an earlier segments.json — ignored."
+# Keep only arms that actually hold renders of the CURRENT segments. An arm whose
+# whole folder predates the current segments.json has not been re-rendered yet —
+# reporting that once here beats one "missing" warning per segment followed by an
+# epilogue about videos that were never written.
+CURRENT=()
+for arm in "${PRESENT[@]}"; do
+    have=0 stale=0
+    for f in "$RENDER_ROOT/$arm"/seg*.mp4; do
+        b="$(basename "$f")"; b="${b%.mp4}"
+        if [[ " ${CLIP_STEMS[*]} " == *" $b "* ]]; then have=$((have + 1)); else stale=$((stale + 1)); fi
     done
+    (( stale > 0 )) && echo "  [note] $arm has $stale render(s) from an earlier segments.json — ignored."
+    if (( have > 0 )); then
+        CURRENT+=("$arm")
+    else
+        echo "  [skip] $arm — nothing rendered for the current segments yet."
+    fi
+done
+PRESENT=("${CURRENT[@]}")
+
+if (( ${#PRESENT[@]} < 2 )); then
+    echo >&2
+    echo "ERROR: need 2+ arms rendered for the CURRENT segments; found ${#PRESENT[@]}." >&2
+    if [[ -f "$SEGMENTS_FILE" ]]; then
+        echo "       $SEGMENTS_FILE lists: ${CLIP_STEMS[*]}" >&2
+        echo >&2
+        echo "       If you just submitted the render job, it has not finished — this script" >&2
+        echo "       reads finished MP4s, it does not wait. Check it, then re-run:" >&2
+        echo "         squeue --me" >&2
+        echo "         tail -n 40 logs/jl_render_<jobid>_0.out" >&2
+        echo "       If pick_segments.py was re-run after the last render, the arms need" >&2
+        echo "       re-rendering against the new windows:" >&2
+        echo "         sbatch --array=0,5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch" >&2
+    fi
+    exit 1
 fi
 
 mkdir -p "$OUT_DIR"
+PRODUCED=0
 echo "=================================================================="
 echo " Stacking renders"
 echo "  arms  : ${PRESENT[*]}"
@@ -212,6 +241,7 @@ for STEM in "${CLIP_STEMS[@]}"; do
         -c:v libx264 -crf "$CRF" -pix_fmt yuv420p "$OUT"
     then
         echo "  ok"
+        PRODUCED=$((PRODUCED + 1))
     else
         echo "  [FAILED] $STEM" >&2
         echo "           If the error mentions drawtext, this ffmpeg lacks libfreetype —" >&2
@@ -220,9 +250,17 @@ for STEM in "${CLIP_STEMS[@]}"; do
     fi
 done
 
+if (( PRODUCED == 0 )); then
+    echo >&2
+    echo "ERROR: no comparison video was written." >&2
+    echo "       Every segment had fewer than 2 arms rendered against the current" >&2
+    echo "       segments.json. See the per-segment lines above." >&2
+    exit 1
+fi
+
 echo
 echo "=================================================================="
-echo " Comparison videos in $OUT_DIR"
+echo " $PRODUCED comparison video(s) in $OUT_DIR"
 echo
 echo " Each panel carries its own HUD: arm label, frame index, and how many of the"
 echo " 129 authored joint-axes are out of range IN THAT FRAME. Watch that counter"

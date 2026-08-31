@@ -32,9 +32,28 @@
 # so the same sweep can be run on multi-view later (`--array=4-7`) without
 # editing this file; they are NOT submitted by default.
 #
-# Each task gets its own node with 4x H100 and runs torchrun --standalone.
-# There is still no unconstrained arm: the reference is each downloaded
-# checkpoint evaluated as-is, which the eval sbatch handles.
+# Each task gets its own node with 4x H100 and runs torchrun over every GPU the
+# allocation actually contains. There is still no unconstrained arm: the
+# reference is each downloaded checkpoint evaluated as-is (eval sbatch task 0).
+#
+# ---------------------------------------------------------------------------
+# HOW MANY GPUs
+# ---------------------------------------------------------------------------
+# Nothing here is hard-coded to 4. The script reads SLURM_JOB_NUM_NODES and
+# SLURM_GPUS_ON_NODE, so the #SBATCH header is only the default and the sbatch
+# command line wins:
+#
+#   4 arms x 1 node x 4 H100 = 16 GPUs busy   (the default; submit --array=0-3
+#                                              with NO % throttle)
+#   4 arms x 2 nodes x 4 H100 = 32 GPUs busy  (sbatch --nodes=2 ...)
+#
+# --nodes=2 halves the wall clock per arm, which is the reason to reach for it:
+# 50 epochs may not fit in the 24 h account cap on one node. It is not free —
+# batch_size is PER PROCESS under DDP, so doubling the ranks doubles the
+# effective batch while the resumed learning-rate curriculum stays put. Pass the
+# SAME --nodes to every arm, and pass BATCH_SIZE=<orig/ranks> to
+# prepare_lambda_sweep.sh if you want to hold the effective batch at the value
+# the reference checkpoint was trained with.
 #
 # ---------------------------------------------------------------------------
 # WALL TIME — read this before submitting
@@ -179,7 +198,33 @@ export HF_DATASETS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+# --- how many GPUs did this task actually get? -------------------------------
+# Derived from the allocation, never hard-coded. `sbatch --gres=gpu:N --nodes=M`
+# on the command line overrides the #SBATCH header above, and the old
+# `export CUDA_VISIBLE_DEVICES=0,1,2,3` here silently contradicted that: with
+# --gres=gpu:2 it named devices that were not allocated, and with 2 nodes it
+# pinned every rank to the first node's ordinals. Slurm already sets
+# CUDA_VISIBLE_DEVICES correctly for the allocation, so do not touch it.
+NNODES="${SLURM_JOB_NUM_NODES:-${SLURM_NNODES:-1}}"
+GPUS_PER_NODE="${GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-}}"
+if [[ -z "$GPUS_PER_NODE" ]] && command -v nvidia-smi >/dev/null 2>&1; then
+    GPUS_PER_NODE="$(nvidia-smi -L 2>/dev/null | wc -l)"
+fi
+if [[ -z "$GPUS_PER_NODE" || "$GPUS_PER_NODE" -lt 1 ]] 2>/dev/null; then
+    # Falling through to 1 would train the arm on a single GPU at 1/4 the speed
+    # and 1/4 the effective batch, quietly, and break the sweep invariant against
+    # the other three arms. Say so loudly rather than "succeeding".
+    echo "WARNING: could not determine the GPU count from the allocation" >&2
+    echo "         (SLURM_GPUS_ON_NODE unset and nvidia-smi gave nothing)." >&2
+    echo "         Falling back to 1 GPU. If this node really has 4, re-submit with" >&2
+    echo "         GPUS_PER_NODE=4 --export=ALL,GPUS_PER_NODE,... — otherwise this arm" >&2
+    echo "         will not be comparable with the rest of the sweep." >&2
+    GPUS_PER_NODE=1
+fi
+# Named WORLD (not WORLD_SIZE): is_torchrun_launched() keys on RANK/LOCAL_RANK/
+# WORLD_SIZE being present, and setting one of them here would confuse the
+# trainer's launch detection. torchrun sets all three for the ranks it spawns.
+WORLD=$(( NNODES * GPUS_PER_NODE ))
 
 REPO_DIR="${REPO_DIR:-$SLURM_SUBMIT_DIR}"
 # RWTH: $HPCWORK is the large per-user filesystem; $HOME has a hard quota that a
@@ -241,6 +286,7 @@ echo "  wall   : ${SLURM_JOB_END_TIME:+ends $(date -d @"$SLURM_JOB_END_TIME" 2>/
 echo "  repo   : $REPO_DIR"
 echo "  env    : $CONDA_PREFIX"
 echo "  config : $CONFIG"
+echo "  gpus   : $GPUS_PER_NODE per node x $NNODES node(s) = $WORLD rank(s)"
 echo "=================================================================="
 python -c "import torch; print(f'  torch  : {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.device_count()} GPU(s) visible')"
 
@@ -256,12 +302,13 @@ fi
 # Each check below corresponds to a way this job can "succeed" while producing a
 # result that does not answer the question. All of them are cheap and run before
 # the GPUs are touched.
-python - "$CONFIG" "$MODE" "$LAMBDA" <<'PY' || exit 1
+python - "$CONFIG" "$MODE" "$LAMBDA" "$WORLD" <<'PY' || exit 1
 import json, math, os, pickle, sys
 import numpy as np
 import torch
 
 cfg_path, expected_mode, expected_lambda = sys.argv[1], sys.argv[2], float(sys.argv[3])
+world = int(sys.argv[4])
 cfg = json.load(open(cfg_path))
 
 # 1. mode -------------------------------------------------------------------
@@ -385,12 +432,15 @@ if peers:
         print(f"     lambda, not a bug — it is what the sweep is measuring.")
 
 # 7. DDP batch arithmetic ---------------------------------------------------
-# batch_size is PER PROCESS under DDP, so 4 GPUs quadruple the effective batch
+# batch_size is PER PROCESS under DDP, so N ranks multiply the effective batch
 # relative to the run that produced the checkpoint, while inheriting that run's
-# learning-rate curriculum unchanged.
+# learning-rate curriculum unchanged. This scales with the allocation, so an arm
+# run on 8 ranks is NOT the same optimisation problem as one run on 4 — every
+# arm of the sweep must use the same allocation shape and the same batch_size.
 bs = tr.get("batch_size")
-print(f"  batch_size {bs} per GPU x 4 GPUs -> effective {bs * 4 if bs else '?'} "
-      f"(batch_size is PER PROCESS under DDP)")
+print(f"  batch_size {bs} per rank x {world} rank(s) -> effective "
+      f"{bs * world if bs else '?'} (batch_size is PER PROCESS under DDP)")
+print(f"  SWEEP INVARIANT   : effective batch {bs * world if bs else '?'} — every other lambda MUST match.")
 print(f"  save_checkpoint_every: {cfg.get('output', {}).get('save_checkpoint_every')} "
       f"(a wall-clock timeout costs at most this many epochs)")
 print(f"  checkpoints -> {cfg.get('output', {}).get('checkpoint_dir')}")
@@ -413,28 +463,46 @@ python scripts/prior_study/preflight_study.py --config "$CONFIG" || {
 }
 
 # --- launch ------------------------------------------------------------------
-# Single node: --standalone gives torchrun its own rendezvous on localhost, so no
-# MASTER_ADDR/MASTER_PORT/rdzv plumbing is needed. Both trainers detect
-# RANK/LOCAL_RANK/WORLD_SIZE (is_torchrun_launched) and skip their own mp.spawn
-# path, so --num_gpus is intentionally not passed.
+# Both trainers detect RANK/LOCAL_RANK/WORLD_SIZE (is_torchrun_launched) and skip
+# their own mp.spawn path, so --num_gpus is intentionally not passed.
 #
-# Run torchrun directly rather than under srun: the batch script already runs on
-# the allocated node with all 4 GPUs visible, and srun+torchrun double-launching
-# is a common source of duplicated ranks.
+# ONE NODE (the default): run torchrun directly. The batch script already runs on
+# the allocated node with every allocated GPU visible, and srun+torchrun
+# double-launching is a common source of duplicated ranks.
 #
-# --rdzv-backend on a distinct port per array task: with --array=0-3%2 two tasks
-# can land on the SAME node, and two --standalone rendezvous both default to
-# 29400 there, so the second job fails to bind.
+# MORE THAN ONE NODE (sbatch --nodes=M): torchrun has to be started once per node,
+# which is what srun --ntasks-per-node=1 does, and the rendezvous has to live on a
+# real hostname rather than localhost. ddp_main() reads RANK/LOCAL_RANK from the
+# environment and calls torch.cuda.set_device(LOCAL_RANK), so the multi-node ranks
+# land on the right GPUs (train_smil_regressor.py:194).
+#
+# Distinct rendezvous port per array task: with --array=0-3%2 two tasks can land
+# on the SAME node, and two rendezvous on 29400 there means the second fails to
+# bind. --rdzv-id makes the group unique even if a port is reused.
 RDZV_PORT=$((29400 + TASK))
+RDZV_ID="jl_${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-0}}_${TASK}"
 
 TORCHRUN="torchrun"
 command -v torchrun >/dev/null 2>&1 || TORCHRUN="python -m torch.distributed.run"
 
-$TORCHRUN \
+LAUNCH_PREFIX=()
+if (( NNODES > 1 )); then
+    MASTER_NODE="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)"
+    RDZV_ENDPOINT="${MASTER_NODE}:${RDZV_PORT}"
+    LAUNCH_PREFIX=(srun --nodes="$NNODES" --ntasks-per-node=1
+                   --cpus-per-task="${SLURM_CPUS_PER_TASK:-96}" --gpus-per-node="$GPUS_PER_NODE")
+    echo "  launch : srun x $NNODES node(s), rendezvous on $RDZV_ENDPOINT"
+else
+    RDZV_ENDPOINT="localhost:${RDZV_PORT}"
+    echo "  launch : torchrun on this node, rendezvous on $RDZV_ENDPOINT"
+fi
+
+"${LAUNCH_PREFIX[@]}" $TORCHRUN \
     --rdzv-backend=c10d \
-    --rdzv-endpoint="localhost:${RDZV_PORT}" \
-    --nnodes=1 \
-    --nproc_per_node=4 \
+    --rdzv-id="$RDZV_ID" \
+    --rdzv-endpoint="$RDZV_ENDPOINT" \
+    --nnodes="$NNODES" \
+    --nproc_per_node="$GPUS_PER_NODE" \
     -m "$TRAIN_MODULE" --config "$CONFIG"
 
-echo "Done ($MODE, lambda=$LAMBDA) — $(date)"
+echo "Done ($MODE, lambda=$LAMBDA, $WORLD rank(s)) — $(date)"
