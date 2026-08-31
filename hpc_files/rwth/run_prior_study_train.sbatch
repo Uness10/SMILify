@@ -205,20 +205,62 @@ export TRANSFORMERS_OFFLINE=1
 # --gres=gpu:2 it named devices that were not allocated, and with 2 nodes it
 # pinned every rank to the first node's ordinals. Slurm already sets
 # CUDA_VISIBLE_DEVICES correctly for the allocation, so do not touch it.
+#
+# Sources, in order of authority:
+#   1. GPUS_PER_NODE=N in the environment  (explicit override, always wins)
+#   2. SLURM_GPUS_ON_NODE / SLURM_JOB_GPUS (what the scheduler actually gave us)
+#   3. nvidia-smi -L                       (what the node actually has)
+#   4. this script's own `#SBATCH --gres=gpu:N` header
+#
+# (4) is what makes `dryrun_sbatch.sh` print the truth: the login node has no
+# GRES variables and no nvidia-smi, so 1-3 all come up empty there, and falling
+# back to 1 would make the dry run report an effective batch 4x below what the
+# real job will use. Reading the header instead reports the shape you are about
+# to submit. On a real compute node (2) always answers first, so the header is
+# never consulted and `sbatch --gres=gpu:2` is still honoured correctly.
+_is_pos_int() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 0 )); }
+
 NNODES="${SLURM_JOB_NUM_NODES:-${SLURM_NNODES:-1}}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-}}"
-if [[ -z "$GPUS_PER_NODE" ]] && command -v nvidia-smi >/dev/null 2>&1; then
-    GPUS_PER_NODE="$(nvidia-smi -L 2>/dev/null | wc -l)"
+GPU_SRC="GPUS_PER_NODE env"
+GPUS_PER_NODE="${GPUS_PER_NODE:-}"
+
+if ! _is_pos_int "$GPUS_PER_NODE"; then
+    GPU_SRC="SLURM_GPUS_ON_NODE"
+    GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-}"
 fi
-if [[ -z "$GPUS_PER_NODE" || "$GPUS_PER_NODE" -lt 1 ]] 2>/dev/null; then
-    # Falling through to 1 would train the arm on a single GPU at 1/4 the speed
-    # and 1/4 the effective batch, quietly, and break the sweep invariant against
-    # the other three arms. Say so loudly rather than "succeeding".
-    echo "WARNING: could not determine the GPU count from the allocation" >&2
-    echo "         (SLURM_GPUS_ON_NODE unset and nvidia-smi gave nothing)." >&2
-    echo "         Falling back to 1 GPU. If this node really has 4, re-submit with" >&2
-    echo "         GPUS_PER_NODE=4 --export=ALL,GPUS_PER_NODE,... — otherwise this arm" >&2
+if ! _is_pos_int "$GPUS_PER_NODE" && [[ -n "${SLURM_JOB_GPUS:-}" ]]; then
+    GPU_SRC="SLURM_JOB_GPUS"
+    GPUS_PER_NODE="$(tr ',' '\n' <<< "$SLURM_JOB_GPUS" | grep -c .)"
+fi
+if ! _is_pos_int "$GPUS_PER_NODE" && command -v nvidia-smi >/dev/null 2>&1; then
+    GPU_SRC="nvidia-smi"
+    GPUS_PER_NODE="$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ')"
+fi
+if ! _is_pos_int "$GPUS_PER_NODE"; then
+    GPU_SRC="#SBATCH --gres header"
+    GPUS_PER_NODE="$(grep -m1 -oP '^#SBATCH\s+--gres=gpu:\K[0-9]+' "$0" 2>/dev/null || true)"
+    if _is_pos_int "$GPUS_PER_NODE"; then
+        # Expected on a login node (a dry run). On a compute node it means the
+        # allocation exposed no GPU variables at all, which is worth a look.
+        if [[ -n "${SLURM_JOB_ID:-}" && "${SLURM_JOB_PARTITION:-}" != *login* && "${SLURM_JOB_ID}" != "000000" ]]; then
+            echo "WARNING: no GPU variables in this allocation (SLURM_GPUS_ON_NODE," >&2
+            echo "         SLURM_JOB_GPUS and nvidia-smi all empty). Assuming the header's" >&2
+            echo "         $GPUS_PER_NODE GPU(s)/node. If you submitted with a different --gres," >&2
+            echo "         re-submit with GPUS_PER_NODE=<n> --export=ALL,GPUS_PER_NODE,..." >&2
+        else
+            echo "[no allocation] not running under a GPU allocation (login node / dry run);" >&2
+            echo "                using the header's --gres=gpu:$GPUS_PER_NODE for the arithmetic below." >&2
+        fi
+    fi
+fi
+if ! _is_pos_int "$GPUS_PER_NODE"; then
+    # Nothing answered, not even the header. Training on 1 GPU would run at 1/4
+    # the speed and 1/4 the effective batch, quietly, and break the sweep
+    # invariant against the other three arms. Say so rather than "succeeding".
+    echo "WARNING: could not determine the GPU count from any source; falling back to 1." >&2
+    echo "         Re-submit with GPUS_PER_NODE=4 --export=ALL,GPUS_PER_NODE,... or this arm" >&2
     echo "         will not be comparable with the rest of the sweep." >&2
+    GPU_SRC="fallback"
     GPUS_PER_NODE=1
 fi
 # Named WORLD (not WORLD_SIZE): is_torchrun_launched() keys on RANK/LOCAL_RANK/
@@ -286,7 +328,7 @@ echo "  wall   : ${SLURM_JOB_END_TIME:+ends $(date -d @"$SLURM_JOB_END_TIME" 2>/
 echo "  repo   : $REPO_DIR"
 echo "  env    : $CONDA_PREFIX"
 echo "  config : $CONFIG"
-echo "  gpus   : $GPUS_PER_NODE per node x $NNODES node(s) = $WORLD rank(s)"
+echo "  gpus   : $GPUS_PER_NODE per node x $NNODES node(s) = $WORLD rank(s)  [from $GPU_SRC]"
 echo "=================================================================="
 python -c "import torch; print(f'  torch  : {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.device_count()} GPU(s) visible')"
 
@@ -444,6 +486,103 @@ print(f"  SWEEP INVARIANT   : effective batch {bs * world if bs else '?'} — ev
 print(f"  save_checkpoint_every: {cfg.get('output', {}).get('save_checkpoint_every')} "
       f"(a wall-clock timeout costs at most this many epochs)")
 print(f"  checkpoints -> {cfg.get('output', {}).get('checkpoint_dir')}")
+
+# 7b. where the outputs land, and how much they will be -----------------------
+# Job 3359198 died 13 epochs in with OSError [Errno 122] Disk quota exceeded,
+# inside imageio.imsave. Every output path is written by rank 0 mid-epoch, hours
+# after the GPUs were allocated, and the trainer has no handler for it — the run
+# is simply lost. $HOME on this cluster is quota'd; $HPCWORK is not.
+out_cfg = cfg.get("output", {}) or {}
+home = os.path.realpath(os.environ.get("HOME", "/nonexistent"))
+viz_every = out_cfg.get("generate_visualizations_every")
+save_every_cfg = out_cfg.get("save_checkpoint_every") or 1
+print(f"  generate_visualizations_every: {viz_every}  plot_history_every: "
+      f"{out_cfg.get('plot_history_every')}  samples: {out_cfg.get('num_visualization_samples')}")
+if viz_every == 1:
+    print("  NOTE: visualisations every epoch — the trainer calls "
+          "visualize_training_progress TWICE per epoch (train + val).")
+
+on_home = []
+for key in ("checkpoint_dir", "plots_dir", "visualizations_dir",
+            "train_visualizations_dir", "singleview_visualizations_dir"):
+    d = out_cfg.get(key)
+    if not d:
+        continue
+    real = os.path.realpath(os.path.abspath(d))
+    if real == home or real.startswith(home + os.sep):
+        on_home.append((key, real))
+
+if on_home and os.environ.get("ALLOW_HOME_OUTPUT") != "1":
+    n_ckpt = max(1, (num_epochs - start) // save_every_cfg)
+    msg = [f"ERROR: {len(on_home)} output dir(s) resolve under $HOME ({home}), which is quota'd:"]
+    msg += [f"         {k} -> {p}" for k, p in on_home]
+    msg += [
+        f"       This arm will write ~{n_ckpt} periodic ViT-Large checkpoints plus",
+        f"       visualisations there, and the four arms share the quota. A quota error",
+        f"       arrives as OSError inside imageio.imsave or torch.save mid-epoch, with no",
+        f"       handler — exactly how job 3359198 lost 13 epochs on 4 GPUs.",
+        f"       Rebuild the configs with the run dirs on $HPCWORK:",
+        f"         export RUNS_ROOT=\"$HPCWORK/smilify_runs\"",
+        f"         EXTRA_EPOCHS=<n> bash scripts/prior_study/prepare_lambda_sweep.sh {expected_mode}",
+        f"       (or set ALLOW_HOME_OUTPUT=1 to proceed anyway).",
+    ]
+    sys.exit("\n".join(msg))
+
+ck_dir = out_cfg.get("checkpoint_dir")
+if ck_dir:
+    probe = os.path.abspath(ck_dir)
+    while probe != os.path.dirname(probe) and not os.path.isdir(probe):
+        probe = os.path.dirname(probe)
+    try:
+        import shutil
+        free_gb = shutil.disk_usage(probe).free / 2**30
+        print(f"  free space on {probe}: {free_gb:.0f} GB "
+              f"(advisory — statvfs shows the FILESYSTEM, not your quota)")
+    except Exception as exc:
+        print(f"  (free-space probe skipped: {exc})")
+
+# 8. the learning rate over THIS window -------------------------------------
+# There is no early stopping and no plateau scheduler: the LR is a pure function
+# of the absolute epoch index (train_smil_regressor.py:2079), and on resume the
+# optimizer's restored LR is overwritten from that curriculum (line 1269). So a
+# continuation from a late checkpoint inherits whatever stage its epoch NUMBER
+# lands in — the shipped OptimizerConfig defaults step 350 -> 1e-6 and
+# 400 -> 1e-5, a 10x increase. Report it into every job log; prepare_lambda_sweep.sh
+# can pin it with LR_FLAT. Not blocking: the same jump hits every arm equally.
+import importlib.util, pathlib
+opt = cfg.get("optimizer") or {}
+lr_sched, lr_base = opt.get("lr_schedule"), opt.get("learning_rate")
+lr_source = "config optimizer.lr_schedule"
+if not lr_sched:
+    lr_source = "OptimizerConfig defaults (config has no optimizer.lr_schedule)"
+    _bc = pathlib.Path("smal_fitter/neuralSMIL/configs/base_config.py")
+    _spec = importlib.util.spec_from_file_location("_base_config_probe", _bc)
+    _mod = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+    _d = _mod.OptimizerConfig()
+    lr_sched = _d.lr_schedule
+    lr_base = _d.learning_rate if lr_base is None else lr_base
+lr_sched = {int(k): float(v) for k, v in lr_sched.items()}
+
+
+def _lr_at(e):
+    lr = float(lr_base)
+    for t in sorted(lr_sched):
+        if e >= t:
+            lr = lr_sched[t]
+    return lr
+
+
+_win = [(e, _lr_at(e)) for e in range(start, num_epochs)]
+_chg = [(e, lr) for i, (e, lr) in enumerate(_win) if i == 0 or lr != _win[i - 1][1]]
+print(f"  lr source         : {lr_source}")
+if len(_chg) > 1:
+    print(f"  LR CHANGES inside [{start}, {num_epochs}): "
+          + " -> ".join(f"{lr:.3g}@epoch{e}" for e, lr in _chg))
+    print(f"     Same for every arm, so lambda-vs-lambda is unaffected — but the")
+    print(f"     reference-vs-lambda delta mixes the prior with this LR change.")
+    print(f"     LR_FLAT={_chg[0][1]:g} on prepare_lambda_sweep.sh pins it.")
+else:
+    print(f"  lr                : constant {_chg[0][1]:.3g} across [{start}, {num_epochs})")
 PY
 
 # --- pre-flight: architecture agreement --------------------------------------
@@ -487,7 +626,11 @@ command -v torchrun >/dev/null 2>&1 || TORCHRUN="python -m torch.distributed.run
 
 LAUNCH_PREFIX=()
 if (( NNODES > 1 )); then
-    MASTER_NODE="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)"
+    # SLURM_JOB_NODELIST is unset in a dry run, where scontrol would then fail and
+    # take the whole script down under `set -e`; localhost keeps the dry run
+    # printing the command it would have used.
+    MASTER_NODE="$(scontrol show hostnames "${SLURM_JOB_NODELIST:-localhost}" 2>/dev/null | head -n1 || true)"
+    MASTER_NODE="${MASTER_NODE:-localhost}"
     RDZV_ENDPOINT="${MASTER_NODE}:${RDZV_PORT}"
     LAUNCH_PREFIX=(srun --nodes="$NNODES" --ntasks-per-node=1
                    --cpus-per-task="${SLURM_CPUS_PER_TASK:-96}" --gpus-per-node="$GPUS_PER_NODE")

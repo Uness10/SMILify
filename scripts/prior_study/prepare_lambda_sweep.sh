@@ -26,6 +26,19 @@
 #   DATASET                  HDF5 (default: SMILySTICKS_centred_reprojected_FIXED.h5)
 #   BATCH_SIZE               override training.batch_size (see note below)
 #   SAVE_EVERY               output.save_checkpoint_every      (default: 2)
+#   LR_FLAT                  pin optimizer.learning_rate and optimizer.lr_schedule
+#                            to this single value for the whole continuation.
+#                            Unset = keep the config's schedule (and the script
+#                            WARNS if that schedule changes mid-window).
+#
+# Why LR_FLAT exists: the learning rate is a pure function of the epoch INDEX
+# (train_smil_regressor.py:2079) with no early stopping and no plateau logic, so
+# a continuation from a late checkpoint inherits whatever stage the absolute
+# epoch number lands in. The shipped OptimizerConfig defaults step 350 -> 1e-6
+# and 400 -> 1e-5 — a 10x INCREASE — so resuming from epoch 386 for 50 epochs
+# crosses that boundary at epoch 400 and trains the last 36 epochs at 10x the LR
+# the reference checkpoint ended on. LR_FLAT=1e-6 holds the LR at the value in
+# force at the resume epoch, which makes reference-vs-lambda interpretable.
 #
 # Why SAVE_EVERY defaults to 2: the account's MaxWall is 24 h and 50 epochs may
 # not fit. With periodic checkpoints every 2 epochs, a timeout costs at most two
@@ -63,6 +76,31 @@ SAVE_EVERY="${SAVE_EVERY:-2}"
 # 4 lambdas x ~25 periodic ViT-Large checkpoints is on the order of 100 GB and
 # $HOME's quota will stop the run partway through with a write error.
 RUNS_ROOT="${RUNS_ROOT:-runs}"
+# Visualisation / plot cadence. prepare_resume_config.set_output_dirs defaults
+# BOTH to 1 (prepare_resume_config.py:253), and the trainer then calls
+# visualize_training_progress TWICE per epoch — train and val — writing
+# num_visualization_samples PNGs each time, plus a history plot
+# (train_smil_regressor.py:2214/2228/2240). Over 50 epochs x 4 arms that is
+# thousands of PNGs nobody looks at, and on a quota'd filesystem it is what
+# actually kills the run: the exception lands in imageio.imsave, mid-epoch,
+# AFTER the GPUs have been busy for hours.
+VIZ_EVERY="${VIZ_EVERY:-10}"
+PLOT_EVERY="${PLOT_EVERY:-10}"
+
+# Refuse to write run dirs onto a quota'd home directory unless told to.
+case "$(cd "$(dirname "$RUNS_ROOT")" 2>/dev/null && pwd || echo "$RUNS_ROOT")" in
+    "$HOME"/*|"$HOME")
+        if [[ "${ALLOW_HOME_OUTPUT:-0}" != "1" ]]; then
+            echo "ERROR: RUNS_ROOT='$RUNS_ROOT' resolves under \$HOME ($HOME)." >&2
+            echo "       Four arms x ~25 periodic ViT-Large checkpoints is ~100 GB and \$HOME" >&2
+            echo "       is quota'd — the run dies mid-epoch with 'Disk quota exceeded' hours in." >&2
+            echo "       Use:  export RUNS_ROOT=\"\$HPCWORK/smilify_runs\"" >&2
+            echo "       (or set ALLOW_HOME_OUTPUT=1 if you really mean it)" >&2
+            exit 1
+        fi
+        echo "[prep] WARNING: RUNS_ROOT is under \$HOME and ALLOW_HOME_OUTPUT=1 — watch your quota."
+        ;;
+esac
 
 if [[ "$MODE" == "singleview" ]]; then
     CKPT="${SV_REF:?set SV_REF=<path to the single-view .pth>}"
@@ -118,15 +156,58 @@ for LAMBDA in "${LAMBDA_ARR[@]}"; do
     # prepare_resume_config.py has no flag for save_checkpoint_every, and it does
     # not inspect curriculum_stages for entries that would overwrite the swept
     # weight partway through the run. Both matter more at 50 epochs than at 10.
-    python - "$OUT" "$SAVE_EVERY" "$LAMBDA" <<'PY'
-import json, sys
+    python - "$OUT" "$SAVE_EVERY" "$LAMBDA" "$EXTRA_EPOCHS" "${LR_FLAT:-}" "$VIZ_EVERY" "$PLOT_EVERY" <<'PY'
+import importlib.util
+import json
+import pathlib
+import sys
 
 path, save_every, lam = sys.argv[1], int(sys.argv[2]), float(sys.argv[3])
+extra_epochs, lr_flat = int(sys.argv[4]), sys.argv[5]
+viz_every, plot_every = int(sys.argv[6]), int(sys.argv[7])
 cfg = json.load(open(path))
+
+
+def effective_lr_schedule(cfg):
+    """The LR curriculum the trainer will ACTUALLY use, defaults included.
+
+    The JSON key is `optimizer.lr_schedule` (epoch -> lr), NOT
+    `learning_rate_curriculum` — that name only exists in the legacy
+    TrainingConfig mirror the loader writes at train_smil_regressor.py:2434.
+    A config with no `optimizer` block inherits OptimizerConfig's dataclass
+    defaults (base_config.py:160), which is easy to mistake for "no schedule".
+    Load that class straight from the file rather than importing the package, so
+    this stays cheap and free of import side effects.
+    """
+    opt = cfg.get("optimizer") or {}
+    sched, base = opt.get("lr_schedule"), opt.get("learning_rate")
+    source = "config optimizer.lr_schedule"
+    if not sched:
+        source = "OptimizerConfig defaults (no optimizer.lr_schedule in the config)"
+        bc = pathlib.Path("smal_fitter/neuralSMIL/configs/base_config.py")
+        spec = importlib.util.spec_from_file_location("_base_config_probe", bc)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        defaults = mod.OptimizerConfig()
+        sched = defaults.lr_schedule
+        base = defaults.learning_rate if base is None else base
+    return {int(k): float(v) for k, v in sched.items()}, float(base), source
+
+
+def lr_at(epoch, sched, base):
+    lr = base
+    for threshold in sorted(sched):
+        if epoch >= threshold:
+            lr = sched[threshold]
+    return lr
+
 
 out = cfg.setdefault("output", {})
 old = out.get("save_checkpoint_every")
 out["save_checkpoint_every"] = save_every
+old_viz, old_plot = out.get("generate_visualizations_every"), out.get("plot_history_every")
+out["generate_visualizations_every"] = viz_every
+out["plot_history_every"] = plot_every
 
 # A curriculum stage that sets joint_limit_regularization inside this run's
 # epoch range would discard the swept lambda mid-run. Strip those keys (and only
@@ -141,12 +222,49 @@ for ep, d in stages.items():
         d.pop("joint_limit_regularization")
         stripped.append(int(ep))
 
+# -- learning rate over the continuation window -------------------------------
+# The LR is a pure function of the epoch INDEX (train_smil_regressor.py:2079) —
+# there is no early stopping and no plateau scheduler, so whatever the schedule
+# says for epochs [start, end) is what this arm gets. Continuing from a late
+# checkpoint can walk straight through a stage boundary: the shipped defaults
+# step 350 -> 1e-6 and 400 -> 1e-5, a 10x INCREASE, which for a resume from
+# epoch 386 lands in the middle of a +50 epoch window. Identical across arms, so
+# lambda-vs-lambda stays clean — but reference-vs-lambda then mixes the prior
+# with an LR jump, so it must not be discovered after the fact.
+start = end - extra_epochs if end is not None else None
+if start is not None:
+    sched, base, source = effective_lr_schedule(cfg)
+    window = [(e, lr_at(e, sched, base)) for e in range(start, end)]
+    changes = [(e, lr) for i, (e, lr) in enumerate(window) if i == 0 or lr != window[i - 1][1]]
+    print(f"[patch] lr source: {source}")
+    if lr_flat:
+        flat = float(lr_flat)
+        opt = cfg.setdefault("optimizer", {})
+        opt["learning_rate"] = flat
+        opt["lr_schedule"] = {"0": flat}
+        was = " -> ".join(f"{lr:.3g}@e{e}" for e, lr in changes)
+        print(f"[patch] LR PINNED to {flat:g} for the whole window (LR_FLAT); was {was}")
+    elif len(changes) > 1:
+        print(f"[patch] WARNING: the LR CHANGES inside this arm's window [{start}, {end}):")
+        for e, lr in changes:
+            prev = dict(changes).get(e)
+            print(f"[patch]            epoch {e}: lr -> {lr:.3g}")
+        print(f"[patch]          Every arm gets the same jump, so lambda-vs-lambda is still")
+        print(f"[patch]          clean, but reference-vs-lambda now mixes the prior with an LR")
+        print(f"[patch]          change. Re-run with LR_FLAT={changes[0][1]:g} to hold the LR at")
+        print(f"[patch]          the value in force at the resume epoch.")
+    else:
+        print(f"[patch] lr constant at {changes[0][1]:.3g} across [{start}, {end}) — nothing to confound")
+
 json.dump(cfg, open(path, "w"), indent=2)
 print(f"[patch] save_checkpoint_every: {old} -> {save_every}")
+print(f"[patch] generate_visualizations_every: {old_viz} -> {viz_every}   "
+      f"(2 calls/epoch x {out.get('num_visualization_samples', '?')} PNGs when it fires)")
+print(f"[patch] plot_history_every: {old_plot} -> {plot_every}")
 if stripped:
     print(f"[patch] removed joint_limit_regularization overrides from curriculum_stages "
           f"at epoch(s) {sorted(stripped)} — lambda={lam} now holds for the whole run")
-print(f"[patch] end epoch (training.num_epochs): {end}")
+print(f"[patch] epochs (training.num_epochs): [{start}, {end})")
 PY
 
     WRITTEN+=("$OUT")

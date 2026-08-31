@@ -21,6 +21,14 @@
 #
 #   SV_CONFIG=configs_runs/other.json bash hpc_files/rwth/dryrun_sbatch.sh ...
 #
+# The login node has no GPUs, no GRES variables and no nvidia-smi, so the
+# training script falls back to its own `#SBATCH --gres=gpu:N` header for the
+# rank arithmetic and says so. To dry-run the MULTI-NODE variant, set the
+# variable the scheduler would have set:
+#
+#   SLURM_JOB_NUM_NODES=2 bash hpc_files/rwth/dryrun_sbatch.sh \
+#       hpc_files/rwth/run_prior_study_train.sbatch 0
+#
 # Exit code 0 means every requested task reached the launch step cleanly.
 #
 # What this does NOT catch: anything that only exists on a compute node —
