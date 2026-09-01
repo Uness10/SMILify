@@ -5,11 +5,11 @@
 #
 #   bash scripts/prior_study/stack_renders.sh
 #
-# Reads   prior_study_results/renders/<arm>/<segment>.mp4
-# Writes  prior_study_results/renders/comparison/<segment>_compare.mp4
+# Reads   prior_study_results/renders/<arm>/<clip>_inference.mp4
+# Writes  prior_study_results/renders/comparison/<clip>_compare.mp4
 #
-# The segments come from pick_segments.py and are identical across arms, so
-# panel k of every frame is the same instant of the same animal.
+# Every arm renders the SAME clips end to end via run_singleview_inference.py,
+# so panel k of every frame is the same moment of the same animal.
 #
 # Login node, ffmpeg only — no GPU, seconds per clip.
 #
@@ -24,12 +24,12 @@
 #                 default: sv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1 lam100
 #                 (arms with no renders on disk are dropped, so this works
 #                 before the sweep has trained)
-#   CLIPS         space-separated segment names (default: every segment found
-#                 under the FIRST arm folder)
+#   CLIPS         space-separated clip stems (default: every clip found under
+#                 the FIRST arm folder)
 #   PANEL_H       panel height in px (default: 480)
 #   CRF           x264 quality, lower = better (default: 20)
-#   LABELS_ON=1   also burn an ffmpeg caption per panel. Off by default because
-#                 render_clip_npz.py already draws one (arm, frame, violations).
+#   LABELS_ON=0   drop the per-panel ffmpeg caption (on by default; the
+#                 inference renderer draws none of its own; needs libfreetype).
 
 set -euo pipefail
 
@@ -55,77 +55,38 @@ command -v ffmpeg >/dev/null 2>&1 || {
 # --- which arms actually rendered? -------------------------------------------
 PRESENT=()
 for arm in "${ARM_ARR[@]}"; do
-    if [[ -d "$RENDER_ROOT/$arm" ]] && compgen -G "$RENDER_ROOT/$arm/seg*.mp4" >/dev/null; then
+    if [[ -d "$RENDER_ROOT/$arm" ]] && compgen -G "$RENDER_ROOT/$arm/*_inference.mp4" >/dev/null; then
         PRESENT+=("$arm")
     else
         echo "  [skip] $arm — no renders under $RENDER_ROOT/$arm/"
     fi
 done
-# Only a hard stop here: the real check is against the CURRENT segments, below,
-# which can give a much more useful message.
+# Only a hard stop here; the 2-arm check below gives a more useful message.
 if (( ${#PRESENT[@]} < 1 )); then
     echo "ERROR: no arm under $RENDER_ROOT/ has any renders at all." >&2
     echo "       Run the render job first:" >&2
-    echo "         sbatch --array=0,5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch" >&2
+    echo "         sbatch --array=0-4 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch" >&2
     exit 1
 fi
 
-# --- which segments? ---------------------------------------------------------
-# Prefer the names in segments.json over globbing the arm folder. Re-running
-# pick_segments.py changes the names (they carry the camera and first frame), so
-# a glob would pick up MP4s left over from an earlier selection and try to stack
-# a segment only some arms have. The JSON is the current truth.
-SEGMENTS_FILE="${SEGMENTS_FILE:-$RENDER_ROOT/segments.json}"
+# --- which clips? ------------------------------------------------------------
 CLIP_STEMS=()
 if [[ -n "${CLIPS:-}" ]]; then
     read -r -a CLIP_STEMS <<< "$CLIPS"
-elif [[ -f "$SEGMENTS_FILE" ]]; then
-    while IFS= read -r n; do CLIP_STEMS+=("$n"); done < <(
-        python -c "import json,sys; [print(s['name']) for s in json.load(open(sys.argv[1]))['segments']]" \
-            "$SEGMENTS_FILE"
-    )
-    echo "  segments from $SEGMENTS_FILE"
 else
-    for f in "$RENDER_ROOT/${PRESENT[0]}"/seg*.mp4; do
+    for f in "$RENDER_ROOT/${PRESENT[0]}"/*_inference.mp4; do
         b="$(basename "$f")"
-        CLIP_STEMS+=("${b%.mp4}")
+        CLIP_STEMS+=("${b%_inference.mp4}")
     done
 fi
 
-# Keep only arms that actually hold renders of the CURRENT segments. An arm whose
-# whole folder predates the current segments.json has not been re-rendered yet —
-# reporting that once here beats one "missing" warning per segment followed by an
-# epilogue about videos that were never written.
-CURRENT=()
-for arm in "${PRESENT[@]}"; do
-    have=0 stale=0
-    for f in "$RENDER_ROOT/$arm"/seg*.mp4; do
-        b="$(basename "$f")"; b="${b%.mp4}"
-        if [[ " ${CLIP_STEMS[*]} " == *" $b "* ]]; then have=$((have + 1)); else stale=$((stale + 1)); fi
-    done
-    (( stale > 0 )) && echo "  [note] $arm has $stale render(s) from an earlier segments.json — ignored."
-    if (( have > 0 )); then
-        CURRENT+=("$arm")
-    else
-        echo "  [skip] $arm — nothing rendered for the current segments yet."
-    fi
-done
-PRESENT=("${CURRENT[@]}")
-
 if (( ${#PRESENT[@]} < 2 )); then
     echo >&2
-    echo "ERROR: need 2+ arms rendered for the CURRENT segments; found ${#PRESENT[@]}." >&2
-    if [[ -f "$SEGMENTS_FILE" ]]; then
-        echo "       $SEGMENTS_FILE lists: ${CLIP_STEMS[*]}" >&2
-        echo >&2
-        echo "       If you just submitted the render job, it has not finished — this script" >&2
-        echo "       reads finished MP4s, it does not wait. Check it, then re-run:" >&2
-        echo "         squeue --me" >&2
-        echo "         tail -n 40 logs/jl_render_<jobid>_0.out" >&2
-        echo "       If pick_segments.py was re-run after the last render, the arms need" >&2
-        echo "       re-rendering against the new windows:" >&2
-        echo "         sbatch --array=0,5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch" >&2
-    fi
+    echo "ERROR: need 2+ arms with renders to compare; found ${#PRESENT[@]}." >&2
+    echo "       If you just submitted the render job it has not finished — this script" >&2
+    echo "       reads finished MP4s, it does not wait:" >&2
+    echo "         squeue --me" >&2
+    echo "         tail -n 40 logs/jl_render_<jobid>_0.out" >&2
     exit 1
 fi
 
@@ -171,12 +132,12 @@ for STEM in "${CLIP_STEMS[@]}"; do
     INPUTS=()
     LABELS=()
     for arm in "${PRESENT[@]}"; do
-        f="$RENDER_ROOT/$arm/${STEM}.mp4"
+        f="$RENDER_ROOT/$arm/${STEM}_inference.mp4"
         if [[ -f "$f" ]]; then
             INPUTS+=("$f")
             LABELS+=("$(label_for "$arm")")
         else
-            echo "  [warn] $arm is missing ${STEM}.mp4 — dropping it from this segment's grid" >&2
+            echo "  [warn] $arm is missing ${STEM}_inference.mp4 — dropping it from this clip's grid" >&2
         fi
     done
 
@@ -196,13 +157,12 @@ for STEM in "${CLIP_STEMS[@]}"; do
 
     # Build the filtergraph: scale each input to a common height, burn in its
     # label, then xstack into the grid.
-    # render_clip_npz.py already burns the arm label, frame index and per-frame
-    # violation count into each panel, so drawtext here would double up. Set
-    # LABELS=1 to add it anyway (e.g. for panels rendered with --no-hud).
+    # run_singleview_inference.py draws no caption, so label each panel here.
+    # LABELS_ON=0 turns it off (e.g. if this ffmpeg lacks libfreetype).
     FILTER=""
     for ((i = 0; i < n; i++)); do
         FILTER+="[${i}:v]scale=-2:${PANEL_H},"
-        if [[ "${LABELS_ON:-0}" == "1" ]]; then
+        if [[ "${LABELS_ON:-1}" == "1" ]]; then
             FILTER+="drawtext=text='${LABELS[$i]//\'/}':x=10:y=10:fontsize=22:fontcolor=white:"
             FILTER+="box=1:boxcolor=black@0.6:boxborderw=6,"
         fi
@@ -245,7 +205,7 @@ for STEM in "${CLIP_STEMS[@]}"; do
     else
         echo "  [FAILED] $STEM" >&2
         echo "           If the error mentions drawtext, this ffmpeg lacks libfreetype —" >&2
-        echo "           drop LABELS_ON (the panels already carry their own HUD), or" >&2
+        echo "           set LABELS_ON=0 to drop the captions, or" >&2
         echo "           conda install -c conda-forge ffmpeg, which includes it." >&2
     fi
 done
@@ -253,8 +213,7 @@ done
 if (( PRODUCED == 0 )); then
     echo >&2
     echo "ERROR: no comparison video was written." >&2
-    echo "       Every segment had fewer than 2 arms rendered against the current" >&2
-    echo "       segments.json. See the per-segment lines above." >&2
+    echo "       Every clip had fewer than 2 arms rendered. See the lines above." >&2
     exit 1
 fi
 
@@ -262,13 +221,12 @@ echo
 echo "=================================================================="
 echo " $PRODUCED comparison video(s) in $OUT_DIR"
 echo
-echo " Each panel carries its own HUD: arm label, frame index, and how many of the"
-echo " 129 authored joint-axes are out of range IN THAT FRAME. Watch that counter"
-echo " across panels — it is the same quantity the violation table aggregates."
+echo " Panels are labelled by arm."
 echo
 echo " What to look for, in the order it is worth looking:"
-echo "   1. The out-of-range counter falling from left to right while the pose"
-echo "      still tracks the animal — that is the prior working."
+echo "   1. A leg segment that folds the wrong way in the reference panel and"
+echo "      stops doing so as lambda rises, while the mesh still sits on the"
+echo "      animal — that is the prior working."
 echo "   2. Legs that stop moving, or a body that drifts off the animal, at the"
 echo "      HIGH end of the sweep — that is the prior overriding the data, and it"
 echo "      should show up as worse MPJPE/PCK in sweep/sweep.md too."

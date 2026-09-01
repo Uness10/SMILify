@@ -4,118 +4,104 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --time=01:00:00
+#SBATCH --time=04:00:00
 #SBATCH --job-name=jl_render
-#SBATCH --array=0-4
+#SBATCH --array=0-5
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 
 # ---------------------------------------------------------------------------
-# JOINT-LIMIT PRIOR STUDY — qualitative renders (RWTH CLAIX-2023, c23g)
+# JOINT-LIMIT PRIOR STUDY — qualitative renders (RWTH CLAIX)
 #
-# Renders each arm's ALREADY-EXPORTED poses (prior_study_results/<arm>/clip_*.npz,
-# written by export_poses.py during the eval stage) over the SAME frame windows,
-# so the change the prior makes can be judged by eye.
+# Uses the ESTABLISHED inference renderer,
+#   smal_fitter/neuralSMIL/run_singleview_inference.py
+# on raw video clips: every consecutive frame, at the clip's own frame rate,
+# with the fitted mesh drawn over the actual footage.
 #
-#   task  arm                    npz
+#   task  arm                    checkpoint
 #   ----  ---------------------  --------------------------------------------
-#     0   sv_reference           prior_study_results/sv_reference/clip_sv_reference.npz
-#     1   sv_constrained @ 1e-4  prior_study_results/lam1e-4/sv_constrained/clip_sv_constrained.npz
-#     2   sv_constrained @ 1e-3  prior_study_results/lam1e-3/sv_constrained/clip_sv_constrained.npz
-#     3   sv_constrained @ 1e-2  prior_study_results/lam1e-2/sv_constrained/clip_sv_constrained.npz
-#     4   sv_constrained @ 1e-1  prior_study_results/lam1e-1/sv_constrained/clip_sv_constrained.npz
-#     5   sv_constrained @ 100   prior_study_results/sv_constrained/clip_sv_constrained.npz
-#                                (the EARLIER w=100 run — pre-sweep flat layout,
-#                                 and NOT epoch-matched to tasks 1-4)
+#     0   sv_reference           $SV_REF (downloaded, unmodified)
+#     1   sv_constrained @ 1e-4  $RUNS_ROOT/singleview_lam1e-4/checkpoints/best_model.pth
+#     2   sv_constrained @ 1e-3  $RUNS_ROOT/singleview_lam1e-3/checkpoints/best_model.pth
+#     3   sv_constrained @ 1e-2  $RUNS_ROOT/singleview_lam1e-2/checkpoints/best_model.pth
+#     4   sv_constrained @ 1e-1  $RUNS_ROOT/singleview_lam1e-1/checkpoints/best_model.pth
+#     5   sv_constrained @ 100   $SV_CON100 (the earlier w=100 run, if kept)
 #
-# Tasks 0 and 5 are the two arms that exist before the sweep has trained, so
-# `--array=0,5` gives a reference-vs-w=100 comparison today.
+# RUNS_ROOT must match the value prepare_lambda_sweep.sh was run with, exactly
+# as for the eval array.
 #
 # ---------------------------------------------------------------------------
-# WHY THE .npz AND NOT THE RAW CLIPS
+# WHY RAW CLIPS AND NOT THE EXPORTED POSES
 # ---------------------------------------------------------------------------
-# The .npz files hold the predictions the study actually SCORED — same test
-# split, same order, same frames behind every MPJPE / PCK / violation number.
-# Rendering them means the pictures and the tables describe one thing. Re-running
-# inference on raw video would answer a different question (how the model behaves
-# on those clips) and would line up with nothing in the results.
+# An earlier version of this job rendered `prior_study_results/<arm>/clip_*.npz`
+# — the pose export the benchmark scores. That was a mistake and the output was
+# rightly called out as odd. Three reasons it cannot show locomotion:
 #
-# It is also far cheaper: no checkpoint, no dataset, no backbone — just SMAL
-# forward plus rasterisation, minutes per arm instead of hours.
+#   1. Those poses cover the TEST SPLIT ONLY, ~10 % of view-items. Consecutive
+#      exported rows are ~7 recording frames apart, so any playback skips 6 of
+#      every 7 frames — the "~5 fps with loads of skipped frames" symptom.
+#   2. The single-view items are enumerated sample-major over (sample, view) and
+#      the camera-centric split keeps whole samples together, so raw export order
+#      cycles the cameras around one instant rather than advancing time.
+#   3. There is no footage behind the mesh, so there is no reference against
+#      which a leg is visibly in the wrong place.
+#
+# Rendering the clips directly fixes all three: every frame, in order, at native
+# frame rate, over the image the model was looking at.
+#
+# The scored poses remain the right input for the NUMBERS
+# (analyze_baseline_pose.py / compare_arms.py). They are simply not a video.
+# scripts/prior_study/pick_segments.py and render_clip_npz.py were written for
+# that approach and are SUPERSEDED — delete them.
 #
 # ---------------------------------------------------------------------------
-# BEFORE SUBMITTING — pick the windows ONCE, on the login node
+# WHICH CLIPS
 # ---------------------------------------------------------------------------
-# Every arm must render the SAME frames or the grid is not a comparison. The
-# windows are chosen once, from the REFERENCE arm, and shared:
+# Give the clips one of three ways (checked in this order):
 #
-#   python scripts/prior_study/pick_segments.py \
-#       --npz  prior_study_results/sv_reference/clip_sv_reference.npz \
-#       --dataset SMILySTICKS_centred_reprojected_FIXED.h5 \
-#       --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
-#       --segments 3 --length 300 --select worst --one-per-camera \
-#       --out prior_study_results/renders/segments.json
+#   CLIP_LIST=clips.txt      a file with one absolute clip path per line
+#                            (lines starting with # are ignored)
+#   CLIPS="a.mp4,b.mp4"      comma-separated paths
+#   CLIPS_DIR=/path/to/clips all *.mp4/*.avi/*.mov/*.mkv directly inside it,
+#                            capped at MAX_CLIPS (default 3)
 #
-# --dataset is NOT optional in practice. Consecutive rows of the .npz are one
-# instant seen from several cameras, not consecutive time: the single-view items
-# are enumerated sample-major over (sample, view) and the camera-centric split
-# keeps whole samples together, so raw row order cycles the cameras and the
-# animal appears to spin. pick_segments.py needs the HDF5 to undo that
-# interleave and emit real per-camera tracks in frame order.
-#
-# --select worst aims the renders at the windows where the reference violates
-# the authored limits most — the frames the prior is supposed to fix. A window
-# where the reference was already in range cannot show the prior doing anything.
-# Use --select even for an unbiased look alongside it.
-#
-# CPU only, seconds. This job refuses to start if segments.json is missing,
-# rather than inventing its own windows.
+# Pick clips with clear walking bouts. A standing animal shows nothing either
+# way, and the point is to see whether a leg segment folds somewhere a stick
+# insect's leg cannot.
 #
 # ---------------------------------------------------------------------------
 # SUBMIT
 # ---------------------------------------------------------------------------
-#   sbatch --array=0-4 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
+# SMOKE TEST FIRST — one arm, 200 frames, with individual frames written out:
 #
-# The reference alone, as soon as its eval has run (no training needed):
-#   sbatch --array=0 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
-#
-# The earlier w=100 arm, which is already on disk:
-#   sbatch --array=5 --account=rwth2151 hpc_files/rwth/run_prior_study_render.sbatch
-#   bash scripts/prior_study/stack_renders.sh      # -> reference | w=100
-#
-# An arm in some other location entirely (ARM names the output folder, NPZ the
-# input, LABEL the burned-in caption — all three override any task's defaults):
-#   ARM=lam100_rerun NPZ=some/other/clip.npz LABEL="lambda = 100 (rerun)" \
-#     sbatch --array=5 --account=rwth2151 --export=ALL,ARM,NPZ,LABEL \
+#   SV_REF=... CLIPS_DIR=$HPCWORK/clips MAX_FRAMES=200 SAVE_FRAMES=1 \
+#     sbatch --array=0 --account=rwth2151 \
+#       --export=ALL,SV_REF,CLIPS_DIR,MAX_FRAMES,SAVE_FRAMES,ENV_PREFIX \
 #       hpc_files/rwth/run_prior_study_render.sbatch
 #
-# Chained after the eval array:
-#   sbatch --array=0-4 --dependency=afterany:$eid --account=rwth2151 \
+# Then LOOK AT THE FRAMES in <out>/frames/ before spending the rest. Does the
+# mesh track the animal, do the legs swing through a stride? That check is the
+# one the .npz renders could not answer, and it costs one GPU-minute.
+#
+# All arms, full clips:
+#
+#   RUNS_ROOT=$HPCWORK/smilify_runs SV_REF=... CLIPS_DIR=... \
+#     sbatch --array=0-4 --account=rwth2151 \
+#       --export=ALL,SV_REF,CLIPS_DIR,RUNS_ROOT,ENV_PREFIX \
 #       hpc_files/rwth/run_prior_study_render.sbatch
 #
-# Then stack them into one labelled video per window (login node, ffmpeg):
+# Then stack the arms side by side (login node, ffmpeg):
 #   bash scripts/prior_study/stack_renders.sh
 #
 # Env knobs:
-#   SEGMENTS_FILE  default: prior_study_results/renders/segments.json
-#   RENDER_ROOT    output root (default: prior_study_results/renders)
-#   CAMERA         orbit | predicted        (default: orbit)
-#   GLOBAL_ROT     zero | keep | auto      (default: auto = zero under orbit).
-#                  These are camera-centric checkpoints, so the root rotation is
-#                  the animal's orientation relative to the camera that saw that
-#                  row. Zeroing it puts every frame in a canonical body frame and
-#                  costs nothing: the authored .pkl pins the root to [0,0] and
-#                  every violation statistic already excludes it. GLOBAL_ROT=keep
-#                  shows the predicted turning — only meaningful now that the
-#                  segments are single-camera tracks.
-#   FPS            output fps (default: the sidecar's, 30). The test split is
-#                  ~10% of view-items, so a track is time-sparse and 30 fps plays
-#                  ~10x faster than life; pick_segments.py prints the fps that
-#                  gives approximately real-time motion.
-#   IMAGE_SIZE     square px               (default: 512)
-#   ELEV / AZIM    orbit camera angles     (default: 15 / 45)
-#   SCALING        auto|mesh_scale|ue|none (default: auto)
-#   BATCH_SIZE     frames per render call  (default: 16)
+#   MAX_FRAMES      frames per clip, -1 = all           (default: -1)
+#   FPS             output fps                          (default: the clip's own)
+#   CROP_MODE       centred | default | bbox_crop       (default: centred)
+#   EXPORT_MODE     overlay | side_by_side              (default: side_by_side)
+#   CAM_SMOOTHING   camera moving-average window        (default: 0 = off)
+#   SAVE_FRAMES=1   also write individual frame PNGs
+#   SLEAP_PROJECT   required when CROP_MODE=bbox_crop
+#   RENDER_ROOT     output root (default: prior_study_results/renders)
 #
 # NOTE: intentionally no `set -u` (conda activate hooks reference unset vars).
 set -eo pipefail
@@ -130,32 +116,29 @@ fi
 LAMBDAS=(1e-4 1e-3 1e-2 1e-1)
 RESULTS_ROOT="${RESULTS_ROOT:-prior_study_results}"
 RENDER_ROOT="${RENDER_ROOT:-$RESULTS_ROOT/renders}"
+# Must match the RUNS_ROOT prepare_lambda_sweep.sh used — same contract as the
+# eval array.
+RUNS_ROOT="${RUNS_ROOT:-runs}"
 
 TASK="${SLURM_ARRAY_TASK_ID:-0}"
 if (( TASK == 0 )); then
     ARM="${ARM:-sv_reference}"
-    NPZ="${NPZ:-$RESULTS_ROOT/sv_reference/clip_sv_reference.npz}"
-    LABEL="${LABEL:-reference (no limit prior)}"
+    CHECKPOINT="${SV_REF:-}"
+    WHAT="downloaded single-view checkpoint (set SV_REF=<path>)"
 elif (( TASK >= 1 && TASK <= 4 )); then
     LAMBDA="${LAMBDAS[$((TASK - 1))]}"
     ARM="${ARM:-lam${LAMBDA}}"
-    NPZ="${NPZ:-$RESULTS_ROOT/lam${LAMBDA}/sv_constrained/clip_sv_constrained.npz}"
-    LABEL="${LABEL:-lambda = ${LAMBDA}}"
+    CHECKPOINT="${SV_CON:-$RUNS_ROOT/singleview_lam${LAMBDA}/checkpoints/best_model.pth}"
+    WHAT="single-view continuation at lambda=$LAMBDA"
 elif (( TASK == 5 )); then
-    # The EARLIER w=100 run, which predates the sweep and therefore lives in the
-    # flat pre-sweep layout (prior_study_results/sv_constrained/) rather than
-    # under a lam<L>/ root. Kept as its own task so the one arm that already
-    # exists can be rendered and compared against the reference today, without
-    # waiting for the sweep to train.
-    #
-    # It is NOT epoch-matched to the sweep: it continued the reference for the
-    # handful of epochs that fit its old 12 h budget, while every sweep arm gets
-    # EXTRA_EPOCHS (50). The label carries that so it cannot be forgotten once
-    # the panel is sitting in a grid next to four arms that trained 6x longer.
+    # The earlier w=100 run. NOT epoch-matched to the sweep — it continued the
+    # reference for the few epochs its old 12 h budget allowed, while every
+    # sweep arm gets EXTRA_EPOCHS. Read its panel against sv_reference, not
+    # against the sweep arms.
     LAMBDA="100"
     ARM="${ARM:-lam100}"
-    NPZ="${NPZ:-$RESULTS_ROOT/sv_constrained/clip_sv_constrained.npz}"
-    LABEL="${LABEL:-lambda = 100  [older run, fewer epochs]}"
+    CHECKPOINT="${SV_CON100:-$RUNS_ROOT/singleview_constrained/checkpoints/best_model.pth}"
+    WHAT="the earlier w=100 continuation (set SV_CON100=<path>)"
 else
     echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-5)." >&2
     echo "       0 = reference, 1-4 = the lambda sweep, 5 = the earlier w=100 arm." >&2
@@ -168,15 +151,15 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
 REPO_DIR="${REPO_DIR:-$SLURM_SUBMIT_DIR}"
+
 # --- resolve the conda env ---------------------------------------------------
 # ENV_PREFIX is a full env PREFIX (a directory), not a name, and the layout
 # differs per install: a conda rooted at $HPCWORK puts envs in `conda/envs/`,
-# while pointing `envs_dirs` at $HPCWORK gives `conda_envs/`. Guessing one and
-# letting `conda activate` fail burns a queue slot for a one-line error, so
-# probe the known layouts and check bin/python actually exists first.
+# while pointing `envs_dirs` at $HPCWORK gives `conda_envs/`. Probe the known
+# layouts and check bin/python exists before `conda activate` fails obscurely.
 if [[ -z "${ENV_PREFIX:-}" ]]; then
-    for cand in "$HPCWORK/conda/envs/pytorch3d" \
-                "$HPCWORK/conda_envs/pytorch3d" \
+    for cand in "$HPCWORK/conda_envs/pytorch3d" \
+                "$HPCWORK/conda/envs/pytorch3d" \
                 "$HPCWORK/miniconda3/envs/pytorch3d" \
                 "$HPCWORK/miniforge3/envs/pytorch3d" \
                 "$HOME/.conda/envs/pytorch3d"; do
@@ -212,102 +195,170 @@ fi
 source "$CONDA_SH"
 conda activate "$ENV_PREFIX"
 
-# Run from the repo root: SMAL_FILE and the results tree are addressed relatively.
+# MUST run from the repo root. run_singleview_inference.py re-derives the SMIL
+# model from the path stored inside the checkpoint's own config
+# (apply_smal_file_override -> open(smal_file)), and that path is RELATIVE
+# ("3D_model_prep/...pkl"). From any other directory it raises FileNotFoundError
+# before the first frame is decoded. There is no --smal_file override on this
+# entry point, unlike run_multiview_inference.py.
 cd "$REPO_DIR"
 
-SEGMENTS_FILE="${SEGMENTS_FILE:-$RENDER_ROOT/segments.json}"
-SMAL_FILE="${SMAL_FILE:-3D_model_prep/SMILy_STICK_limits_authored.pkl}"
-DATASET="${DATASET:-SMILySTICKS_centred_reprojected_FIXED.h5}"
-CAMERA="${CAMERA:-orbit}"
-GLOBAL_ROT="${GLOBAL_ROT:-auto}"
-IMAGE_SIZE="${IMAGE_SIZE:-512}"
-ELEV="${ELEV:-15}"
-AZIM="${AZIM:-45}"
-SCALING="${SCALING:-auto}"
-BATCH_SIZE="${BATCH_SIZE:-16}"
+MAX_FRAMES="${MAX_FRAMES:--1}"
+CROP_MODE="${CROP_MODE:-centred}"
+EXPORT_MODE="${EXPORT_MODE:-side_by_side}"
+CAM_SMOOTHING="${CAM_SMOOTHING:-0}"
 OUT_DIR="$RENDER_ROOT/$ARM"
+
+# --- resolve the checkpoint --------------------------------------------------
+if [[ -z "$CHECKPOINT" ]]; then
+    echo "ERROR: no checkpoint for arm '$ARM'." >&2
+    echo "       This arm needs $WHAT." >&2
+    exit 1
+fi
+# best_model.pth is only written when val_loss beats the value RESTORED from the
+# resumed checkpoint, so a short continuation can finish without ever writing
+# one. Same fallback run_prior_study.sh applies, so the render and the metrics
+# describe the SAME weights.
+if [[ ! -e "$CHECKPOINT" && "$(basename "$CHECKPOINT")" == "best_model.pth" ]]; then
+    CKPT_DIR="$(dirname "$CHECKPOINT")"
+    FALLBACK="$(ls -t "$CKPT_DIR"/checkpoint_epoch_*.pth 2>/dev/null | head -n1 || true)"
+    if [[ -n "$FALLBACK" ]]; then
+        echo "  [note] $CHECKPOINT not found (val loss never beat the resumed best)."
+        echo "         Falling back to newest periodic checkpoint: $FALLBACK"
+        CHECKPOINT="$FALLBACK"
+    fi
+fi
+if [[ ! -e "$CHECKPOINT" ]]; then
+    echo "ERROR: checkpoint not found: $CHECKPOINT" >&2
+    if (( TASK >= 1 && TASK <= 4 )); then
+        echo "       RUNS_ROOT is '$RUNS_ROOT'. It must match the value" >&2
+        echo "       prepare_lambda_sweep.sh was run with, or this arm has not trained yet." >&2
+    fi
+    exit 1
+fi
+
+# --- resolve the clip list ---------------------------------------------------
+CLIP_PATHS=()
+if [[ -n "${CLIP_LIST:-}" ]]; then
+    [[ -f "$CLIP_LIST" ]] || { echo "ERROR: CLIP_LIST not found: $CLIP_LIST" >&2; exit 1; }
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        CLIP_PATHS+=("$line")
+    done < "$CLIP_LIST"
+elif [[ -n "${CLIPS:-}" ]]; then
+    IFS=',' read -r -a CLIP_PATHS <<< "$CLIPS"
+elif [[ -n "${CLIPS_DIR:-}" ]]; then
+    [[ -d "$CLIPS_DIR" ]] || { echo "ERROR: CLIPS_DIR not a directory: $CLIPS_DIR" >&2; exit 1; }
+    MAX_CLIPS="${MAX_CLIPS:-3}"
+    while IFS= read -r f; do CLIP_PATHS+=("$f"); done < <(
+        find "$CLIPS_DIR" -maxdepth 1 -type f \
+             \( -iname '*.mp4' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.mkv' \) \
+        | sort | head -n "$MAX_CLIPS"
+    )
+else
+    echo "ERROR: no clips given. Set one of CLIP_LIST=<file>, CLIPS=<a.mp4,b.mp4>," >&2
+    echo "       or CLIPS_DIR=<folder>. See the header of this file." >&2
+    exit 1
+fi
+
+(( ${#CLIP_PATHS[@]} > 0 )) || { echo "ERROR: clip list resolved to zero files." >&2; exit 1; }
+
+# Fail before touching the GPU if any clip is missing — a half-rendered arm
+# makes an uneven comparison grid that is easy to misread.
+missing=0
+for c in "${CLIP_PATHS[@]}"; do
+    [[ -f "$c" ]] || { echo "  [MISSING] $c" >&2; missing=1; }
+done
+(( missing == 0 )) || { echo "One or more clips are missing. Aborting." >&2; exit 1; }
+
+if [[ "$CROP_MODE" == "bbox_crop" && -z "${SLEAP_PROJECT:-}" ]]; then
+    echo "ERROR: CROP_MODE=bbox_crop needs SLEAP_PROJECT=<sleap project dir>." >&2
+    exit 1
+fi
+
+mkdir -p "$OUT_DIR"
 
 echo "=================================================================="
 echo "Job ${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID} task $TASK on $(hostname) — $(date)"
-echo "  arm      : $ARM — $LABEL"
-echo "  npz      : $NPZ"
-echo "  segments : $SEGMENTS_FILE"
-echo "  camera   : $CAMERA   image size ${IMAGE_SIZE}px"
-echo "  out dir  : $OUT_DIR"
+echo "  arm        : $ARM — $WHAT"
+echo "  renderer   : smal_fitter.neuralSMIL.run_singleview_inference (established)"
+echo "  checkpoint : $CHECKPOINT"
+echo "  runs root  : $RUNS_ROOT"
+echo "  clips      : ${#CLIP_PATHS[@]}"
+printf '                 %s\n' "${CLIP_PATHS[@]}"
+echo "  out dir    : $OUT_DIR"
+echo "  max frames : $MAX_FRAMES per clip (-1 = all)"
+echo "  crop mode  : $CROP_MODE   (MUST match the training preprocessing)"
+echo "  export mode: $EXPORT_MODE"
+echo "  save frames: ${SAVE_FRAMES:-0}"
 echo "=================================================================="
-
-# --- the two things that make this job produce a non-comparison --------------
-if [[ ! -f "$SEGMENTS_FILE" ]]; then
-    echo "ERROR: $SEGMENTS_FILE not found." >&2
-    echo "       Every arm must render the SAME windows, so they are chosen once on the" >&2
-    echo "       login node before any render job runs:" >&2
-    echo >&2
-    echo "         python scripts/prior_study/pick_segments.py \\" >&2
-    echo "             --npz $RESULTS_ROOT/sv_reference/clip_sv_reference.npz \\" >&2
-    echo "             --dataset $DATASET \\" >&2
-    echo "             --smal-file $SMAL_FILE \\" >&2
-    echo "             --segments 3 --length 300 --select worst --one-per-camera \\" >&2
-    echo "             --out $SEGMENTS_FILE" >&2
-    echo >&2
-    echo "       --dataset matters: without it the segments are raw npz row windows," >&2
-    echo "       which interleave the cameras and make the animal appear to spin." >&2
-    exit 1
-fi
-
-# A segments.json built without --dataset renders a spin, not motion. Refuse by
-# default rather than producing a video that misleads at a glance.
-if ! python -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('time_ordered') else 1)" \
-        "$SEGMENTS_FILE"; then
-    if [[ "${ALLOW_UNORDERED_SEGMENTS:-0}" == "1" ]]; then
-        echo "[render] WARNING: segments are NOT time-ordered (ALLOW_UNORDERED_SEGMENTS=1)." >&2
-        echo "         The output shows the camera jumping around the animal, not the animal moving." >&2
-    else
-        echo "ERROR: $SEGMENTS_FILE was built without --dataset, so its segments are raw npz" >&2
-        echo "       row windows. Consecutive rows are one instant seen from several cameras," >&2
-        echo "       so the render would spin the animal instead of animating it." >&2
-        echo "       Re-run pick_segments.py with --dataset $DATASET, or set" >&2
-        echo "       ALLOW_UNORDERED_SEGMENTS=1 if you really want the raw ordering." >&2
-        exit 1
-    fi
-fi
-
-if [[ ! -f "$NPZ" ]]; then
-    echo "ERROR: exported poses not found: $NPZ" >&2
-    echo "       This arm has not been evaluated yet — run_prior_study.sh writes the" >&2
-    echo "       clip_*.npz during the eval stage. Submit the matching eval task first:" >&2
-    if (( TASK == 5 )); then
-        echo "         This is the PRE-SWEEP w=100 arm, expected in the flat layout" >&2
-        echo "         $RESULTS_ROOT/sv_constrained/. If your copy lives elsewhere, point" >&2
-        echo "         at it directly rather than moving files:" >&2
-        echo "           NPZ=<path to clip_sv_constrained.npz> sbatch --array=5 \\" >&2
-        echo "             --account=rwth2151 --export=ALL,NPZ \\" >&2
-        echo "             hpc_files/rwth/run_prior_study_render.sbatch" >&2
-    else
-        echo "         sbatch --array=$TASK --account=rwth2151 --export=ALL,SV_REF \\" >&2
-        echo "             hpc_files/rwth/run_prior_study_eval.sbatch" >&2
-    fi
-    exit 1
-fi
-
 python -c "import torch; print(f'  torch: {torch.__version__}, {torch.cuda.device_count()} GPU(s) visible')"
 
-python scripts/prior_study/render_clip_npz.py \
-    --npz "$NPZ" \
-    --smal-file "$SMAL_FILE" \
-    --segments-file "$SEGMENTS_FILE" \
-    --out-dir "$OUT_DIR" \
-    --label "$LABEL" \
-    --camera "$CAMERA" \
-    --image-size "$IMAGE_SIZE" \
-    --elev "$ELEV" --azim "$AZIM" \
-    --scaling "$SCALING" \
-    --global-rot "$GLOBAL_ROT" \
-    ${FPS:+--fps "$FPS"} \
-    --batch-size "$BATCH_SIZE"
+# Provenance. Without it a folder of MP4s is indistinguishable from any other
+# folder of MP4s three weeks later.
+python - "$OUT_DIR/render.json" "$ARM" "$CHECKPOINT" "${LAMBDA:-0}" "$CROP_MODE" "$EXPORT_MODE" <<'PY'
+import json, sys, torch
+out, arm, ckpt, lam, crop, mode = sys.argv[1:7]
+epoch = "?"
+try:
+    epoch = torch.load(ckpt, map_location="cpu", weights_only=False).get("epoch", "?")
+except Exception as e:      # noqa: BLE001 - provenance must never fail the render
+    print(f"  [warn] could not read epoch from checkpoint: {e}")
+json.dump({"arm": arm, "renderer": "run_singleview_inference.py", "checkpoint": ckpt,
+           "checkpoint_epoch": epoch, "joint_limit_weight": float(lam),
+           "crop_mode": crop, "video_export_mode": mode},
+          open(out, "w"), indent=2)
+print(f"  provenance -> {out} (checkpoint epoch {epoch})")
+PY
+
+# --- render every clip -------------------------------------------------------
+FAILED=()
+for CLIP in "${CLIP_PATHS[@]}"; do
+    STEM="$(basename "${CLIP%.*}")"
+    echo
+    echo "------------------------------------------------------------------"
+    echo " [$ARM] $STEM"
+    echo "------------------------------------------------------------------"
+
+    EXTRA=()
+    [[ -n "${FPS:-}" ]]              && EXTRA+=(--fps "$FPS")
+    [[ "${SAVE_FRAMES:-0}" == "1" ]] && EXTRA+=(--save_frames)
+    [[ -n "${SLEAP_PROJECT:-}" ]]    && EXTRA+=(--sleap_project "$SLEAP_PROJECT")
+    [[ -n "${SLEAP_CAMERA:-}" ]]     && EXTRA+=(--sleap_camera "$SLEAP_CAMERA")
+
+    # --export_animation writes <stem>.npz + .json with the RAW (pre-smoothing)
+    # parameters, so the same clip can be re-plotted against the authored limits
+    # later without re-running the GPU.
+    if python -m smal_fitter.neuralSMIL.run_singleview_inference \
+        --checkpoint "$CHECKPOINT" \
+        --input_video "$CLIP" \
+        --output_folder "$OUT_DIR" \
+        --crop_mode "$CROP_MODE" \
+        --video_export_mode "$EXPORT_MODE" \
+        --max_frames "$MAX_FRAMES" \
+        --camera_smoothing "$CAM_SMOOTHING" \
+        --export_animation "$OUT_DIR/${STEM}_anim" \
+        "${EXTRA[@]}" 2>&1 | tee "$OUT_DIR/${STEM}_render.log"
+    then
+        echo "  -> $OUT_DIR/${STEM}_inference.mp4"
+    else
+        echo "  [FAILED] $STEM — see $OUT_DIR/${STEM}_render.log" >&2
+        FAILED+=("$STEM")
+    fi
+done
 
 echo
 echo "=================================================================="
-echo " $ARM rendered into $OUT_DIR"
+if (( ${#FAILED[@]} > 0 )); then
+    echo " $ARM: ${#FAILED[@]} of ${#CLIP_PATHS[@]} clip(s) FAILED: ${FAILED[*]}" >&2
+    exit 1
+fi
+echo " $ARM: rendered ${#CLIP_PATHS[@]} clip(s) into $OUT_DIR"
+if [[ "${SAVE_FRAMES:-0}" == "1" ]]; then
+    echo " Individual frames in $OUT_DIR/frames/ — check a few in sequence before"
+    echo " trusting the video: the mesh should track the animal and the legs should"
+    echo " swing, not jitter in place."
+fi
 echo
 echo " Once every arm has finished, stack them on the login node:"
 echo "   bash scripts/prior_study/stack_renders.sh"
