@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "model_id": null,
-  "source_checkpoint": "singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth",
+  "source_checkpoint": "/home/mkd34160/test/SMILify/singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth",
   "source_input": "SMILySTICKS_centred_reprojected_FIXED.h5[test:singleview]",
   "n_frames": 50630,
   "n_joints": 55,

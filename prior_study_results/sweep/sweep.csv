@@ -1,0 +1,3 @@
+mode,lambda,label,checkpoint_epoch,n_axes,violating_axes,mean_viol_rate,mean_overshoot_deg,max_overshoot_deg,mpjpe_mm,median_mpjpe_mm,pck_5px_native,pck_5px_input,checkpoint,dir
+multiview,0.0,mv_reference,345,162,76,13.959541871188462,2.6468550795493555,56.57237881016064,0.9639,0.8382,,,SMILySTICKS_ViT_model.pth,prior_study_results/mv_reference
+singleview,0.0,sv_reference,386,162,96,14.760535767843677,2.531032391206795,77.69861153568446,1.092,0.9227,,,/home/mkd34160/test/SMILify/singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth,prior_study_results/sv_reference
