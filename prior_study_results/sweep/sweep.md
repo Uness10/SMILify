@@ -10,6 +10,10 @@ reference row as context.
 |---|---|---|---|---|---|---|
 | multiview | 0 | 76/162 | 13.96 | 2.65 | 0.96 | — |
 | singleview | 0 | 96/162 | 14.76 | 2.53 | 1.09 | — |
+| singleview | 0.0001 | 89/162 | 2.73 | 0.14 | 0.97 | — |
+| singleview | 0.001 | 85/162 | 0.26 | 0.00 | 1.01 | — |
+| singleview | 0.01 | 73/162 | 0.02 | 0.00 | 1.02 | — |
+| singleview | 0.1 | 41/162 | 0.00 | 0.00 | 1.05 | — |
 
 Lower is better for violations, overshoot and MPJPE; higher for PCK.
 A lambda that lowers violations while leaving MPJPE/PCK flat is the win

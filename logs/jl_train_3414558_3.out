@@ -2252,3 +2252,882 @@ Epoch 431:
     silhouette     : 0.000000 / 0.000000
     trans          : 0.000000 / 0.000000
   Checkpoint saved at epoch 431
+
+WARNING: Near-zero total loss detected: 9.97e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.017479 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.117085 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.48e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017117 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.119582 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.91e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.017153 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118729 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.38e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.017179 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118732 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.50e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.017213 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.112505 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+Epoch 432:
+  Train Loss = 0.000003, Val Loss = 0.000002, LR = 1.00e-05
+  Parameter Errors (Train / Val):
+    betas          : 0.000072 / 0.000010
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.104111 / 0.103166
+    joint_limit_regularization: 0.000000 / 0.000000
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000017 / 0.000014
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.021631 / 0.021759
+    limb_trans_regularization: 0.000000 / 0.000000
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+WARNING: Near-zero total loss detected: 9.46e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.017296 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.117655 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.87e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.017086 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.115787 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.48e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000001 (weight=0.0005)
+    limb_scale_regularization: 0.017184 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.119705 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.09e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.017164 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.117149 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.48e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.017099 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.119040 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.85e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.017132 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118245 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+Epoch 433:
+  Train Loss = 0.000003, Val Loss = 0.000002, LR = 1.00e-05
+  Parameter Errors (Train / Val):
+    betas          : 0.000054 / 0.000010
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.103197 / 0.104035
+    joint_limit_regularization: 0.000000 / 0.000000
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000017 / 0.000014
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.021697 / 0.021720
+    limb_trans_regularization: 0.000000 / 0.000000
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 433
+
+WARNING: Near-zero total loss detected: 9.26e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.017281 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.117776 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.96e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.017081 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.115752 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.33e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017084 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.119167 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.94e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017027 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.117205 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.62e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000009 (weight=0.0005)
+    limb_scale_regularization: 0.017134 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118919 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 8.92e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.016855 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118887 (weight=2e-07)
+    keypoint_2d: 0.000004 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+Epoch 434:
+  Train Loss = 0.000003, Val Loss = 0.000002, LR = 1.00e-05
+  Parameter Errors (Train / Val):
+    betas          : 0.000168 / 0.000010
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.104193 / 0.104207
+    joint_limit_regularization: 0.000000 / 0.000000
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000017 / 0.000014
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.021708 / 0.021660
+    limb_trans_regularization: 0.000000 / 0.000000
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+WARNING: Near-zero total loss detected: 9.39e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017313 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118077 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.85e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017248 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.115935 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.11e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017130 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118341 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.71e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000004 (weight=0.0005)
+    limb_scale_regularization: 0.016931 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.116156 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.99e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000007 (weight=0.0005)
+    limb_scale_regularization: 0.017244 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.118374 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 8.58e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.016850 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.115157 (weight=2e-07)
+    keypoint_2d: 0.000004 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+Epoch 435:
+  Train Loss = 0.000003, Val Loss = 0.000002, LR = 1.00e-05
+  Parameter Errors (Train / Val):
+    betas          : 0.000056 / 0.000011
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.102674 / 0.104169
+    joint_limit_regularization: 0.000000 / 0.000000
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000017 / 0.000014
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.021682 / 0.021766
+    limb_trans_regularization: 0.000000 / 0.000000
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 435
+
+WARNING: Near-zero total loss detected: 9.46e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017064 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.111884 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.68e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017197 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.116757 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.37e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017247 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.114808 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.84e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000003 (weight=0.0005)
+    limb_scale_regularization: 0.017046 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.113302 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+WARNING: Near-zero total loss detected: 9.55e-07
+  Valid samples: 16/16
+  Dataset composition: {'unknown': 16}
+  Availability masks present: True
+  Availability summary:
+    global_rot: 0/16 samples have real data
+    joint_rot: 0/16 samples have real data
+    betas: 16/16 samples have real data
+    trans: 0/16 samples have real data
+    fov: 0/16 samples have real data
+    cam_rot: 0/16 samples have real data
+    cam_trans: 0/16 samples have real data
+    log_beta_scales: 0/16 samples have real data
+    betas_trans: 0/16 samples have real data
+    keypoint_2d: 16/16 samples have real data
+    keypoint_3d: 16/16 samples have real data
+    silhouette: 0/16 samples have real data
+  Loss weights: keypoint_2d=0.1, betas=0.0005
+  need_keypoint_loss=True, need_silhouette_loss=False
+  Loss components (non-zero only):
+    betas: 0.000002 (weight=0.0005)
+    limb_scale_regularization: 0.017056 (weight=1e-05)
+    limb_trans_regularization: 0.000000 (weight=0.5)
+    joint_angle_regularization: 0.116542 (weight=2e-07)
+    keypoint_2d: 0.000005 (weight=0.1)
+    keypoint_3d: 0.000000 (weight=2)
+
+Epoch 436:
+  Train Loss = 0.000003, Val Loss = 0.000002, LR = 1.00e-05
+  Parameter Errors (Train / Val):
+    betas          : 0.000053 / 0.000010
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.104285 / 0.103355
+    joint_limit_regularization: 0.000000 / 0.000000
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000017 / 0.000014
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.021575 / 0.021756
+    limb_trans_regularization: 0.000000 / 0.000000
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+Training completed!
+Evaluating on test set...
+Test Loss: 0.000002
+Test Parameter Errors:
+  betas          : 0.000010
+  betas_trans    : 0.000000
+  cam_rot        : 0.000000
+  cam_trans      : 0.000000
+  fov            : 0.000000
+  global_rot     : 0.000000
+  joint_angle_regularization: 0.103189
+  joint_limit_regularization: 0.000000
+  joint_rot      : 0.000000
+  keypoint_2d    : 0.000014
+  keypoint_3d    : 0.000000
+  limb_scale_regularization: 0.021619
+  limb_trans_regularization: 0.000000
+  log_beta_scales: 0.000000
+  silhouette     : 0.000000
+  trans          : 0.000000
+Done (singleview, lambda=1e-1, 4 rank(s)) — Wed Sep  2 14:06:12 CEST 2026

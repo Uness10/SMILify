@@ -1,0 +1,157 @@
+============================================================
+SMILify Benchmark (singleview)
+============================================================
+Model type: singleview
+Checkpoint: prior_study_results/lam1e-4/sv_constrained/.bench_ckpt/sv_constrained_lam1e-4.pth
+Dataset: SMILySTICKS_centred_reprojected_FIXED.h5
+Output dir: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_singleview_sv_constrained_lam1e-4_on_SMILySTICKS_centred_reprojected_FIXED
+Timestamp: 2026-09-03T10:14:17
+Device: cuda
+Override original image size: 1530x1530
+Singleview model config:
+  backbone: vit_large_patch16_224
+  head_type: transformer_decoder
+  rotation_representation: 6d
+  scale_trans_mode: separate
+  shape_family: -1
+  input_resolution: 224
+  Missing keys (will use init): ['betas', 'log_beta_scales', 'betas_trans', 'global_rotation', 'trans']...
+Loaded singleview model (329,916,907 params)
+
+HDF5 INVENTORY:
+GROUP:   auxiliary
+DATASET: auxiliary/camera_names | shape=(101250,) | dtype=object
+DATASET: auxiliary/frame_idx | shape=(101250,) | dtype=int64
+DATASET: auxiliary/has_3d_data | shape=(101250,) | dtype=bool
+DATASET: auxiliary/has_ground_truth_betas | shape=(101250,) | dtype=bool
+DATASET: auxiliary/num_views | shape=(101250,) | dtype=int64
+DATASET: auxiliary/session_name | shape=(101250,) | dtype=object
+GROUP:   metadata
+  ATTR metadata.backbone_name: vit_large_patch16_224
+  ATTR metadata.canonical_camera_order: ["A", "B", "C", "D", "E"]
+  ATTR metadata.crop_mode: centred
+  ATTR metadata.dataset_type: sleap_multiview
+  ATTR metadata.failed_samples: 0
+  ATTR metadata.frame_skip: 1
+  ATTR metadata.frames_3d_available: 16875
+  ATTR metadata.has_3d_keypoints: True
+  ATTR metadata.has_camera_parameters: True
+  ATTR metadata.is_multiview: True
+  ATTR metadata.jpeg_quality: 95
+  ATTR metadata.keypoints_3d_joint_order: smal
+  ATTR metadata.load_3d_data: True
+  ATTR metadata.max_frame_idx_requested: 16874
+  ATTR metadata.max_views: 5
+  ATTR metadata.min_frame_idx_requested: 0
+  ATTR metadata.min_views_per_sample: 2
+  ATTR metadata.n_betas: 5
+  ATTR metadata.n_joints: 55
+  ATTR metadata.n_pose: 54
+  ATTR metadata.num_samples: 101250
+  ATTR metadata.processed_samples: 101250
+  ATTR metadata.samples_3d_out_of_range: 0
+  ATTR metadata.samples_with_3d_data: 101250
+  ATTR metadata.samples_with_3d_in_range: 101250
+  ATTR metadata.samples_with_outliers_filtered: 0
+  ATTR metadata.sessions_failed: 0
+  ATTR metadata.sessions_processed: 6
+  ATTR metadata.sessions_with_3d_data: 6
+  ATTR metadata.skipped_insufficient_views: 0
+  ATTR metadata.target_resolution: 512
+  ATTR metadata.total_cameras: 5
+  ATTR metadata.total_multiview_samples: 101250
+  ATTR metadata.total_outlier_keypoints_filtered: 0
+  ATTR metadata.total_potential_views: 506250
+  ATTR metadata.total_sessions: 6
+  ATTR metadata.total_views_attempted: 506250
+  ATTR metadata.total_views_included: 506250
+  ATTR metadata.undistort_images: True
+  ATTR metadata.used_reprojections: True
+  ATTR metadata.views_excluded_no_camera_data: 0
+  ATTR metadata.views_excluded_no_keypoints: 0
+  ATTR metadata.views_excluded_no_video_capture: 0
+  ATTR metadata.views_excluded_position_correction_failed: 0
+  ATTR metadata.views_excluded_processing_error: 0
+  ATTR metadata.views_excluded_video_read_failed: 0
+  ATTR metadata.views_missing_annotations: 0
+  ATTR metadata.views_reprojected: 506250
+  ATTR metadata.views_undistorted: 506250
+GROUP:   multiview_images
+DATASET: multiview_images/image_jpeg_view_0 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_1 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_2 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_3 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_4 | shape=(101250,) | dtype=object
+DATASET: multiview_images/view_mask | shape=(101250, 5) | dtype=bool
+GROUP:   multiview_keypoints
+DATASET: multiview_keypoints/camera_extrinsics_R | shape=(101250, 5, 3, 3) | dtype=float32
+DATASET: multiview_keypoints/camera_extrinsics_t | shape=(101250, 5, 3) | dtype=float32
+DATASET: multiview_keypoints/camera_indices | shape=(101250, 5) | dtype=int32
+DATASET: multiview_keypoints/camera_intrinsics | shape=(101250, 5, 3, 3) | dtype=float32
+DATASET: multiview_keypoints/image_sizes | shape=(101250, 5, 2) | dtype=int32
+DATASET: multiview_keypoints/keypoint_visibility | shape=(101250, 5, 55) | dtype=float32
+DATASET: multiview_keypoints/keypoints_2d | shape=(101250, 5, 55, 2) | dtype=float32
+DATASET: multiview_keypoints/keypoints_3d | shape=(101250, 55, 3) | dtype=float32
+GROUP:   parameters
+DATASET: parameters/betas | shape=(101250, 5) | dtype=float32
+DATASET: parameters/global_rot | shape=(101250, 3) | dtype=float32
+DATASET: parameters/joint_rot | shape=(101250, 55, 3) | dtype=float32
+DATASET: parameters/trans | shape=(101250, 3) | dtype=float32
+
+Dataset size: 506250
+Target resolution: 512x512
+2D keypoint scaling: using override size 1530x1530
+
+Dataset split (camera-centric, sample-grouped, seed=42):
+  86062/5062/10126 samples -> Test: 50630 view-items
+
+PCK reported at TWO resolutions: [native override 1530x1530] and [input res 224px]. PCK@Npx is resolution-dependent, so both are shown.
+
+==== BENCHMARK RESULTS (TEST SPLIT) ====
+
+-- PCK @ native override 1530x1530 --
+PCK@5px: 0.4301
+Mean 2D error (px): 7.2336
+Median 2D error (px): 5.7256
+2D joint errors count: 2121534
+PCK curve:
+  PCK@1px: 0.0309
+  PCK@2px: 0.1107
+  PCK@5px: 0.4301
+  PCK@10px: 0.7799
+  PCK@20px: 0.9647
+  PCK@30px: 0.9910
+  PCK@40px: 0.9963
+  PCK@50px: 0.9986
+
+-- PCK @ input res 224px --
+PCK@5px: 0.9939
+Mean 2D error (px): 1.0590
+Median 2D error (px): 0.8383
+2D joint errors count: 2121534
+PCK curve:
+  PCK@1px: 0.5934
+  PCK@2px: 0.8920
+  PCK@5px: 0.9939
+  PCK@10px: 0.9996
+  PCK@20px: 1.0000
+  PCK@30px: 1.0000
+  PCK@40px: 1.0000
+  PCK@50px: 1.0000
+
+MPJPE (mm): 0.9718
+Median MPJPE (mm): 0.8184
+MPJPE percentiles (mm):
+  P50: 0.8184
+  P75: 1.2300
+  P90: 1.7398
+  P95: 2.1406
+  P99: 3.5011
+3D samples with GT: 50630
+3D joint errors count: 2122820
+
+Saved outputs to: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_singleview_sv_constrained_lam1e-4_on_SMILySTICKS_centred_reprojected_FIXED
+  PCK plots: pck_curve_native.png, pck_curve_input.png
+  Error histograms: error_histogram_native.png, error_histogram_input.png
+  MPJPE histogram: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_singleview_sv_constrained_lam1e-4_on_SMILySTICKS_centred_reprojected_FIXED/mpjpe_histogram.png
+  3D percentile plots: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_singleview_sv_constrained_lam1e-4_on_SMILySTICKS_centred_reprojected_FIXED/sample_00_3d_keypoints_percentiles.png (and next 4)

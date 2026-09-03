@@ -10,22 +10,21 @@ Deltas are `constrained - reference`. Lower is better for violations and MPJPE; 
 
 ## singleview
 
-_Only `sv_reference` present — no delta can be computed._
-
 Authored axes scored: **162**
 
 | metric | reference | constrained | delta |
 |---|---|---|---|
-| Violating axes (count) | 96 | — | — |
-| Mean violation rate (% frames) | 14.76 | — | — |
-| Mean overshoot, violating axes (deg) | 2.53 | — | — |
-| Max overshoot (deg) | 77.70 | — | — |
-| MPJPE (mm) | 1.09 | — | — |
-| Median MPJPE (mm) | 0.92 | — | — |
+| Violating axes (count) | 96 | 41 | -55 (better) |
+| Mean violation rate (% frames) | 14.76 | 0.00 | -14.76 (better) |
+| Mean overshoot, violating axes (deg) | 2.53 | 0.00 | -2.53 (better) |
+| Max overshoot (deg) | 77.70 | 2.53 | -75.17 (better) |
+| MPJPE (mm) | 1.09 | 1.05 | -0.04 (better) |
+| Median MPJPE (mm) | 0.92 | 0.89 | -0.03 (better) |
 | PCK@5px native | — | — | — |
 | PCK@5px input | — | — | — |
 
 - `sv_reference`: /home/mkd34160/test/SMILify/singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth (epoch 386)
+- `sv_constrained`: /hpcwork/mkd34160/smilify_runs/singleview_lam1e-1/checkpoints/checkpoint_epoch_435.pth (epoch 435)
 
 ## multiview
 
@@ -48,4 +47,4 @@ Authored axes scored: **162**
 
 ## Single-view vs multi-view
 
-_Incomplete: missing `sv_constrained`, `mv_constrained`._
+_Incomplete: missing `mv_constrained`._
