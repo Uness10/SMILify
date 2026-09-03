@@ -1,5 +1,4 @@
 mode,lambda,label,checkpoint_epoch,n_axes,violating_axes,mean_viol_rate,mean_overshoot_deg,max_overshoot_deg,mpjpe_mm,median_mpjpe_mm,pck_5px_native,pck_5px_input,checkpoint,dir
-multiview,0.0,mv_reference,345,162,76,13.959541871188462,2.6468550795493555,56.57237881016064,0.9639,0.8382,,,SMILySTICKS_ViT_model.pth,prior_study_results/mv_reference
 singleview,0.0,sv_reference,386,162,96,14.760535767843677,2.531032391206795,77.69861153568446,1.092,0.9227,,,/home/mkd34160/test/SMILify/singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth,prior_study_results/sv_reference
 singleview,0.0001,sv_constrained,435,162,89,2.727058812054531,0.1395491770329409,50.83590783194203,0.9718,0.8184,,,/hpcwork/mkd34160/smilify_runs/singleview_lam1e-4/checkpoints/checkpoint_epoch_435.pth,prior_study_results/lam1e-4/sv_constrained
 singleview,0.001,sv_constrained,435,162,85,0.2566672275013838,0.0040932731495131125,25.63508136081749,1.0075,0.854,,,/hpcwork/mkd34160/smilify_runs/singleview_lam1e-3/checkpoints/checkpoint_epoch_435.pth,prior_study_results/lam1e-3/sv_constrained
