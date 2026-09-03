@@ -1,0 +1,606 @@
+%==============================================================================
+%  Effect of an authored joint-limit prior on single-view pose regression
+%  SMILify / SMILySTICKS -- internship report
+%  Compile:  pdflatex main.tex  (twice, for cross-references)
+%==============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{siunitx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
+
+\sisetup{
+  detect-weight = true,
+  detect-family = true
+}
+
+\captionsetup{font=small,labelfont=bf}
+\captionsetup[sub]{font=small}
+\graphicspath{{figures/}}
+
+\newcommand{\lam}{\lambda}
+\newcommand{\best}[1]{\textbf{#1}}
+\newcommand{\armref}{\textsc{sv-ref}}
+
+\title{\textbf{Effect of an Authored Joint-Limit Prior on\\
+Single-View 3D Pose Regression of the Stick Insect}\\[0.4em]
+\large A regularisation sweep on the SMILySTICKS benchmark}
+
+\author{%
+  Youness ANOUAR\\
+  \small Forschungszentrum J\"ulich --- SMILify project
+}
+
+\date{3 September 2026}
+
+%==============================================================================
+\begin{document}
+\maketitle
+
+
+\noindent\rule{\textwidth}{0.4pt}
+
+%==============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Monocular 3D pose estimation of articulated animals is underdetermined: a range
+of joint configurations reproject to nearly the same image evidence, and the
+network is free to select among them by criteria unrelated to anatomy. In the
+SMILify pipeline for the stick insect this manifests as recovered poses that
+score well on keypoint metrics while placing individual joints far outside the
+range the animal can physically attain.
+
+Per-joint rotation limits were authored for the SMILy stick-insect model
+($55$ joints, $162$ rotation axes) and stored in
+\texttt{3D\_model\_prep/SMILy\_STICK\_limits\_authored.pkl}. The study reported
+here asks:
+
+\begin{quote}
+\emph{Does adding an authored per-joint rotation prior to the neural
+stick-insect model produce more anatomically plausible poses without losing 3D
+and 2D accuracy?}
+\end{quote}
+
+The working hypothesis was that the prior should improve plausibility at little
+or no accuracy cost. This report analyses the completed sweep and gives:
+\begin{enumerate}[nosep,leftmargin=1.6em]
+  \item the plausibility/accuracy trade-off over four decades of $\lam$
+        (\Cref{sec:res-plaus,sec:res-acc});
+  \item a confound that invalidates the headline accuracy claim, with an
+        estimate of its magnitude (\Cref{sec:disc-confound});
+  \item a range-of-motion analysis showing that the prior does more than remove
+        violations, and a diagnostic --- the \emph{clipping bound} --- that
+        separates the two effects (\Cref{sec:res-rom}).
+\end{enumerate}
+
+%==============================================================================
+\section{Method}
+\label{sec:method}
+
+\subsection{Model and data}
+
+All arms use the single-view SMILify regressor: a \texttt{vit\_large\_patch16\_224}
+backbone with a transformer-decoder head, a 6D rotation representation and
+separate scale/translation prediction (\num{329916907} parameters). The
+benchmark dataset is
+\texttt{SMILySTICKS\_centred\_reprojected\_FIXED.h5}: \num{101250} samples over
+$6$ sessions and $5$ synchronised cameras (\num{506250} view-items), with
+undistorted images, reprojected 2D keypoints, 3D keypoints in SMAL joint order,
+and per-view camera intrinsics and extrinsics. Images are processed at
+$224\,$px; 2D errors are additionally reported at the native override
+resolution $1530 \times 1530$.
+
+The split is camera-centric and sample-grouped with seed $42$, giving
+$\num{86062}/\num{5062}/\num{10126}$ samples for train/validation/test and
+\num{50630} test view-items. Every arm is scored on exactly this split, and
+against the same authored ranges, so all reported differences are model
+differences.
+
+\subsection{Joint-limit regularisation}
+
+Let $\theta_{a}$ denote the predicted Euler angle on rotation axis $a$, and
+$[\,m_a, M_a\,]$ the authored range for that axis. The penalty added to the
+training objective is the mean one-sided hinge over all axes and all samples in
+the batch,
+\begin{equation}
+  \mathcal{L}_{\text{limit}}
+  \;=\;
+  \lam \cdot
+  \frac{1}{|\mathcal{A}|}\sum_{a \in \mathcal{A}}
+  \Big[
+    \operatorname{relu}\!\big(\theta_a - M_a\big)
+    \;+\;
+    \operatorname{relu}\!\big(m_a - \theta_a\big)
+  \Big],
+  \label{eq:penalty}
+\end{equation}
+so that $\mathcal{L}_{\text{limit}} = 0$ whenever every axis lies inside its
+authored box. \Cref{eq:penalty} has \emph{zero gradient in the interior} of the
+feasible set; this property is what makes the range-of-motion result of
+\Cref{sec:res-rom} noteworthy.
+
+\subsection{Experimental arms}
+
+\begin{table}[t]
+\centering
+\small
+\caption{The five scored arms. Each constrained arm continues the reference
+checkpoint for $49$ additional epochs with the penalty of \Cref{eq:penalty}
+enabled. The reference received no additional epochs, which is the confound
+discussed in \Cref{sec:disc-confound}.}
+\label{tab:arms}
+\begin{tabular}{llccl}
+\toprule
+Arm & Mode & $\lam$ & Epoch & Checkpoint \\
+\midrule
+\armref{}            & single-view & $0$       & 386 & \texttt{best\_model.pth} \\
+\textsc{sv-1e-4}     & single-view & $10^{-4}$ & 435 & \texttt{singleview\_lam1e-4/\dots\_0435.pth} \\
+\textsc{sv-1e-3}     & single-view & $10^{-3}$ & 435 & \texttt{singleview\_lam1e-3/\dots\_0435.pth} \\
+\textsc{sv-1e-2}     & single-view & $10^{-2}$ & 435 & \texttt{singleview\_lam1e-2/\dots\_0435.pth} \\
+\textsc{sv-1e-1}     & single-view & $10^{-1}$ & 435 & \texttt{singleview\_lam1e-1/\dots\_0435.pth} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Cref{tab:arms} lists the five scored arms. The four constrained arms share a
+common starting point, epoch count and schedule, and differ only in $\lam$;
+comparisons \emph{between} them are therefore clean. The reference did not receive the additional epochs, so any
+comparison against it mixes the effect of the prior with the effect of
+continued training.
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+\paragraph{Anatomical plausibility.}
+For each of the $162$ authored axes we report the fraction of test frames on
+which the predicted angle falls outside $[\,m_a, M_a\,]$ (\emph{violation
+rate}), and the signed distance beyond the nearer bound on violating frames
+(\emph{overshoot}). Of the $162$ axes, $129$ carry a finite authored range; the
+remaining $33$ are unconstrained by construction and contribute zero. Aggregate
+figures quoted as ``over $162$ axes'' follow the convention of the existing
+sweep tables; the ROM analyses in \Cref{sec:res-rom} are restricted to the $129$
+bounded axes.
+
+\paragraph{Accuracy.}
+MPJPE and its percentiles in millimetres; PCK curves and mean/median 2D error
+in pixels, reported at both the native override resolution and the network
+input resolution, since PCK@$N$\,px is resolution-dependent.
+
+\paragraph{Range of motion and the clipping bound.}
+For each bounded axis, ROM is the observed angular range
+$\max_t \theta_a(t) - \min_t \theta_a(t)$ over the test set. To separate
+``removing violations'' from ``shrinking motion'', we define the
+\emph{clipping bound}: the ROM the reference arm would have if its trajectory
+were simply clipped into the authored box,
+\begin{equation}
+  \mathrm{ROM}^{\text{clip}}_a
+  = \max\!\Big(
+      \min\big(\max_t \theta_a(t),\, M_a\big)
+      - \max\big(\min_t \theta_a(t),\, m_a\big),
+      \; 0
+    \Big).
+  \label{eq:clip}
+\end{equation}
+An arm whose ROM sits \emph{above} $\mathrm{ROM}^{\text{clip}}$ has not fully
+removed its violations; an arm whose ROM sits \emph{below} it has given up
+motion inside the feasible set, where the penalty exerts no force.
+
+%==============================================================================
+\section{Results}
+\label{sec:results}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\caption{Main results on the test split. Bold marks the best value among the
+four epoch-matched arms. Lower is better for violation, overshoot, MPJPE and 2D
+error; higher is better for PCK. The reference row is set apart: it did not
+receive the $49$ additional epochs.}
+\label{tab:main}
+\begin{tabular}{l c c *{9}{r}}
+\toprule
+ & & & \multicolumn{4}{c}{Anatomical plausibility} & \multicolumn{2}{c}{3D accuracy} & \multicolumn{3}{c}{2D accuracy} \\
+\cmidrule(lr){4-7}\cmidrule(lr){8-9}\cmidrule(lr){10-12}
+Arm & $\lam$ & Ep. &
+\#viol. & rate & mean ov. & max ov. &
+MPJPE & med. &
+PCK@5 & PCK@5 & 2D err. \\
+ & & &
+axes & (\%) & (deg) & (deg) &
+(mm) & (mm) &
+nat. & 224 & (px) \\
+\midrule
+\armref{}        & 0         & 386 & 96 & 14.7605 & 2.531 & 77.70 & 1.0920 & 0.9227 & 0.3762 & 0.9935 & 7.827 \\
+\midrule
+\textsc{sv-1e-4} & $10^{-4}$ & 435 & 89 & 2.7271 & 0.140 & 50.84 & \best{0.9718} & \best{0.8184} & \best{0.4301} & \best{0.9939} & \best{7.234} \\
+\textsc{sv-1e-3} & $10^{-3}$ & 435 & 85 & 0.2567 & 0.004 & 25.64 & 1.0075 & 0.8540 & 0.4024 & 0.9934 & 7.614 \\
+\textsc{sv-1e-2} & $10^{-2}$ & 435 & 73 & 0.0197 & 0.000 & 7.15  & 1.0232 & 0.8703 & 0.3915 & 0.9930 & 7.777 \\
+\textsc{sv-1e-1} & $10^{-1}$ & 435 & \best{41} & \best{0.0034} & \best{0.000} & \best{2.53} & 1.0479 & 0.8924 & 0.3745 & 0.9924 & 8.038 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_tradeoff.pdf}
+\caption{The plausibility/accuracy trade-off across four decades of $\lam$.
+Violation rate is the mean fraction of frames outside the authored range over
+the $162$ authored axes (log scale). Neither curve has an interior optimum:
+plausibility improves and accuracy degrades with every decade. The reference
+arm is drawn as an open marker joined by a dashed segment because it did not
+receive the $49$ additional epochs.}
+\label{fig:tradeoff}
+\end{figure}
+
+\subsection{Anatomical plausibility}
+\label{sec:res-plaus}
+
+The prior is effective on the quantity it penalises (\Cref{tab:main},
+\Cref{fig:tradeoff}). Relative to the reference, the mean violation rate falls
+by a factor of $5.4$ at $\lam = 10^{-4}$, by $57$ at $10^{-3}$, by $750$ at
+$10^{-2}$ and by $\approx\!4400$ at $10^{-1}$. Mean overshoot on violating axes
+falls from \SI{2.53}{\degree} to below \SI{0.001}{\degree}.
+
+The number of axes violating \emph{at least once} is a poor summary: it falls
+only from $96$ to $41$ while the rate falls by more than three orders of
+magnitude, because it is a binary indicator over \num{50630} frames and a
+single marginal frame is enough to trip it. The informative quantity is the
+maximum overshoot, which measures how badly the worst predicted pose fails:
+$77.7 \rightarrow 50.8 \rightarrow 25.6 \rightarrow 7.2 \rightarrow
+\SI{2.5}{\degree}$. At $\lam = 10^{-4}$ the model still produces a
+\SI{50.8}{\degree} violation somewhere in the test set --- rare, but
+anatomically impossible. A requirement of the form ``no anatomically impossible
+pose ever'' is met only from $\lam = 10^{-2}$ upwards.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_worst_axes.pdf}
+\caption{The twelve axes most frequently violated by the reference arm, and
+their violation rate under each $\lam$ (log scale; bars below
+\SI{0.02}{\percent} are drawn at the axis floor). All twelve are leg axes,
+predominantly coxa and femur flexion. The reference violates
+\texttt{l\_2\_co\_r.x} on \SI{96.0}{\percent} of frames; at $\lam = 10^{-1}$
+the same axis violates on \SI{0.18}{\percent}.}
+\label{fig:worst}
+\end{figure}
+
+\Cref{fig:worst} shows where the violations are concentrated. All twelve of the
+most-violated axes belong to the legs, and eight are femur or coxa flexion axes
+--- the degrees of freedom that dominate stance and swing. The prior therefore
+acts, as intended, on anatomically meaningful joints rather than on numerically
+incidental ones.
+
+\subsection{Accuracy}
+\label{sec:res-acc}
+
+Read column-wise in \Cref{tab:main}, the prior appears to be free: all four
+constrained arms beat the reference on MPJPE, median MPJPE, PCK and mean 2D
+error. Read across the epoch-matched arms, the controlled comparison, accuracy
+degrades monotonically with $\lam$:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+ & $\lam=10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ \\
+\midrule
+MPJPE (mm)            & 0.9718 & 1.0075 & 1.0232 & 1.0479 \\
+PCK@5\,px (native)    & 0.4301 & 0.4024 & 0.3915 & 0.3745 \\
+Mean 2D error (px)    & 7.234  & 7.614  & 7.777  & 8.038  \\
+\bottomrule
+\end{tabular}
+\end{center}
+A least-squares fit of MPJPE against $\log_{10}\lam$ over these four points
+gives a slope of $\SI{0.0244}{\milli\metre}$ per decade ($R^2 = 0.98$): a cost
+that is small per decade but consistent in sign across all four arms and all
+five accuracy metrics.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_pck.pdf}
+\caption{PCK curves on the test split at both reporting resolutions. The four
+constrained arms are ordered by $\lam$ at every threshold on both curves:
+weaker regularisation is uniformly more accurate. At the native resolution the
+$\lam = 10^{-1}$ curve falls below the unregularised reference for thresholds of
+$5\,$px and above, despite $49$ additional epochs of training.}
+\label{fig:pck}
+\end{figure}
+
+This is not an artefact of a single threshold: in \Cref{fig:pck} the arms are
+ordered by $\lam$ at every point of both PCK curves. The $\lam = 10^{-1}$ arm
+reaches PCK@5\,px $=0.3745$ at native resolution against the reference's
+$0.3762$ --- after $49$ additional epochs of training, it is \emph{worse} at
+placing keypoints in the image than the checkpoint it started from.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_mpjpe_quantiles.pdf}
+\caption{Left: MPJPE quantile functions. Right: change relative to the
+reference arm at each percentile. The accuracy ordering is preserved across the
+whole error distribution, and the gain of the constrained arms over the
+reference shrinks towards the tail (for $\lam = 10^{-4}$: $-\SI{11.3}{\percent}$
+at P50 against $-\SI{4.3}{\percent}$ at P99).}
+\label{fig:quant}
+\end{figure}
+
+\Cref{fig:quant} decomposes the 3D error by percentile. The ordering by $\lam$
+holds across the entire error distribution, and the advantage of the
+constrained arms over the reference is largest at the median and smallest in
+the tail. That is the signature of general fine-tuning: if the prior were the
+cause of the improvement, the gain should concentrate in the tail, where the
+implausible poses live.
+
+\subsection{Range of motion}
+\label{sec:res-rom}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Mean range of motion per bounded axis (deg), by joint group, over the
+$129$ axes with a finite authored range. The clipping bound (\Cref{eq:clip}) is
+the ROM the reference arm would retain if its trajectory were merely clipped
+into the authored box.}
+\label{tab:rom}
+\begin{tabular}{l r *{5}{r}}
+\toprule
+Joint group & axes & $\lam{=}0$ & $10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ \\
+\midrule
+Coxa            & 18 & 78.1 & 65.1 & 61.6 & 58.0 & 55.0 \\
+Trochanter      & 18 & 74.2 & 52.1 & 44.7 & 39.1 & 36.9 \\
+Femur           & 18 & 71.6 & 44.1 & 26.8 & 20.7 & 18.7 \\
+Tibia           & 18 & 88.9 & 50.3 & 41.4 & 33.3 & 28.6 \\
+Tarsus          & 18 & 96.3 & 54.1 & 48.2 & 43.0 & 38.0 \\
+Antenna         & 18 & 40.9 & 33.7 & 31.8 & 30.6 & 30.0 \\
+Head / wings    & 21 & 20.2 & 13.6 & 10.9 &  9.3 &  8.9 \\
+\midrule
+\textbf{All}    & \textbf{129} & \textbf{66.1} & \textbf{44.0} & \textbf{37.3} & \textbf{32.9} & \textbf{30.3} \\
+\midrule
+\multicolumn{2}{l}{\emph{Clipping bound}} & \multicolumn{5}{c}{$37.0$ (mean over all $129$ axes)} \\
+\multicolumn{2}{l}{\emph{Mean authored range}} & \multicolumn{5}{c}{$51.6$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The reference arm moves through a mean ROM of \SI{66.1}{\degree} per bounded
+axis, against a mean authored range of \SI{51.6}{\degree} --- a ratio of means
+of $1.28\times$. Averaged per axis instead, the exceedance is larger,
+$1.95\times$ (\Cref{fig:ratio}), since axes with small authored ranges
+contribute disproportionately large ratios; both figures describe the same
+overshoot from different weightings and are not in conflict. Clipping the
+reference trajectory into the box would leave \SI{37.0}{\degree}. The trained
+arms give $44.0$, $37.3$, $32.9$ and \SI{30.3}{\degree} for
+$\lam = 10^{-4} \ldots 10^{-1}$ (\Cref{tab:rom}).
+
+From $\lam = 10^{-3}$ upward, therefore, the model does not merely stay inside
+the authored box --- it withdraws into the interior, ending at $\lam = 10^{-1}$
+some \SI{18}{\percent} below the clipping bound. Since \Cref{eq:penalty} has
+zero gradient there, this cannot be a direct response to the penalty. The most
+plausible mechanism is that the network cannot distinguish ``near the
+boundary'' from ``beyond it'' while its own predictions carry noise, and so
+learns a safety margin: predicting conservatively is the cheapest way to keep
+the expected hinge loss at zero.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{fig_rom_retention.pdf}
+\caption{ROM retained relative to the reference arm, with axes grouped by the
+reference's own violation rate on that axis. The dashed rule in each group is
+the clipping bound of \Cref{eq:clip} --- the retention that pure violation
+removal would produce. Axes that never violated retain
+\SIrange{93.6}{95.8}{\percent} of their range at every $\lam$; on chronically
+violating axes $\lam = 10^{-2}$ lands on the clipping bound
+(\SI{32.4}{\percent} vs.\ \SI{32.1}{\percent}) while $\lam = 10^{-1}$ falls
+below it.}
+\label{fig:retention}
+\end{figure}
+
+\Cref{fig:retention} resolves the effect by axis severity, with two results of
+opposite sign. The prior is \emph{well targeted}: axes that never violated in
+the reference retain \SIrange{93.6}{95.8}{\percent} of their range at every
+$\lam$, so the penalty is not indiscriminately damping the whole pose. But it
+\emph{overshoots on marginal axes}: on axes that violated on less than
+\SI{1}{\percent} of frames, $\lam = 10^{-1}$ retains only
+\SI{62.3}{\percent} of the reference range where clipping would retain
+\SI{86.1}{\percent} --- $24$ percentage points of motion removed for which no
+violation can account.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_rom_scatter.pdf}
+\caption{Per-axis ROM before and after regularisation (log--log). Marker colour
+encodes the reference violation rate; horizontal ticks mark the clipping bound
+for each axis. At $\lam = 10^{-4}$ most axes sit near or above their clipping
+bound. At $\lam = 10^{-1}$ a dense band of axes has collapsed to roughly
+\SIrange{15}{25}{\degree} regardless of its starting ROM or of whether it ever
+violated, which is the visual signature of the learned margin.}
+\label{fig:scatter}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{fig_rom_ratio.pdf}
+\caption{Distribution over the $129$ bounded axes of the ratio between observed
+ROM and authored range. The reference (mean $1.95$, median $1.18$; $79$ axes
+above $1.0$) systematically exceeds the authored envelope. By $\lam = 10^{-1}$
+only $15$ axes reach it and the mean ratio is $0.66$, i.e.\ the typical joint
+uses barely two-thirds of the range it is permitted.}
+\label{fig:ratio}
+\end{figure}
+
+\Cref{fig:scatter,fig:ratio} display the same phenomenon per axis and in
+distribution. \Cref{tab:rom} shows where it is paid for: femur ROM falls from
+\SI{71.6}{\degree} to \SI{18.7}{\degree} ($-\SI{74}{\percent}$), tibia from
+\SI{88.9}{\degree} to \SI{28.6}{\degree} ($-\SI{68}{\percent}$) and tarsus by
+\SI{61}{\percent}, while coxa loses only \SI{30}{\percent} and antennae
+\SI{27}{\percent}. The femur--tibia complex is the principal locomotor degree
+of freedom of the stick insect; a model whose femora sweep through less than
+\SI{19}{\degree} will render a visibly stiff gait irrespective of its MPJPE.
+
+\subsection{Spread versus centre}
+\label{sec:res-centre}
+
+The mean absolute shift of the per-axis mean angle relative to the reference is
+$4.20$, $4.38$, $4.50$ and \SI{4.69}{\degree} for
+$\lam = 10^{-4} \ldots 10^{-1}$ --- essentially constant across four decades.
+The \emph{centre} of the pose distribution therefore moved by the same amount
+in all four arms, implicating the $49$ epochs of continued training rather than
+the penalty; the penalty acts almost exclusively on the \emph{spread}. The two
+effects are therefore separable in principle, which supports the estimate in
+\Cref{sec:disc-confound}.
+
+%==============================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{The fine-tuning confound}
+\label{sec:disc-confound}
+
+Every ``constrained beats reference'' comparison in this study contrasts
+\emph{prior plus $49$ epochs} against \emph{neither}. The correct control ---
+$\lam = 0$ continued for the same $49$ epochs --- was excluded from the design,
+and its absence limits what can be claimed.
+
+Three observations indicate that the accuracy gain belongs to the fine-tune
+rather than the prior. (i) Within the epoch-matched arms, every accuracy metric
+degrades monotonically with $\lam$ (\Cref{sec:res-acc}); the prior can only be
+credited with the improvement if its effect reverses sign between $\lam = 0$
+and $\lam = 10^{-4}$. (ii) Linear extrapolation of MPJPE in $\log_{10}\lam$
+places a hypothetical $\lam = 10^{-5}$ arm at $\approx\SI{0.95}{\milli\metre}$,
+below every constrained arm. (iii) The strongest arm, $\lam = 10^{-1}$, already
+falls below the reference on PCK@5\,px at native resolution \emph{without} any
+extrapolation, despite $49$ additional epochs --- the penalty has consumed the
+entire fine-tuning benefit and gone into deficit.
+
+What can be stated at present is: \emph{the prior buys a large plausibility
+gain at a small but systematic accuracy cost, the magnitude of which is not yet
+measured}. One single-view run at $\lam = 0$ to epoch $435$ (approximately
+\SI{4}{\hour} wall clock, inside the \SI{24}{\hour} queue limit) would measure
+every delta in \Cref{tab:main}.
+
+\subsection{Over-regularisation and the learned margin}
+
+The ROM analysis identifies a failure mode that the violation rate cannot see.
+A one-sided hinge is, by construction, inactive inside the feasible set; yet
+for $\lam \ge 10^{-3}$ the model settles well inside it (\Cref{sec:res-rom}).
+Two mechanisms are consistent with the evidence and are not mutually exclusive:
+(a) prediction noise makes a near-boundary configuration risky in expectation,
+so the minimum-risk prediction sits at a margin; (b) the penalty is applied to
+a batch mean, so a systematic inward bias across many axes is a cheap way to
+reduce it. Distinguishing them, and mitigating the effect, is the object of the
+tolerance-band and annealing experiments proposed in \Cref{sec:next}.
+
+\subsection{Limitations of the plausibility metric}
+
+The violation rate is minimised by a stiff pose, and \Cref{sec:res-rom} shows
+the sweep exploiting exactly that degree of freedom, so a plausibility claim
+resting on the violation rate alone is not sound. It should be paired with an
+under-articulation measure --- the per-axis ratio of observed ROM to authored
+range (\Cref{fig:ratio}) is the natural candidate --- so that a model cannot
+score as plausible by ceasing to move.
+
+\subsection{Choice of operating point}
+
+The clipping-bound analysis (\Cref{fig:retention}) favours $\lam = 10^{-2}$: it
+is the only setting at which chronically violating axes land on the bound
+rather than above or below it, while violations are effectively eliminated
+(max.\ overshoot \SI{7.2}{\degree}) at an MPJPE cost of
+\SI{0.05}{\milli\metre} relative to the best arm. We recommend it as the
+default, since the stated objective is plausibility and $\lam = 10^{-4}$ still
+admits \SI{50.8}{\degree} overshoots.
+
+Where 3D accuracy is the priority, $\lam = 10^{-3}$ is the better compromise:
+violation rate \SI{0.26}{\percent}, MPJPE \SI{1.0075}{\milli\metre}, and ROM
+close to the clipping bound on chronic axes. $\lam = 10^{-1}$ is not
+recommended at any operating point: its marginal plausibility gain over
+$10^{-2}$ is small (\SI{7.2}{\degree} to \SI{2.5}{\degree} of maximum
+overshoot) and it costs \SI{74}{\percent} of femur range and a net loss on 2D
+accuracy.
+
+\subsection{Threats to validity}
+
+Two caveats bound the conclusions. First, the missing $\lam = 0$ control
+(\Cref{sec:disc-confound}). Second, ROM as defined here is a min--max statistic
+over the test set and is therefore sensitive to outliers; the distributional
+view in \Cref{fig:ratio} and the per-axis view in \Cref{fig:scatter} are
+provided so that the aggregate is not read in isolation.
+
+%==============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+Returning to the question of \Cref{sec:intro}:
+
+\begin{description}[leftmargin=1.4em,style=nextline]
+\item[More anatomically plausible poses --- yes.]
+  Across four decades the authored prior reduces the mean violation rate by
+  between $5.4\times$ and $4400\times$ and the worst overshoot from
+  \SI{77.7}{\degree} to \SI{2.5}{\degree}, acting on precisely the leg axes
+  that dominate locomotion.
+\item[Without losing accuracy --- not established, and probably false.]
+  The apparent gain over the reference is confounded with $49$ epochs of
+  continued training, and within the controlled comparison every accuracy
+  metric degrades monotonically with $\lam$.
+\end{description}
+
+A third finding was not anticipated by the study design: the prior does more
+than remove violations. Beyond $\lam = 10^{-3}$ it induces a conservative
+inward bias that costs the femur and tibia most of their range of motion, in a
+region where the penalty exerts no gradient at all. Plausibility, in the sense
+that matters for behavioural analysis, is not only a matter of staying inside
+the authored box but also of using it.
+
+%==============================================================================
+\section{Next step}
+\label{sec:next}
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.45em]
+\item Run the missing $\lam = 0$, epoch-$435$ control (\Cref{sec:disc-confound})
+      to separate the effect of the prior from the effect of continued
+      training.
+\item Sweep additional magnitudes of $\lam$: $5{\times}10^{-2}$,
+      $5{\times}10^{-1}$, $1$, $5$, $10$.
+\item Apply the same pipeline to the multi-view case.
+\end{enumerate}
+
+%==============================================================================
+\appendix
+\section{Data provenance}
+\label{app:prov}
+
+\begin{description}[leftmargin=0em,style=nextline,itemsep=0.25em,font=\normalfont\ttfamily\small]
+\item[prior\_study\_results/sweep/\{sweep.csv, arms.csv, comparison.md\}]
+  Aggregated sweep metrics; source of the violation and MPJPE columns of
+  \Cref{tab:main}.
+\item[prior\_study\_results/\{sv\_reference,
+  lam1e-\{1..4\}/sv\_constrained\}/analysis/]
+  Per-arm \texttt{limit\_violations.csv}, \texttt{per\_axis\_stats.csv} and
+  \texttt{magnitude\_stats.csv}; source of all ROM and retention analyses.
+\item[benchmark\_*\_on\_SMILySTICKS\_centred\_reprojected\_FIXED/benchmark\_report.txt]
+  Per-arm PCK curves, 2D errors and MPJPE percentiles;
+  source of \Cref{fig:pck,fig:quant}.
+\item[3D\_model\_prep/SMILy\_STICK\_limits\_authored.pkl]
+  Authored per-joint rotation limits (\texttt{joint\_limits}), against which all
+  arms are scored.
+\item[report\_joint\_limit\_prior/make\_figures.py]
+  Script regenerating every figure in this report from the sources above.
+\end{description}
+
+\noindent
+The clipping bound (\Cref{eq:clip}), the ROM retention buckets
+(\Cref{fig:retention}) and the joint-group aggregation (\Cref{tab:rom}) are
+derived in this report and are not present in the original sweep outputs.
+
+\end{document}
