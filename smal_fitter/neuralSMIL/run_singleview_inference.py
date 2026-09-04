@@ -872,9 +872,27 @@ def render_model_only(
                 verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
                 joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
             else:
-                # Camera-centric / no UE scaling: plain translation (scale baked in).
-                verts = verts + temp_fitter.trans.unsqueeze(1)
-                joints = joints + temp_fitter.trans.unsqueeze(1)
+                # Apply the predicted per-sample mesh scale when the checkpoint
+                # has a mesh_scale head, exactly as
+                # SMALFitter.generate_visualization does: centre on the root
+                # joint, scale, then translate. WITHOUT this the mesh renders at
+                # native size (~35x too large vs the metric 3D) and floods the
+                # frame instead of sitting on the animal.
+                _ms = None
+                if getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
+                    _ms = predicted_params["mesh_scale"].to(device=device, dtype=torch.float32)
+                    if _ms.dim() == 0:
+                        _ms = _ms.unsqueeze(0).unsqueeze(0)
+                    elif _ms.dim() == 1:
+                        _ms = _ms.unsqueeze(1)
+                if _ms is not None:
+                    _root = joints[:, 0:1, :]
+                    verts = (verts - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
+                    joints = (joints - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
+                else:
+                    # Camera-centric / no UE scaling: plain translation (scale baked in).
+                    verts = verts + temp_fitter.trans.unsqueeze(1)
+                    joints = joints + temp_fitter.trans.unsqueeze(1)
 
             # Get canonical model joints
             canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
@@ -998,9 +1016,27 @@ def render_prediction_on_frame(
                 verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
                 joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
             else:
-                # Camera-centric / no UE scaling: plain translation (scale baked in).
-                verts = verts + temp_fitter.trans.unsqueeze(1)
-                joints = joints + temp_fitter.trans.unsqueeze(1)
+                # Apply the predicted per-sample mesh scale when the checkpoint
+                # has a mesh_scale head, exactly as
+                # SMALFitter.generate_visualization does: centre on the root
+                # joint, scale, then translate. WITHOUT this the mesh renders at
+                # native size (~35x too large vs the metric 3D) and floods the
+                # frame instead of sitting on the animal.
+                _ms = None
+                if getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
+                    _ms = predicted_params["mesh_scale"].to(device=device, dtype=torch.float32)
+                    if _ms.dim() == 0:
+                        _ms = _ms.unsqueeze(0).unsqueeze(0)
+                    elif _ms.dim() == 1:
+                        _ms = _ms.unsqueeze(1)
+                if _ms is not None:
+                    _root = joints[:, 0:1, :]
+                    verts = (verts - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
+                    joints = (joints - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
+                else:
+                    # Camera-centric / no UE scaling: plain translation (scale baked in).
+                    verts = verts + temp_fitter.trans.unsqueeze(1)
+                    joints = joints + temp_fitter.trans.unsqueeze(1)
 
             # Get canonical model joints
             canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
