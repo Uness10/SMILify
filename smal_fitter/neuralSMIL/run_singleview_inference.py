@@ -2,26 +2,67 @@
 """
 SMIL Image Regressor Inference Script
 
-This script loads a trained SMILImageRegressor model from a checkpoint and runs inference
-on images or videos. It generates visualizations using the existing SMIL visualization
-functions and saves results to an output folder.
+Loads a trained ``SMILImageRegressor`` checkpoint and runs inference on a
+**preprocessed HDF5 dataset**, a folder of images, or a video, writing
+visualizations / videos / animation exports to an output folder.
 
 Usage:
+    # For a preprocessed dataset (preferred - mirrors run_multiview_inference.py)
+    python -m smal_fitter.neuralSMIL.run_singleview_inference \
+        --checkpoint path/to/checkpoint.pth --dataset path/to/dataset.h5 \
+        --output_folder path/to/output
+
     # For images
-    python run_inference.py --checkpoint path/to/checkpoint.pth --input-folder path/to/images --output-folder path/to/output
+    python -m smal_fitter.neuralSMIL.run_singleview_inference \
+        --checkpoint path/to/checkpoint.pth --input_folder path/to/images --output_folder path/to/output
 
     # For video
-    python run_inference.py --checkpoint path/to/checkpoint.pth --input-video path/to/video.mp4 --output-folder path/to/output
+    python -m smal_fitter.neuralSMIL.run_singleview_inference \
+        --checkpoint path/to/checkpoint.pth --input_video path/to/video.mp4 --output_folder path/to/output
+
+Dataset mode (issue #100)
+-------------------------
+Historically the single-view entrypoint only accepted raw images / video while
+``run_multiview_inference.py`` ran over a preprocessed dataset, and the two
+render paths had drifted apart. ``--dataset`` closes that gap: it consumes the
+same HDF5 datasets the trainer and ``benchmark_model.py`` use and follows the
+identical conventions, namely
+
+* **Camera intrinsics / extrinsics.** A ``camera_centric`` checkpoint renders
+  through the FIXED PyTorch3D identity camera with the vertical FOV (and aspect
+  ratio) taken from the sample's calibration, exactly like
+  ``SMILImageRegressor.predict_from_batch``. A ``model_centric`` checkpoint
+  renders through its own predicted ``cam_rot`` / ``cam_trans`` / ``fov``. A
+  multi-view HDF5 is opened with ``return_single_view=True`` and the matching
+  ``camera_centric`` flag so the dataset re-anchors the world onto the sampled
+  camera before handing back keypoints and 3D.
+* **Shape-space variation.** ``scale_trans_mode`` decides whether
+  ``log_beta_scales`` / ``betas_trans`` are PCA weights (``separate`` +
+  ``use_pca_transformation``, which must be expanded to per-joint values) or
+  already per-joint (``separate`` without PCA, ``entangled_with_betas``), or
+  absent (``ignore``).
+* **Mesh scaling and cropping.** Placement uses the legacy 10x UE scaling or the
+  predicted per-sample ``mesh_scale``, whichever the checkpoint was trained
+  with, and the dataset's own crop is used as-is (``--crop_mode`` applies only
+  to raw image / video input, where no preprocessing has happened yet).
 
 Features:
     - Loads trained model from checkpoint
-    - Processes images or video files
-    - Supports center-crop preprocessing (matching training)
+    - Processes a preprocessed dataset, images, or video files
+    - Supports center-crop preprocessing for raw input (matching training)
     - Generates SMIL model visualizations
     - Saves predicted parameters and visualizations
-    - For videos: generates output video and per-frame results
-    - Handles different image/video sizes and formats
+    - For videos / datasets: generates output video and per-frame results
+    - Optional temporal smoothing and AMASS-style animation export
 """
+
+# ===== CRITICAL: Force IPv4 before torch/distributed resolves anything =====
+# Prevents "Address family not supported by protocol" (errno: 97) on HPC systems
+# without full IPv6 support. Shared with run_multiview_inference.py.
+from smal_fitter.neuralSMIL.inference_ddp import force_ipv4_getaddrinfo
+
+force_ipv4_getaddrinfo()
+# ===== End IPv4 forcing =====
 
 import os
 import argparse
@@ -32,6 +73,7 @@ import json
 import pickle as pkl
 
 import torch
+import torch.multiprocessing as mp
 import numpy as np
 import cv2
 import imageio
@@ -43,11 +85,40 @@ import matplotlib
 matplotlib.use("Agg")
 
 
-from smal_fitter.neuralSMIL.smil_image_regressor import SMILImageRegressor, rotation_6d_to_axis_angle
+from smal_fitter.neuralSMIL.smil_image_regressor import SMILImageRegressor
 from smal_fitter.neuralSMIL.training_config import TrainingConfig
 from smal_fitter.fitter import SMALFitter
 import config
 from smal_fitter.neuralSMIL.animation_export import AnimationRecorder, build_recorder_from_config
+from smal_fitter.neuralSMIL.inference_common import (
+    InMemoryImageExporter,
+    PredictionSmoother,
+    apply_pose_and_shape,
+    compute_subclip_ranges,
+    pad_or_resize,
+    params_to_cpu,
+    params_to_device,
+    place_mesh,
+    resolve_frame_convention,
+    resolve_mesh_scale,
+    resolve_render_camera,
+    resolve_singleview_dataset_kwargs,
+    write_video,
+)
+from smal_fitter.neuralSMIL.inference_ddp import (
+    barrier,
+    cleanup_ddp,
+    cleanup_temp_dir,
+    compute_rank_indices,
+    gather_predictions,
+    is_torchrun_launched,
+    merge_frame_streams_from_temp,
+    resolve_launch,
+    setup_ddp,
+    validate_num_gpus,
+    write_frame_streams_to_temp,
+    write_video_from_manifest,
+)
 from sleap_data_loader import SLEAPDataLoader
 import importlib.util
 import importlib
@@ -355,7 +426,9 @@ class InferenceImageExporter:
         print(f"  Parameters (PKL): {pkl_path}")
 
 
-def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILImageRegressor, Dict[str, Any]]:
+def load_model_from_checkpoint(
+    checkpoint_path: str, device: str
+) -> Tuple[SMILImageRegressor, Dict[str, Any], Dict[str, Any]]:
     """
     Load a trained SMILImageRegressor model from checkpoint.
 
@@ -364,7 +437,11 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
         device: PyTorch device ('cuda' or 'cpu')
 
     Returns:
-        Tuple of (loaded_model, model_config)
+        Tuple of (loaded_model, model_config, conventions) where *conventions* is
+        the frame-convention / camera / mesh-scale dict resolved by
+        ``inference_common.resolve_frame_convention`` — the same resolution
+        ``benchmark_model.py`` performs, so inference and benchmarking agree on
+        what a checkpoint means.
 
     Raises:
         FileNotFoundError: If checkpoint file doesn't exist
@@ -404,21 +481,25 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
         # Frame convention + camera flags (persisted at the TOP level of
         # checkpoint["config"] by the trainer, not inside model_config).
         # camera_centric checkpoints use a fixed identity camera and were
-        # trained without the 10x UE scaling.
-        frame_convention = ckpt_config.get("frame_convention", "model_centric") if ckpt_config else "model_centric"
-        fixed_camera = bool(ckpt_config.get("fixed_camera", frame_convention == "camera_centric"))
-        use_ue_scaling = bool(ckpt_config.get("use_ue_scaling", not fixed_camera))
-        # Mesh-scale: prefer the persisted flag; fall back to detecting the
-        # mesh_scale head in the state dict so older checkpoints (saved before the
-        # flag was persisted) still rebuild with the head instead of dropping it.
-        _has_mesh_scale_head = any("mesh_scale_head" in k for k in checkpoint.get("model_state_dict", {}))
-        allow_mesh_scaling = bool(ckpt_config.get("allow_mesh_scaling", _has_mesh_scale_head))
-        mesh_scale_init = float(ckpt_config.get("init_mesh_scale", 1.0))
+        # trained without the 10x UE scaling. Resolved by the shared helper so
+        # this script, benchmark_model.py and the multi-view entrypoint cannot
+        # drift apart again (issue #100).
+        conventions = resolve_frame_convention(ckpt_config, checkpoint.get("model_state_dict", {}))
+        frame_convention = conventions["frame_convention"]
+        fixed_camera = conventions["fixed_camera"]
+        use_ue_scaling = conventions["use_ue_scaling"]
+        allow_mesh_scaling = conventions["allow_mesh_scaling"]
+        mesh_scale_init = conventions["mesh_scale_init"]
         model_config["frame_convention"] = frame_convention
         model_config["fixed_camera"] = fixed_camera
+        conventions["scale_trans_mode"] = scale_trans_mode
+        conventions["shape_family"] = shape_family
+        conventions["rotation_representation"] = rotation_representation
 
         print(f"Configuration from {config_source}:")
         print(f"  frame_convention: {frame_convention} (fixed_camera={fixed_camera}, use_ue_scaling={use_ue_scaling})")
+        print(f"  from_multiview: {conventions['from_multiview']}")
+        print(f"  allow_mesh_scaling: {allow_mesh_scaling} (init {mesh_scale_init})")
         print(f"  backbone_name: {model_config['backbone_name']}")
         print(f"  head_type: {model_config.get('head_type', 'mlp')}")
         print(f"  rotation_representation: {rotation_representation}")
@@ -585,7 +666,7 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
         print(f"  Backbone: {model.backbone_name}")
         print(f"  Input resolution: {input_resolution}")
 
-        return model, model_config
+        return model, model_config, conventions
 
     except Exception as e:
         raise RuntimeError(f"Failed to load checkpoint: {e}")
@@ -793,8 +874,113 @@ def run_inference_on_image(
         raise RuntimeError(f"Inference failed: {e}")
 
 
+def _build_render_fitter(
+    model: SMILImageRegressor,
+    predicted_params: Dict[str, torch.Tensor],
+    rgb_tensor: torch.Tensor,
+    device: str,
+    y_data: Optional[Dict[str, Any]] = None,
+    disable_scaling: bool = False,
+    disable_translation: bool = False,
+) -> SMALFitter:
+    """Build a throwaway SMALFitter loaded with *predicted_params*, ready to render.
+
+    Centralises the three rules that used to be re-implemented (inconsistently)
+    at every render site in this file:
+
+    1. ``propagate_scaling`` must match the training model's setting.
+    2. ``log_beta_scales`` / ``betas_trans`` must be interpreted through
+       ``scale_trans_mode`` (PCA weights expanded to per-joint values) — see
+       ``inference_common.apply_shape_space_params``.
+    3. The camera comes from the checkpoint's frame convention: fixed identity +
+       calibrated FOV for ``camera_centric``, predicted camera otherwise — see
+       ``inference_common.resolve_render_camera``.
+    """
+    temp_fitter = SMALFitter(
+        device=device,
+        data_batch=rgb_tensor,
+        batch_size=1,
+        shape_family=config.SHAPE_FAMILY,
+        use_unity_prior=False,
+        rgb_only=True,
+    )
+
+    # CRITICAL: Match propagate_scaling to the training model's setting.
+    # The model learns scales with propagate_scaling=True (set in SMILImageRegressor.__init__),
+    # so visualization must also use propagate_scaling=True for consistent geometry.
+    temp_fitter.propagate_scaling = model.propagate_scaling
+
+    apply_pose_and_shape(
+        temp_fitter,
+        model,
+        predicted_params,
+        index=0,
+        disable_scaling=disable_scaling,
+        disable_translation=disable_translation,
+    )
+
+    cam_rot, cam_trans, fov, aspect = resolve_render_camera(model, predicted_params, y_data, device)
+    temp_fitter.fov.data = fov.reshape(-1)[:1].clone()
+    temp_fitter.renderer.set_camera_parameters(R=cam_rot, T=cam_trans, fov=fov, aspect_ratio=aspect)
+
+    return temp_fitter
+
+
+def _render_mesh_rgb(
+    model: SMILImageRegressor,
+    predicted_params: Dict[str, torch.Tensor],
+    rgb_tensor: torch.Tensor,
+    device: str,
+    y_data: Optional[Dict[str, Any]] = None,
+    disable_scaling: bool = False,
+    disable_translation: bool = False,
+) -> np.ndarray:
+    """Render the predicted mesh over *rgb_tensor* and return float RGB in [0, 1]."""
+    temp_fitter = _build_render_fitter(
+        model,
+        predicted_params,
+        rgb_tensor,
+        device,
+        y_data=y_data,
+        disable_scaling=disable_scaling,
+        disable_translation=disable_translation,
+    )
+    mesh_scale = resolve_mesh_scale(model, predicted_params)
+
+    with torch.no_grad():
+        # SMAL reads the beta count as ``beta.shape[1]``, so betas must be 2-D
+        # here. ``apply_pose_and_shape`` writes the (N_BETAS,) layout SMALFitter
+        # declares (its own generate_visualization expands it); this call site
+        # bypasses that expansion, so add the batch dim explicitly.
+        verts, joints, Rs, v_shaped = temp_fitter.smal_model(
+            temp_fitter.betas.reshape(1, -1),
+            torch.cat([temp_fitter.global_rotation.unsqueeze(1), temp_fitter.joint_rotations], dim=1),
+            betas_logscale=temp_fitter.log_beta_scales,
+            betas_trans=temp_fitter.betas_trans,
+            propagate_scaling=temp_fitter.propagate_scaling,
+        )
+
+        verts, joints = place_mesh(
+            model.use_ue_scaling, verts, joints, temp_fitter.trans, mesh_scale=mesh_scale
+        )
+
+        canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
+        faces_batch = temp_fitter.smal_model.faces.unsqueeze(0).expand(verts.shape[0], -1, -1)
+
+        _, _, rendered_image = temp_fitter.renderer(
+            verts.float(), canonical_joints.float(), faces_batch, render_texture=True
+        )
+
+    rendered_np = rendered_image[0].permute(1, 2, 0).cpu().numpy()  # (H, W, 3)
+    return np.clip(rendered_np, 0, 1)
+
+
 def render_model_only(
-    model: SMILImageRegressor, predicted_params: Dict[str, torch.Tensor], device: str, render_size: int
+    model: SMILImageRegressor,
+    predicted_params: Dict[str, torch.Tensor],
+    device: str,
+    render_size: int,
+    y_data: Optional[Dict[str, Any]] = None,
 ) -> np.ndarray:
     """
     Render only the predicted 3D model without any background.
@@ -804,99 +990,18 @@ def render_model_only(
         predicted_params: Dictionary of predicted SMIL parameters
         device: PyTorch device
         render_size: Target render resolution
+        y_data: Optional target dict supplying camera calibration (FOV / aspect)
+                for camera-centric checkpoints
 
     Returns:
         Rendered model image (render_size, render_size, 3) in RGB, range [0, 255]
     """
     try:
-        # Convert rotations to axis-angle if they're in 6D representation
-        if model.rotation_representation == "6d":
-            global_rot_aa = rotation_6d_to_axis_angle(predicted_params["global_rot"])
-            joint_rot_aa = rotation_6d_to_axis_angle(predicted_params["joint_rot"])
-        else:
-            global_rot_aa = predicted_params["global_rot"]
-            joint_rot_aa = predicted_params["joint_rot"]
-
-        # Create a blank RGB tensor for rendering
         rgb_tensor = torch.zeros((1, 3, render_size, render_size), device=device)
-
-        # Create temporary SMALFitter for rendering
-        temp_fitter = SMALFitter(
-            device=device,
-            data_batch=rgb_tensor,
-            batch_size=1,
-            shape_family=config.SHAPE_FAMILY,
-            use_unity_prior=False,
-            rgb_only=True,
-        )
-
-        # CRITICAL: Match propagate_scaling to the training model's setting.
-        # The model learns scales with propagate_scaling=True (set in SMILImageRegressor.__init__),
-        # so visualization must also use propagate_scaling=True for consistent geometry.
-        temp_fitter.propagate_scaling = model.propagate_scaling
-
-        # Set the predicted parameters
-        temp_fitter.global_rotation.data = global_rot_aa.to(device)
-        temp_fitter.joint_rotations.data = joint_rot_aa.to(device)
-        temp_fitter.betas.data = predicted_params["betas"].to(device)
-        temp_fitter.trans.data = predicted_params["trans"].to(device)
-        temp_fitter.fov.data = predicted_params["fov"].to(device)
-
-        # Set joint scales and translations if available
-        if "log_beta_scales" in predicted_params:
-            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
-        if "betas_trans" in predicted_params:
-            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
-
-        # Set camera parameters
-        if "cam_rot" in predicted_params and "cam_trans" in predicted_params:
-            temp_fitter.renderer.set_camera_parameters(
-                R=predicted_params["cam_rot"].to(device),
-                T=predicted_params["cam_trans"].to(device),
-                fov=predicted_params["fov"].to(device),
-            )
-
-        # Render the model
-        with torch.no_grad():
-            # Get vertices and joints from SMAL model
-            verts, joints, Rs, v_shaped = temp_fitter.smal_model(
-                temp_fitter.betas,
-                torch.cat([temp_fitter.global_rotation.unsqueeze(1), temp_fitter.joint_rotations], dim=1),
-                betas_logscale=temp_fitter.log_beta_scales,
-                betas_trans=temp_fitter.betas_trans,
-                propagate_scaling=temp_fitter.propagate_scaling,
-            )
-
-            if model.use_ue_scaling:
-                # Apply UE scaling transformation (10x scale) — legacy replicAnt
-                verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
-                joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
-            else:
-                # Camera-centric / no UE scaling: plain translation (scale baked in).
-                verts = verts + temp_fitter.trans.unsqueeze(1)
-                joints = joints + temp_fitter.trans.unsqueeze(1)
-
-            # Get canonical model joints
-            canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
-
-            # Prepare faces
-            faces_batch = temp_fitter.smal_model.faces.unsqueeze(0).expand(verts.shape[0], -1, -1)
-
-            # Render with texture
-            rendered_silhouettes, rendered_joints, rendered_image = temp_fitter.renderer(
-                verts, canonical_joints, faces_batch, render_texture=True
-            )
-
-        # Convert rendered image to numpy (already in (B, C, H, W) format)
-        rendered_np = rendered_image[0].permute(1, 2, 0).cpu().numpy()  # (H, W, 3)
-        rendered_np = np.clip(rendered_np, 0, 1)
-
-        # Convert to [0, 255] range
+        rendered_np = _render_mesh_rgb(model, predicted_params, rgb_tensor, device, y_data=y_data)
         return (rendered_np * 255).astype(np.uint8)
-
     except Exception as e:
         print(f"Warning: Failed to render model: {e}")
-        # Return black image on error
         return np.zeros((render_size, render_size, 3), dtype=np.uint8)
 
 
@@ -906,6 +1011,7 @@ def render_prediction_on_frame(
     original_frame: np.ndarray,
     device: str,
     transform_info: Optional[Dict[str, Any]] = None,
+    y_data: Optional[Dict[str, Any]] = None,
 ) -> np.ndarray:
     """
     Render the predicted 3D model onto the original frame.
@@ -915,107 +1021,27 @@ def render_prediction_on_frame(
         predicted_params: Dictionary of predicted SMIL parameters
         original_frame: Original frame (H, W, 3) in RGB, range [0, 255]
         device: PyTorch device
+        transform_info: Crop/resize bookkeeping from ``preprocess_frame`` so the
+                        render is composited back onto the region it was cropped
+                        from (identity for already-cropped dataset frames)
+        y_data: Optional target dict supplying camera calibration (FOV / aspect)
 
     Returns:
         Rendered frame with 3D model overlay (H, W, 3) in RGB, range [0, 255]
     """
     try:
-        # Convert rotations to axis-angle if they're in 6D representation
-        if model.rotation_representation == "6d":
-            global_rot_aa = rotation_6d_to_axis_angle(predicted_params["global_rot"])
-            joint_rot_aa = rotation_6d_to_axis_angle(predicted_params["joint_rot"])
-        else:
-            global_rot_aa = predicted_params["global_rot"]
-            joint_rot_aa = predicted_params["joint_rot"]
-
-        # Get frame dimensions
         frame_h, frame_w = original_frame.shape[:2]
-
-        # Resize to model's expected input size for rendering
         render_size = model.input_resolution
 
-        # Prepare image for rendering
         if original_frame.max() > 1.0:
             rgb_image = original_frame.astype(np.float32) / 255.0
         else:
             rgb_image = original_frame.astype(np.float32)
 
-        # Resize to render size
         rgb_resized = cv2.resize(rgb_image, (render_size, render_size))
+        rgb_tensor = torch.from_numpy(rgb_resized).permute(2, 0, 1).unsqueeze(0)
 
-        # Convert to tensor format expected by SMALFitter
-        rgb_tensor = torch.from_numpy(rgb_resized).permute(2, 0, 1).unsqueeze(0)  # (1, 3, H, W)
-
-        # Create temporary SMALFitter for rendering
-        temp_fitter = SMALFitter(
-            device=device,
-            data_batch=rgb_tensor,
-            batch_size=1,
-            shape_family=config.SHAPE_FAMILY,
-            use_unity_prior=False,
-            rgb_only=True,
-        )
-
-        # CRITICAL: Match propagate_scaling to the training model's setting.
-        # The model learns scales with propagate_scaling=True (set in SMILImageRegressor.__init__),
-        # so visualization must also use propagate_scaling=True for consistent geometry.
-        temp_fitter.propagate_scaling = model.propagate_scaling
-
-        # Set the predicted parameters
-        temp_fitter.global_rotation.data = global_rot_aa.to(device)
-        temp_fitter.joint_rotations.data = joint_rot_aa.to(device)
-        temp_fitter.betas.data = predicted_params["betas"].to(device)
-        temp_fitter.trans.data = predicted_params["trans"].to(device)
-        temp_fitter.fov.data = predicted_params["fov"].to(device)
-
-        # Set joint scales and translations if available
-        if "log_beta_scales" in predicted_params:
-            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
-        if "betas_trans" in predicted_params:
-            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
-
-        # Set camera parameters
-        if "cam_rot" in predicted_params and "cam_trans" in predicted_params:
-            temp_fitter.renderer.set_camera_parameters(
-                R=predicted_params["cam_rot"].to(device),
-                T=predicted_params["cam_trans"].to(device),
-                fov=predicted_params["fov"].to(device),
-            )
-
-        # Render the model
-        with torch.no_grad():
-            # Get vertices and joints from SMAL model
-            verts, joints, Rs, v_shaped = temp_fitter.smal_model(
-                temp_fitter.betas,
-                torch.cat([temp_fitter.global_rotation.unsqueeze(1), temp_fitter.joint_rotations], dim=1),
-                betas_logscale=temp_fitter.log_beta_scales,
-                betas_trans=temp_fitter.betas_trans,
-                propagate_scaling=temp_fitter.propagate_scaling,
-            )
-
-            if model.use_ue_scaling:
-                # Apply UE scaling transformation (10x scale) — legacy replicAnt
-                verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
-                joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
-            else:
-                # Camera-centric / no UE scaling: plain translation (scale baked in).
-                verts = verts + temp_fitter.trans.unsqueeze(1)
-                joints = joints + temp_fitter.trans.unsqueeze(1)
-
-            # Get canonical model joints
-            canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
-
-            # Prepare faces
-            faces_batch = temp_fitter.smal_model.faces.unsqueeze(0).expand(verts.shape[0], -1, -1)
-
-            # Render with texture
-            rendered_silhouettes, rendered_joints, rendered_image = temp_fitter.renderer(
-                verts, canonical_joints, faces_batch, render_texture=True
-            )
-
-        # Convert rendered image to numpy (already in (B, C, H, W) format)
-        rendered_np = rendered_image[0].permute(1, 2, 0).cpu().numpy()  # (H, W, 3)
-        rendered_np = np.clip(rendered_np, 0, 1)
+        rendered_np = _render_mesh_rgb(model, predicted_params, rgb_tensor, device, y_data=y_data)
 
         alpha = 0.6  # Transparency of the overlay
         overlay_base = original_frame.astype(np.float32) / 255.0
@@ -1064,6 +1090,44 @@ def render_prediction_on_frame(
         return original_frame
 
 
+def _to_uint8_rgb(image: np.ndarray) -> np.ndarray:
+    """Normalise an RGB array to uint8 [0, 255] whether it arrived as [0,1] or [0,255]."""
+    arr = np.asarray(image)
+    if arr.dtype == np.uint8:
+        return arr
+    arr = arr.astype(np.float32)
+    if arr.max() <= 1.0:
+        arr = arr * 255.0
+    return np.clip(arr, 0, 255).astype(np.uint8)
+
+
+def _set_target_joints(temp_fitter, keypoints_2d, keypoint_visibility, device, target_size: int) -> None:
+    """Attach GT keypoints (normalised [y, x]) to *temp_fitter* at render scale.
+
+    ``SMALFitter`` draws ``target_joints`` in pixels of the rendered image, so
+    the normalised dataset keypoints are scaled by the fitter's own image size,
+    NOT by ``model.input_resolution`` — scaling by the backbone input resolution
+    shrinks the GT markers by ``input_res / native`` and misaligns them (the same
+    fix already applied in ``train_smil_regressor.visualize_training_progress``).
+    """
+    if keypoints_2d is not None and keypoint_visibility is not None:
+        pixel_coords = np.asarray(keypoints_2d, dtype=np.float32).copy()
+        pixel_coords[:, 0] = pixel_coords[:, 0] * target_size  # y
+        pixel_coords[:, 1] = pixel_coords[:, 1] * target_size  # x
+        vis = np.asarray(keypoint_visibility, dtype=np.float32).reshape(-1)
+        temp_fitter.target_joints = torch.tensor(pixel_coords, dtype=torch.float32, device=device).unsqueeze(0)
+        temp_fitter.target_visibility = torch.tensor(vis, dtype=torch.float32, device=device).unsqueeze(0)
+    else:
+        # No GT keypoints: draw nothing. The marker drawer unpacks
+        # ``(bs, nj, 2)`` and indexes config.MARKER_COLORS / MARKER_TYPE by joint
+        # id, and the predicted joints it draws are config.CANONICAL_MODEL_JOINTS,
+        # so the placeholder must have exactly that many rows (this equals
+        # N_POSE + 1 for SMIL models but NOT for the legacy hard-coded body).
+        n_joints = len(config.CANONICAL_MODEL_JOINTS)
+        temp_fitter.target_joints = torch.zeros((1, n_joints, 2), device=device)
+        temp_fitter.target_visibility = torch.zeros((1, n_joints), device=device)
+
+
 def generate_visualization(
     model: SMILImageRegressor,
     predicted_params: Dict[str, torch.Tensor],
@@ -1071,6 +1135,9 @@ def generate_visualization(
     image_exporter: InferenceImageExporter,
     image_name: str,
     device: str,
+    y_data: Optional[Dict[str, Any]] = None,
+    disable_scaling: bool = False,
+    disable_translation: bool = False,
 ) -> None:
     """
     Generate visualization using the SMIL model and predicted parameters.
@@ -1082,22 +1149,19 @@ def generate_visualization(
         image_exporter: Image exporter for saving results
         image_name: Base name for the image
         device: PyTorch device
+        y_data: Optional target dict (dataset mode) supplying GT keypoints and
+                the camera calibration used by camera-centric checkpoints
+        disable_scaling: Skip applying log_beta_scales (comparison/debugging)
+        disable_translation: Skip applying betas_trans (comparison/debugging)
     """
     try:
-        # Convert rotations to axis-angle if they're in 6D representation
-        if model.rotation_representation == "6d":
-            global_rot_aa = rotation_6d_to_axis_angle(predicted_params["global_rot"])
-            joint_rot_aa = rotation_6d_to_axis_angle(predicted_params["joint_rot"])
-        else:
-            global_rot_aa = predicted_params["global_rot"]
-            joint_rot_aa = predicted_params["joint_rot"]
-
         # Create a simplified SMALFitter for visualization
         # Use the original image as RGB input
         if original_image.max() > 1.0:
             rgb_image = original_image.astype(np.float32) / 255.0
         else:
             rgb_image = original_image.astype(np.float32)
+        rgb_image = np.clip(rgb_image, 0.0, 1.0)
 
         # Resize to model's expected input size
         target_size = (model.input_resolution, model.input_resolution)
@@ -1108,45 +1172,19 @@ def generate_visualization(
         # Convert to tensor format expected by SMALFitter
         rgb_tensor = torch.from_numpy(rgb_image).permute(2, 0, 1).unsqueeze(0)  # (1, 3, H, W)
 
-        # Create temporary SMALFitter for visualization
-        temp_fitter = SMALFitter(
-            device=device,
-            data_batch=rgb_tensor,
-            batch_size=1,
-            shape_family=config.SHAPE_FAMILY,
-            use_unity_prior=False,
-            rgb_only=True,
+        temp_fitter = _build_render_fitter(
+            model,
+            predicted_params,
+            rgb_tensor,
+            device,
+            y_data=y_data,
+            disable_scaling=disable_scaling,
+            disable_translation=disable_translation,
         )
 
-        # CRITICAL: Match propagate_scaling to the training model's setting.
-        # The model learns scales with propagate_scaling=True (set in SMILImageRegressor.__init__),
-        # so visualization must also use propagate_scaling=True for consistent geometry.
-        temp_fitter.propagate_scaling = model.propagate_scaling
-
-        # Set the predicted parameters (ensure they're on the right device)
-        temp_fitter.global_rotation.data = global_rot_aa.to(device)
-        temp_fitter.joint_rotations.data = joint_rot_aa.to(device)
-        temp_fitter.betas.data = predicted_params["betas"].to(device)
-        temp_fitter.trans.data = predicted_params["trans"].to(device)
-        temp_fitter.fov.data = predicted_params["fov"].to(device)
-
-        # Set joint scales and translations if available
-        if "log_beta_scales" in predicted_params:
-            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
-        if "betas_trans" in predicted_params:
-            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
-
-        # Set camera parameters using predicted values
-        if "cam_rot" in predicted_params and "cam_trans" in predicted_params:
-            temp_fitter.renderer.set_camera_parameters(
-                R=predicted_params["cam_rot"].to(device),
-                T=predicted_params["cam_trans"].to(device),
-                fov=predicted_params["fov"].to(device),
-            )
-
-        # Set dummy target joints and visibility for visualization
-        temp_fitter.target_joints = torch.zeros((1, config.N_POSE, 2), device=device)
-        temp_fitter.target_visibility = torch.ones((1, config.N_POSE), device=device)
+        keypoints_2d = y_data.get("keypoints_2d") if y_data is not None else None
+        keypoint_visibility = y_data.get("keypoint_visibility") if y_data is not None else None
+        _set_target_joints(temp_fitter, keypoints_2d, keypoint_visibility, device, int(temp_fitter.image_size))
 
         # Generate visualization with custom image exporter wrapper
         class NamedImageExporter:
@@ -1172,11 +1210,11 @@ def generate_visualization(
         named_exporter = NamedImageExporter(image_exporter, image_name)
         # Apply the predicted per-sample mesh scale (camera_centric); without it the
         # mesh renders at native size (~35x too large vs the metric 3D).
-        mesh_scale_viz = None
-        if getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
-            mesh_scale_viz = predicted_params["mesh_scale"].to(device)
         temp_fitter.generate_visualization(
-            named_exporter, apply_UE_transform=model.use_ue_scaling, img_idx=0, mesh_scale=mesh_scale_viz
+            named_exporter,
+            apply_UE_transform=model.use_ue_scaling,
+            img_idx=0,
+            mesh_scale=resolve_mesh_scale(model, predicted_params),
         )
 
         print(f"Generated visualization for {image_name}")
@@ -1216,6 +1254,8 @@ def process_images_batch(
     batch_size: int = 1,
     sleap_helper: Optional[SLEAPCroppingHelper] = None,
     sleap_camera: Optional[str] = None,
+    disable_scaling: bool = False,
+    disable_translation: bool = False,
 ) -> None:
     """
     Process a batch of images for inference.
@@ -1271,7 +1311,16 @@ def process_images_batch(
             predicted_params = run_inference_on_image(model, preprocessed_tensor, device)
 
             # Generate visualization with unique image name
-            generate_visualization(model, predicted_params, original_image, image_exporter, image_name, device)
+            generate_visualization(
+                model,
+                predicted_params,
+                original_image,
+                image_exporter,
+                image_name,
+                device,
+                disable_scaling=disable_scaling,
+                disable_translation=disable_translation,
+            )
 
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
@@ -1330,6 +1379,9 @@ def process_video(
     sleap_camera: Optional[str] = None,
     video_export_mode: str = "overlay",
     animation_recorder: Optional[AnimationRecorder] = None,
+    smoothing_window: int = 0,
+    disable_scaling: bool = False,
+    disable_translation: bool = False,
 ) -> None:
     """
     Process a video file for inference.
@@ -1347,6 +1399,13 @@ def process_video(
         sleap_helper: Optional helper for bbox_crop using SLEAP keypoints
         sleap_camera: Optional camera override when using bbox_crop
         video_export_mode: Export mode ('overlay' or 'side_by_side')
+        animation_recorder: Optional recorder for the raw (pre-smoothing) parameters
+        smoothing_window: Moving-average window over ALL predicted parameters
+            (``PredictionSmoother``, the same smoother run_multiview_inference.py
+            uses). When > 0 it supersedes ``camera_smoothing_window``, which only
+            averages the camera parameters.
+        disable_scaling: Skip applying log_beta_scales when rendering
+        disable_translation: Skip applying betas_trans when rendering
     """
     # Create output directory
     os.makedirs(output_folder, exist_ok=True)
@@ -1401,6 +1460,15 @@ def process_video(
 
     # Initialize moving average buffers for camera parameters
     camera_buffer = {"cam_rot": [], "cam_trans": [], "fov": []}
+    # Full-parameter smoother (shared with the multi-view entrypoint). When
+    # active it replaces the camera-only moving average so a --smoothing_window
+    # run smooths identically on both paths.
+    param_smoother = PredictionSmoother(smoothing_window) if smoothing_window > 0 else None
+    if param_smoother is not None and camera_smoothing_window > 0:
+        print(
+            "Note: --smoothing_window is set; it supersedes --camera_smoothing "
+            "(all parameters are smoothed, not just the camera)."
+        )
 
     # Optionally create frame exporter
     if save_frames:
@@ -1458,8 +1526,11 @@ def process_video(
                 if animation_recorder is not None:
                     animation_recorder.record(predicted_params)
 
-                # Apply camera parameter smoothing
-                if camera_smoothing_window > 0:
+                # Apply smoothing: full-parameter moving average when
+                # --smoothing_window is set, otherwise the legacy camera-only one.
+                if param_smoother is not None:
+                    smoothed_params = param_smoother(predicted_params)
+                elif camera_smoothing_window > 0:
                     smoothed_params = smooth_camera_parameters(predicted_params, camera_buffer, camera_smoothing_window)
                 else:
                     smoothed_params = predicted_params
@@ -1493,7 +1564,16 @@ def process_video(
                 if save_frames and frame_idx % 10 == 0:  # Save every 10th frame
                     frame_name = f"frame_{frame_idx:06d}"
                     try:
-                        generate_visualization(model, predicted_params, frame_rgb, frame_exporter, frame_name, device)
+                        generate_visualization(
+                            model,
+                            predicted_params,
+                            frame_rgb,
+                            frame_exporter,
+                            frame_name,
+                            device,
+                            disable_scaling=disable_scaling,
+                            disable_translation=disable_translation,
+                        )
                     except Exception as e:
                         print(f"Warning: Failed to save frame {frame_idx}: {e}")
 
@@ -1521,26 +1601,695 @@ def process_video(
         print(f"  Frame results: {frames_folder}")
 
 
+# --------------------------------------------------------------------------- #
+# Dataset mode (issue #100) - mirrors run_multiview_inference.py
+# --------------------------------------------------------------------------- #
+
+
+def load_inference_dataset(dataset_path: str, model: SMILImageRegressor, conventions: Dict[str, Any]):
+    """Open *dataset_path* for single-view inference under the checkpoint's convention.
+
+    ``UnifiedSMILDataset.from_path`` dispatches on the HDF5 ``/metadata`` attrs:
+    a multi-view file is opened with ``return_single_view=True`` (plus the
+    checkpoint's ``camera_centric`` flag and ``expand_all_views=True``) so every
+    calibrated view becomes its own single-view item and the camera the model
+    renders through is the one the dataset re-anchored to. A genuine single-view
+    file (``SLEAPDataset`` / ``OptimizedSMILDataset``) needs no extra kwargs.
+
+    This is the same resolution ``benchmark_model._run_singleview_benchmark``
+    performs, so a benchmark run and an inference run consume identical items.
+    """
+    from smal_fitter.neuralSMIL.smil_datasets import UnifiedSMILDataset
+
+    extra_kwargs = resolve_singleview_dataset_kwargs(dataset_path, conventions)
+    dataset = UnifiedSMILDataset.from_path(
+        dataset_path,
+        rotation_representation=model.rotation_representation,
+        backbone_name=model.backbone_name,
+        **extra_kwargs,
+    )
+    return dataset, extra_kwargs
+
+
+def check_dataset_model_coherence(dataset, model: SMILImageRegressor, conventions: Dict[str, Any]) -> List[str]:
+    """Cross-check the dataset's conventions against the checkpoint's.
+
+    Returns the list of warnings emitted (also printed). These are exactly the
+    axes issue #100 calls out: camera intrinsics/extrinsics, the shape-space
+    scale/translation parameterisation, and mesh scaling / cropping.
+    """
+    warnings: List[str] = []
+
+    def warn(msg: str):
+        warnings.append(msg)
+        print(f"WARNING: {msg}")
+
+    print("\n" + "-" * 60)
+    print("DATASET / CHECKPOINT COHERENCE")
+    print("-" * 60)
+
+    # --- Mesh scaling -------------------------------------------------------
+    dataset_ue = None
+    if hasattr(dataset, "get_ue_scaling_flag"):
+        try:
+            dataset_ue = bool(dataset.get_ue_scaling_flag())
+        except Exception:
+            dataset_ue = None
+    print(f"  mesh placement: use_ue_scaling={model.use_ue_scaling}, allow_mesh_scaling={model.allow_mesh_scaling}")
+    if dataset_ue is not None:
+        print(f"  dataset UE-scaling convention: {dataset_ue}")
+        if dataset_ue != bool(model.use_ue_scaling):
+            warn(
+                f"dataset expects use_ue_scaling={dataset_ue} but the checkpoint was trained with "
+                f"use_ue_scaling={model.use_ue_scaling}; the rendered mesh will be misplaced/mis-scaled."
+            )
+    if not model.use_ue_scaling and not model.allow_mesh_scaling:
+        print("  note: neither UE scaling nor a learned mesh_scale - mesh is placed by translation only.")
+
+    # --- Cropping -----------------------------------------------------------
+    crop_mode = getattr(dataset, "crop_mode", None)
+    target_resolution = None
+    if hasattr(dataset, "get_target_resolution"):
+        try:
+            target_resolution = int(dataset.get_target_resolution())
+        except Exception:
+            target_resolution = None
+    print(f"  dataset crop_mode: {crop_mode if crop_mode is not None else '(not recorded)'}")
+    print(f"  dataset target_resolution: {target_resolution}, model input_resolution: {model.input_resolution}")
+    print("  note: dataset frames are already cropped by the preprocessor - --crop_mode is NOT applied here.")
+
+    # --- Camera intrinsics / extrinsics -------------------------------------
+    has_cam = bool(getattr(dataset, "has_camera_parameters", False))
+    if conventions.get("fixed_camera", False):
+        print("  camera: camera_centric - FIXED PyTorch3D identity, vertical FOV from per-sample calibration.")
+        if not has_cam:
+            warn(
+                "camera-centric checkpoint but the dataset carries no camera calibration; "
+                "the render falls back to --fov, which will not match the footage."
+            )
+    else:
+        print("  camera: model_centric - the network's predicted cam_rot / cam_trans / fov are used.")
+        if has_cam:
+            print("  note: dataset ships GT camera parameters; they are used only for the aspect ratio here.")
+
+    world_scale = getattr(dataset, "world_scale", None)
+    if world_scale is not None:
+        print(f"  dataset world_scale: {world_scale}")
+
+    # --- Shape space --------------------------------------------------------
+    mode = getattr(model, "scale_trans_mode", "separate")
+    use_pca = None
+    if mode == "separate":
+        use_pca = TrainingConfig.get_scale_trans_config().get("separate", {}).get("use_pca_transformation", True)
+    print(f"  scale_trans_mode: {mode}" + (f" (use_pca_transformation={use_pca})" if use_pca is not None else ""))
+    if mode == "separate" and use_pca:
+        print("  note: log_beta_scales / betas_trans are PCA weights and are expanded to per-joint values.")
+    elif mode == "ignore":
+        print("  note: shape-space scale/translation is disabled for this checkpoint.")
+
+    print("-" * 60 + "\n")
+    return warnings
+
+
+def run_forward_singleview(
+    model: SMILImageRegressor, x_data: Dict[str, Any], y_data: Dict[str, Any]
+) -> Optional[Dict[str, torch.Tensor]]:
+    """Run one dataset sample through the model, returning ``predicted_params``.
+
+    Uses ``predict_from_batch`` rather than a bare ``forward`` so the
+    camera-centric fixed-camera override sources its FOV from the sample's own
+    calibration (``y_data['cam_fov']``) - the same code path training and
+    ``benchmark_model.py`` use. Calling ``forward`` directly (as the raw-image
+    path must, having no calibration) would silently substitute the CLI ``--fov``.
+    """
+    if x_data.get("input_image_data") is None:
+        return None
+    with torch.no_grad():
+        result = model.predict_from_batch([x_data], [y_data])
+    if result is None or result[0] is None:
+        return None
+    return result[0]
+
+
+def render_dataset_sample(
+    model: SMILImageRegressor,
+    x_data: Dict[str, Any],
+    y_data: Dict[str, Any],
+    device: str,
+    predicted_params: Dict[str, torch.Tensor],
+    disable_scaling: bool = False,
+    disable_translation: bool = False,
+    render_resolution: Optional[int] = None,
+) -> Optional[np.ndarray]:
+    """Render the SMALFitter collage for one dataset sample (RGB uint8).
+
+    Deliberately mirrors ``run_multiview_inference.render_singleview_collage``:
+    same footage handling, same GT-keypoint scaling, same shared parameter
+    application, same camera resolution, same mesh placement - so a single-view
+    checkpoint and a multi-view checkpoint produce comparable frames.
+
+    The dataset image is used as-is: it is already the crop the preprocessor
+    produced, and ``keypoints_2d`` are normalised to that crop, so applying a
+    second crop here would break the correspondence.
+    """
+    image = x_data.get("input_image_data")
+    if image is None:
+        return None
+
+    target_size = int(render_resolution) if render_resolution else int(getattr(model.renderer, "image_size", 224))
+
+    from PIL import Image
+
+    pil_img = Image.fromarray(_to_uint8_rgb(image))
+    pil_img = pil_img.resize((target_size, target_size), Image.BILINEAR)
+    resized_image = np.asarray(pil_img).astype(np.float32) / 255.0
+    resized_image = np.clip(resized_image, 0.0, 1.0)
+    rgb = torch.from_numpy(resized_image).permute(2, 0, 1).unsqueeze(0).float()
+
+    keypoints_2d = y_data.get("keypoints_2d", None)
+    visibility = y_data.get("keypoint_visibility", None)
+
+    if keypoints_2d is not None and visibility is not None:
+        pixel_coords = np.asarray(keypoints_2d, dtype=np.float32).copy()
+        pixel_coords[:, 0] = pixel_coords[:, 0] * target_size
+        pixel_coords[:, 1] = pixel_coords[:, 1] * target_size
+        num_joints = pixel_coords.shape[0]
+        joints = torch.tensor(pixel_coords.reshape(1, num_joints, 2), dtype=torch.float32)
+        vis = torch.tensor(np.asarray(visibility, dtype=np.float32).reshape(1, num_joints), dtype=torch.float32)
+        sil = torch.zeros(1, 1, target_size, target_size)
+        temp_batch = (rgb, sil, joints, vis)
+        rgb_only = False
+    else:
+        temp_batch = rgb
+        rgb_only = True
+
+    temp_fitter = SMALFitter(
+        device=device,
+        data_batch=temp_batch,
+        batch_size=1,
+        shape_family=config.SHAPE_FAMILY,
+        use_unity_prior=False,
+        rgb_only=rgb_only,
+    )
+    temp_fitter.propagate_scaling = model.propagate_scaling
+
+    _set_target_joints(temp_fitter, keypoints_2d, visibility, device, target_size)
+
+    apply_pose_and_shape(
+        temp_fitter,
+        model,
+        predicted_params,
+        index=0,
+        disable_scaling=disable_scaling,
+        disable_translation=disable_translation,
+    )
+
+    cam_rot, cam_trans, fov, aspect = resolve_render_camera(model, predicted_params, y_data, device)
+    temp_fitter.fov.data = fov.reshape(-1)[:1].clone()
+    temp_fitter.renderer.set_camera_parameters(R=cam_rot, T=cam_trans, fov=fov, aspect_ratio=aspect)
+
+    exporter = InMemoryImageExporter()
+    temp_fitter.generate_visualization(
+        exporter,
+        apply_UE_transform=model.use_ue_scaling,
+        img_idx=0,
+        mesh_scale=resolve_mesh_scale(model, predicted_params),
+    )
+    return exporter.image
+
+
+SV_FRAME_STREAM = "sv"
+"""Temp-storage stream name for the single-view render (see inference_ddp)."""
+
+
+def _probe_frame_size(
+    model: SMILImageRegressor,
+    dataset,
+    device: str,
+    render_resolution: Optional[int],
+) -> Tuple[int, int]:
+    """Determine the output frame size once, identically on every rank.
+
+    Every rank must agree on the video dimensions before any frame is written,
+    otherwise ``cv2.VideoWriter`` silently drops the frames whose size differs
+    from the one it was opened with. Probing the SAME sample (index 0) on every
+    rank guarantees agreement without a collective.
+    """
+    fallback = int(render_resolution) if render_resolution else int(getattr(model.renderer, "image_size", 224))
+    if len(dataset) == 0:
+        return (fallback, fallback)
+    try:
+        x_data, y_data = dataset[0]
+        predicted_params = run_forward_singleview(model, x_data, y_data)
+        if predicted_params is not None:
+            frame = render_dataset_sample(
+                model,
+                x_data,
+                y_data,
+                device,
+                predicted_params,
+                render_resolution=render_resolution,
+            )
+            if frame is not None:
+                return (frame.shape[1], frame.shape[0])
+    except Exception as e:
+        print(f"Warning: frame-size probe failed ({e}); falling back to {fallback}x{fallback}")
+    return (fallback, fallback)
+
+
+def _export_animation_singleview(
+    raw_predictions: List[Tuple[int, Dict[str, Any]]],
+    rank: int,
+    world_size: int,
+    model: SMILImageRegressor,
+    checkpoint_path: str,
+    dataset_path: str,
+    export_path: str,
+    fps: float,
+) -> None:
+    """Gather predictions to rank 0 and write an AMASS-style .npz + .json clip.
+
+    Captures the *raw*, pre-smoothing predictions so downstream consumers
+    (Blender addon, etc.) can apply their own smoothing. Mirrors
+    ``run_multiview_inference._export_animation``; the recorder builds the
+    averaged single-view camera block itself, so there is no per-view camera
+    list to assemble here.
+    """
+    export_temp_base = Path.cwd() / f".animation_export_temp_{Path(export_path).name}"
+    if world_size > 1 and rank == 0:
+        cleanup_temp_dir(export_temp_base)
+
+    all_predictions = gather_predictions(
+        raw_predictions,
+        rank=rank,
+        world_size=world_size,
+        temp_dir=export_temp_base,
+        all_ranks=False,
+    )
+
+    if world_size > 1 and rank == 0:
+        cleanup_temp_dir(export_temp_base)
+
+    if rank != 0 or not all_predictions:
+        return
+
+    recorder = build_recorder_from_config(
+        output_path=export_path,
+        rotation_representation=model.rotation_representation,
+        fps=fps,
+        source_checkpoint=str(checkpoint_path),
+        source_input=str(dataset_path),
+        model_id=getattr(model, "model_id", None),
+    )
+    for _, params in all_predictions:
+        recorder.record(params)
+
+    written = recorder.write()
+    print(f"Animation export written: {written['npz']} + {written['json']} ({recorder.num_frames()} frames)")
+
+
+def run_dataset_inference_phase(
+    model: SMILImageRegressor,
+    dataset,
+    indices: List[int],
+    rank: int,
+) -> List[Tuple[int, Dict[str, Any]]]:
+    """Run forward passes on the assigned indices; return raw predictions on CPU."""
+    model.eval()
+    raw_predictions: List[Tuple[int, Dict[str, Any]]] = []
+
+    for global_idx in tqdm(indices, desc="Running inference", disable=(rank != 0)):
+        try:
+            x_data, y_data = dataset[global_idx]
+            predicted_params = run_forward_singleview(model, x_data, y_data)
+            if predicted_params is None:
+                continue
+            raw_predictions.append((global_idx, params_to_cpu(predicted_params)))
+        except Exception as e:
+            print(f"[Rank {rank}] Error in inference for sample {global_idx}: {e}")
+            continue
+
+    print(f"[Rank {rank}] Inference complete: {len(raw_predictions)} predictions")
+    return raw_predictions
+
+
+def run_dataset_render_phase(
+    model: SMILImageRegressor,
+    dataset,
+    device: str,
+    smoothed_params: Dict[int, Dict[str, Any]],
+    indices: List[int],
+    rank: int,
+    frame_size: Tuple[int, int],
+    args,
+    render_resolution: Optional[int],
+    frame_exporter: Optional[InferenceImageExporter],
+) -> Tuple[List[np.ndarray], List[int]]:
+    """Render the assigned indices; return ``(bgr_frames, global_indices)``."""
+    frames: List[np.ndarray] = []
+    frame_indices: List[int] = []
+
+    for global_idx in tqdm(indices, desc="Rendering visualizations", disable=(rank != 0)):
+        if global_idx not in smoothed_params:
+            continue
+        try:
+            x_data, y_data = dataset[global_idx]
+            params = params_to_device(smoothed_params[global_idx], device)
+            frame = render_dataset_sample(
+                model,
+                x_data,
+                y_data,
+                device,
+                params,
+                disable_scaling=args.disable_scaling,
+                disable_translation=args.disable_translation,
+                render_resolution=render_resolution,
+            )
+            if frame is None:
+                continue
+            frame = pad_or_resize(frame, frame_size)
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+            frame_indices.append(global_idx)
+
+            if frame_exporter is not None and global_idx % 10 == 0:
+                generate_visualization(
+                    model,
+                    params,
+                    _to_uint8_rgb(x_data["input_image_data"]),
+                    frame_exporter,
+                    f"sample_{global_idx:06d}",
+                    device,
+                    y_data=y_data,
+                    disable_scaling=args.disable_scaling,
+                    disable_translation=args.disable_translation,
+                )
+        except Exception as e:
+            print(f"[Rank {rank}] Error rendering sample {global_idx}: {e}")
+            continue
+
+    print(f"[Rank {rank}] Rendering complete: {len(frames)} frames")
+    return frames, frame_indices
+
+
+def process_dataset(
+    model: SMILImageRegressor,
+    dataset_path: str,
+    output_folder: str,
+    device: str,
+    conventions: Dict[str, Any],
+    args,
+    checkpoint_path: str,
+    rank: int = 0,
+    world_size: int = 1,
+) -> None:
+    """Run inference over a preprocessed dataset and write video(s) + exports.
+
+    Phase structure mirrors ``run_multiview_inference.main_inference`` exactly,
+    including its multi-GPU behaviour:
+
+      1. inference over this rank's striped index slice,
+      1b. optional animation export (raw predictions, gathered to rank 0),
+      2. temporal smoothing — gathered across ranks first when smoothing is on,
+         because smoothing a rank's striped subset would average frames that are
+         ``world_size`` apart in time rather than adjacent ones,
+      3. rendering this rank's slice,
+      4. video writing (rank 0 merges the per-rank frames back into clip order).
+    """
+    os.makedirs(output_folder, exist_ok=True)
+
+    dataset, extra_kwargs = load_inference_dataset(dataset_path, model, conventions)
+    if rank == 0:
+        if extra_kwargs:
+            print(f"Opened multi-view dataset in single-view mode: {extra_kwargs}")
+        print(f"Dataset size: {len(dataset)} item(s)")
+        print(f"World size: {world_size}")
+        check_dataset_model_coherence(dataset, model, conventions)
+
+    render_resolution = getattr(args, "render_resolution", None)
+    if render_resolution is not None and render_resolution <= 0:
+        raise ValueError(f"--render_resolution must be a positive integer, got {render_resolution}")
+
+    max_frames = args.max_frames if args.max_frames and args.max_frames > 0 else None
+    subclip_ranges = compute_subclip_ranges(
+        dataset_size=len(dataset),
+        max_frames=max_frames,
+        num_subclips=args.generate_num_subclips,
+        rank=rank,
+    )
+    multi_subclip = len(subclip_ranges) > 1
+
+    dataset_name = Path(dataset_path).stem
+    smoothing_window = args.smoothing_window
+    fps = float(args.fps) if args.fps else 30.0
+
+    # Probed identically on every rank so all frames share one size.
+    frame_size = _probe_frame_size(model, dataset, device, render_resolution)
+    if rank == 0:
+        print(f"Output frame size: {frame_size[0]}x{frame_size[1]}")
+
+    frame_exporter = None
+    if args.save_frames:
+        frames_folder = os.path.join(output_folder, "frames")
+        os.makedirs(frames_folder, exist_ok=True)
+        frame_exporter = InferenceImageExporter(frames_folder)
+
+    for clip_idx, (start_idx, end_idx) in enumerate(subclip_ranges):
+        if multi_subclip and rank == 0:
+            print(f"\n{'#' * 60}")
+            print(
+                f"# SUBCLIP {clip_idx + 1}/{len(subclip_ranges)}: "
+                f"frames [{start_idx}, {end_idx}) ({end_idx - start_idx} frames)"
+            )
+            print(f"{'#' * 60}")
+
+        range_suffix = f"_frames{start_idx:06d}-{end_idx:06d}" if multi_subclip else ""
+        assigned_indices = compute_rank_indices(
+            len(dataset),
+            rank,
+            world_size,
+            start_idx=start_idx,
+            end_idx=end_idx,
+        )
+
+        # -- Phase 1: inference (all ranks in parallel) -----------------------
+        if rank == 0:
+            print("\n-- Phase 1: Running inference --")
+        raw_predictions = run_dataset_inference_phase(model, dataset, assigned_indices, rank)
+
+        # Free GPU memory after inference - rendering reloads params as needed
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # -- Phase 1b: animation export (raw, pre-smoothing) ------------------
+        if args.export_animation:
+            _export_animation_singleview(
+                raw_predictions=raw_predictions,
+                rank=rank,
+                world_size=world_size,
+                model=model,
+                checkpoint_path=checkpoint_path,
+                dataset_path=dataset_path,
+                export_path=f"{args.export_animation}{range_suffix}",
+                fps=fps,
+            )
+
+        # -- Phase 2: gather + smooth -----------------------------------------
+        temp_base = Path.cwd() / f".sv_inference_temp_{dataset_name}{range_suffix}"
+
+        if world_size > 1 and smoothing_window > 0:
+            if rank == 0:
+                print(
+                    f"\n-- Phase 2: Gathering predictions across {world_size} ranks "
+                    f"for smoothing (window={smoothing_window}) --"
+                )
+                cleanup_temp_dir(temp_base)
+            # cleanup=True removes the pickles but keeps temp_base itself, which
+            # is reused for frame storage in Phase 4.
+            all_predictions = gather_predictions(
+                raw_predictions,
+                rank=rank,
+                world_size=world_size,
+                temp_dir=temp_base,
+                all_ranks=True,
+            )
+            smoother = PredictionSmoother(smoothing_window)
+            smoothed_params: Dict[int, Dict[str, Any]] = {}
+            for global_idx, params in tqdm(
+                all_predictions, desc="Applying temporal smoothing", disable=(rank != 0)
+            ):
+                smoothed_params[global_idx] = smoother(params)
+            del raw_predictions, all_predictions
+
+        elif smoothing_window > 0:
+            if rank == 0:
+                print(f"\n-- Phase 2: Applying temporal smoothing (window={smoothing_window}) --")
+            raw_predictions.sort(key=lambda kv: kv[0])
+            smoother = PredictionSmoother(smoothing_window)
+            smoothed_params = {}
+            for global_idx, params in tqdm(
+                raw_predictions, desc="Applying temporal smoothing", disable=(rank != 0)
+            ):
+                smoothed_params[global_idx] = smoother(params)
+            del raw_predictions
+
+        else:
+            if rank == 0:
+                print("\n-- Phase 2: No smoothing (window=0) --")
+            raw_predictions.sort(key=lambda kv: kv[0])
+            smoothed_params = dict(raw_predictions)
+            del raw_predictions
+
+        # -- Phase 3: rendering (all ranks in parallel) ------------------------
+        if rank == 0:
+            print("\n-- Phase 3: Rendering visualizations --")
+        frames, frame_indices = run_dataset_render_phase(
+            model=model,
+            dataset=dataset,
+            device=device,
+            smoothed_params=smoothed_params,
+            indices=assigned_indices,
+            rank=rank,
+            frame_size=frame_size,
+            args=args,
+            render_resolution=render_resolution,
+            frame_exporter=frame_exporter,
+        )
+        del smoothed_params
+
+        # -- Phase 4: write video ---------------------------------------------
+        if rank == 0:
+            print("\n-- Phase 4: Writing output video --")
+        out_path = Path(output_folder) / f"{dataset_name}{range_suffix}_singleview_inference.mp4"
+
+        if world_size > 1:
+            if rank == 0:
+                temp_base.mkdir(parents=True, exist_ok=True)
+            barrier()
+
+            write_frame_streams_to_temp({SV_FRAME_STREAM: (frames, frame_indices)}, temp_base, rank)
+            del frames, frame_indices
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            barrier()
+
+            if rank == 0:
+                merged = merge_frame_streams_from_temp(temp_base, world_size, [SV_FRAME_STREAM])
+                entries = merged.get(SV_FRAME_STREAM, [])
+                if entries:
+                    written = write_video_from_manifest(entries, out_path, fps, frame_size)
+                    print(f"Wrote {out_path} ({written} frames)")
+                else:
+                    print("No frames rendered; no video written.")
+                print(f"Cleaning up temporary directory: {temp_base}")
+                cleanup_temp_dir(temp_base)
+
+            barrier()
+        else:
+            if frames:
+                written = write_video(frames, out_path, fps, frame_size)
+                print(f"Wrote {out_path} ({written} frames)")
+            else:
+                print("No frames rendered; no video written.")
+
+
+def prepare_model(args, device: str):
+    """Load the checkpoint and apply the CLI overrides every input mode needs."""
+    print("\n" + "=" * 40)
+    print("Loading model...")
+    model, model_config, conventions = load_model_from_checkpoint(args.checkpoint, device)
+
+    # Optional SMAL/SMIL model override on top of the one recorded in the
+    # checkpoint. Must run before any dataset construction so config.dd /
+    # N_POSE / N_BETAS are correct; load_model_from_checkpoint has already
+    # applied the checkpoint's own smal_file at this point.
+    if args.smal_file:
+        from smal_fitter.neuralSMIL.configs import apply_smal_file_override
+
+        shape_family = args.shape_family if args.shape_family is not None else conventions.get("shape_family")
+        print(f"Applying SMAL file override: {args.smal_file} (shape_family={shape_family})")
+        apply_smal_file_override(args.smal_file, shape_family=shape_family)
+
+    # Resolve the inference FOV for camera-centric checkpoints. A raw image
+    # carries no GT calibration, so the fallback chain is: --fov -> 60.0
+    # (the pytorch3d / codebase default). Stashed on the model for the
+    # fixed-camera override in run_inference_on_image. In dataset mode the
+    # per-sample calibration takes precedence over this value.
+    chosen_fov = args.fov if args.fov is not None else 60.0
+    model._inference_fov = chosen_fov
+    if getattr(model, "fixed_camera", False):
+        src = "from --fov" if args.fov is not None else "default"
+        print(f"Camera-centric checkpoint: fixed identity camera, FOV={chosen_fov} deg ({src})")
+
+    return model, model_config, conventions
+
+
+def dataset_main(args, rank: int = 0, world_size: int = 1, device_override: Optional[str] = None) -> None:
+    """Load the model and run dataset inference for one rank."""
+    if device_override:
+        device = device_override
+    elif world_size > 1:
+        device = f"cuda:{rank}"
+    else:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model, _model_config, conventions = prepare_model(args, device)
+
+    print("\n" + "=" * 40)
+    print("Running inference on dataset...")
+    process_dataset(
+        model=model,
+        dataset_path=args.dataset,
+        output_folder=args.output_folder,
+        device=device,
+        conventions=conventions,
+        args=args,
+        checkpoint_path=args.checkpoint,
+        rank=rank,
+        world_size=world_size,
+    )
+
+
+def ddp_dataset_main(rank: int, world_size: int, args, master_port: str) -> None:
+    """DDP wrapper around :func:`dataset_main`.
+
+    Supports two launch modes:
+    1. mp.spawn (single-node): rank is passed by spawn, local_rank == rank
+    2. torchrun/SLURM (multi-node): environment variables are auto-detected
+    """
+    rank, world_size, gpu_rank = resolve_launch(rank, world_size)
+    setup_ddp(rank, world_size, master_port, local_rank=gpu_rank, timeout_s=getattr(args, "dist_timeout", None))
+    try:
+        dataset_main(args, rank=rank, world_size=world_size, device_override=f"cuda:{gpu_rank}")
+    finally:
+        cleanup_ddp()
+
+
 def main():
     """Main function for the inference script."""
     parser = argparse.ArgumentParser(
-        description="Run SMIL inference on images or video",
+        description="Run SMIL single-view inference on a preprocessed dataset, images, or video",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Process a preprocessed dataset (mirrors run_multiview_inference.py)
+  python -m smal_fitter.neuralSMIL.run_singleview_inference -c model.pth -d dataset.h5 -o output/
+  python -m smal_fitter.neuralSMIL.run_singleview_inference -c model.pth -d dataset.h5 -o output/ \
+      --max_frames 300 --smoothing_window 5 --render_resolution 512 --export_animation out/clip
+
+  # Multi-GPU (single node), or via torchrun / SLURM for multi-node
+  python -m smal_fitter.neuralSMIL.run_singleview_inference -c model.pth -d dataset.h5 -o output/ --num_gpus 4
+  torchrun --nproc_per_node=4 -m smal_fitter.neuralSMIL.run_singleview_inference -c model.pth -d dataset.h5 -o output/
+
   # Process images
-  python run_singleview_inference.py --checkpoint checkpoints/best_model.pth --input_folder test_images --output_folder results
-  python run_singleview_inference.py -c model.pth -i images/ -o output/ --crop_mode centred
+  python -m smal_fitter.neuralSMIL.run_singleview_inference -c model.pth -i images/ -o output/ --crop_mode centred
 
   # Process video
-  python run_singleview_inference.py --checkpoint model.pth --input_video video.mp4 --output_folder results
-  python run_singleview_inference.py -c model.pth -v video.mp4 -o output/ --save_frames --fps 30
-
-  # With different preprocessing
-  python run_singleview_inference.py -c model.pth -i images/ -o output/ --crop_mode default
+  python -m smal_fitter.neuralSMIL.run_singleview_inference -c model.pth -v video.mp4 -o output/ --save_frames --fps 30
 
 Supported image formats: jpg, jpeg, png, bmp, tiff, tif (case-insensitive)
 Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
+Supported dataset formats: .h5 / .hdf5 produced by the SLEAP or replicAnt preprocessors
         """,
     )
 
@@ -1552,6 +2301,15 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("-i", "--input_folder", type=str, help="Path to folder containing input images")
     input_group.add_argument("-v", "--input_video", type=str, help="Path to input video file")
+    input_group.add_argument(
+        "-d",
+        "--dataset",
+        type=str,
+        help="Path to a preprocessed HDF5 dataset (.h5/.hdf5). Mirrors run_multiview_inference.py: "
+        "a multi-view dataset is opened in single-view mode under the checkpoint's frame convention, "
+        "so camera intrinsics/extrinsics, shape-space scaling, mesh scaling and cropping all follow "
+        "the dataset's own convention instead of being re-derived from raw pixels.",
+    )
 
     parser.add_argument("-o", "--output_folder", type=str, required=True, help="Path to folder for saving results")
 
@@ -1617,6 +2375,55 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
         "side_by_side=display input and rendered model side by side at same resolution",
     )
 
+    # Dataset-mode options (mirroring run_multiview_inference.py)
+    parser.add_argument(
+        "--smoothing_window",
+        type=int,
+        default=0,
+        help="Number of frames to average ALL predicted parameters over for temporal smoothing "
+        "(default: 0, disabled). Same semantics as run_multiview_inference.py --smoothing_window. "
+        "Applies to --dataset and --input_video. Distinct from --camera_smoothing, which smooths "
+        "only the camera parameters on the legacy video path.",
+    )
+    parser.add_argument(
+        "--generate_num_subclips",
+        type=int,
+        default=1,
+        help="Dataset mode: generate N subclips evenly spaced across the dataset, each --max_frames "
+        "long. Each output video / animation export is suffixed with the frame range. "
+        "Falls back to a single full-dataset clip if subclips do not fit. Default: 1.",
+    )
+    parser.add_argument(
+        "--disable_scaling",
+        action="store_true",
+        help="Disable part scaling (log_beta_scales) when rendering, for comparison/debugging",
+    )
+    parser.add_argument(
+        "--disable_translation",
+        action="store_true",
+        help="Disable part translation (betas_trans) when rendering, for comparison/debugging",
+    )
+    parser.add_argument(
+        "--render_resolution",
+        type=int,
+        default=None,
+        help="Dataset mode: square pixel resolution for the mesh visualization. The mesh is rendered "
+        "and the footage interpolated up to match. Default: the renderer's native image_size. "
+        "Does NOT affect model inference / backbone input.",
+    )
+    parser.add_argument(
+        "--smal_file",
+        type=str,
+        default=None,
+        help="Path to a SMAL/SMIL model file overriding the one recorded in the checkpoint (optional)",
+    )
+    parser.add_argument(
+        "--shape_family",
+        type=int,
+        default=None,
+        help="Shape family to use with --smal_file (optional, defaults to the checkpoint / config value)",
+    )
+
     # SLEAP-specific options
     parser.add_argument(
         "--sleap_project", type=str, default=None, help="Path to SLEAP project directory (required for bbox_crop)"
@@ -1635,7 +2442,7 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
         default=None,
         help="Optional output path stem for SMIL animation export. "
         "Writes <stem>.npz + <stem>.json alongside the MP4. "
-        "Only active when --input_video is used. "
+        "Active for --input_video and --dataset. "
         'NOTE: any string is accepted as-is (e.g. "True" writes True.npz) — '
         "no validation is performed, so pass a real path/filename stem.",
     )
@@ -1650,13 +2457,24 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
         print(f"Input folder: {args.input_folder}")
     if args.input_video:
         print(f"Input video: {args.input_video}")
+    if args.dataset:
+        print(f"Dataset: {args.dataset}")
     print(f"Output folder: {args.output_folder}")
-    print(f"Crop mode: {args.crop_mode}")
+    if args.dataset:
+        print("Crop mode: (from dataset - --crop_mode is ignored for preprocessed datasets)")
+    else:
+        print(f"Crop mode: {args.crop_mode}")
+    if args.smoothing_window > 0:
+        print(f"Temporal smoothing: {args.smoothing_window} frames")
+    if args.disable_scaling:
+        print("Part scaling: DISABLED (comparison mode)")
+    if args.disable_translation:
+        print("Part translation: DISABLED (comparison mode)")
     if args.sleap_project:
         print(f"SLEAP project: {args.sleap_project}")
         if args.sleap_camera:
             print(f"SLEAP camera override: {args.sleap_camera}")
-    if args.input_video:
+    if args.input_video or args.dataset:
         print(f"Save frames: {args.save_frames}")
         if args.fps:
             print(f"Output FPS: {args.fps}")
@@ -1664,6 +2482,8 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
             print(f"Max frames: {args.max_frames}")
         else:
             print("Max frames: All frames")
+        if args.generate_num_subclips > 1:
+            print(f"Subclips: {args.generate_num_subclips} (per-clip length: {args.max_frames})")
 
     # Set device
     if args.device == "auto":
@@ -1677,26 +2497,55 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
 
     print(f"Device: {device}")
 
-    if args.crop_mode == "bbox_crop" and not args.sleap_project:
+    if args.crop_mode == "bbox_crop" and not args.sleap_project and not args.dataset:
         print("Error: bbox_crop mode requires --sleap-project to supply keypoints.")
         return 1
 
+    if args.dataset and not os.path.exists(args.dataset):
+        print(f"Error: dataset not found: {args.dataset}")
+        return 1
+
+    # ---- Multi-GPU dataset inference -------------------------------------
+    # Must branch BEFORE the model is loaded: each rank builds its own model on
+    # its own GPU. Only dataset mode is distributed - the raw image/video paths
+    # stream from a single decoder and gain nothing from extra ranks.
+    master_port = args.master_port or os.environ.get("MASTER_PORT", "12355")
+
+    if args.dataset and is_torchrun_launched():
+        rank = int(os.environ["RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        if rank == 0:
+            print("Detected torchrun/HPC launch environment:")
+            print(f"  Global rank: {rank}")
+            print(f"  Local rank (GPU): {os.environ['LOCAL_RANK']}")
+            print(f"  World size: {world_size}")
+            print(f"  MASTER_ADDR: {os.environ.get('MASTER_ADDR', 'not set')}")
+            print(f"  MASTER_PORT: {os.environ.get('MASTER_PORT', 'not set')}")
+        ddp_dataset_main(rank, world_size, args, master_port)
+        return 0
+
+    if args.dataset and args.num_gpus > 1:
+        try:
+            validate_num_gpus(args.num_gpus)
+        except RuntimeError as e:
+            print(f"ERROR: {e}")
+            return 1
+        print(f"Launching multi-GPU dataset inference on {args.num_gpus} GPUs (using mp.spawn)...")
+        print(f"Master port: {master_port}")
+        mp.spawn(ddp_dataset_main, args=(args.num_gpus, args, master_port), nprocs=args.num_gpus, join=True)
+        print("\n" + "=" * 60)
+        print("Inference completed successfully!")
+        print(f"Results saved to: {args.output_folder}")
+        print("=" * 60)
+        return 0
+
+    if args.num_gpus > 1 and not args.dataset:
+        print("Warning: --num_gpus > 1 only applies to --dataset mode; running single-process.")
+
     sleap_helper = None
     try:
-        # Load model from checkpoint
-        print("\n" + "=" * 40)
-        print("Loading model...")
-        model, model_config = load_model_from_checkpoint(args.checkpoint, device)
-
-        # Resolve the inference FOV for camera-centric checkpoints. A raw image
-        # carries no GT calibration, so the fallback chain is: --fov -> 60.0
-        # (the pytorch3d / codebase default). Stashed on the model for the
-        # fixed-camera override in run_inference_on_image.
-        chosen_fov = args.fov if args.fov is not None else 60.0
-        model._inference_fov = chosen_fov
-        if getattr(model, "fixed_camera", False):
-            src = "from --fov" if args.fov is not None else "default"
-            print(f"Camera-centric checkpoint: fixed identity camera, FOV={chosen_fov} deg ({src})")
+        # Load model from checkpoint (shared with the distributed dataset path)
+        model, model_config, conventions = prepare_model(args, device)
 
         if args.crop_mode == "bbox_crop":
             sleap_helper = SLEAPCroppingHelper(
@@ -1709,7 +2558,22 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
             print(f"Available SLEAP cameras: {sleap_helper.list_cameras()}")
 
         # Process based on input type
-        if args.input_folder:
+        if args.dataset:
+            print("\n" + "=" * 40)
+            print("Running inference on dataset...")
+            process_dataset(
+                model=model,
+                dataset_path=args.dataset,
+                output_folder=args.output_folder,
+                device=device,
+                conventions=conventions,
+                args=args,
+                checkpoint_path=args.checkpoint,
+                rank=0,
+                world_size=1,
+            )
+
+        elif args.input_folder:
             # Find image files
             print("\n" + "=" * 40)
             print("Finding images...")
@@ -1731,6 +2595,8 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
                 args.batch_size,
                 sleap_helper=sleap_helper,
                 sleap_camera=args.sleap_camera,
+                disable_scaling=args.disable_scaling,
+                disable_translation=args.disable_translation,
             )
 
         elif args.input_video:
@@ -1767,6 +2633,9 @@ Supported video formats: mp4, avi, mov, mkv (anything supported by OpenCV)
                 sleap_camera=args.sleap_camera,
                 video_export_mode=args.video_export_mode,
                 animation_recorder=animation_recorder,
+                smoothing_window=args.smoothing_window,
+                disable_scaling=args.disable_scaling,
+                disable_translation=args.disable_translation,
             )
 
             if animation_recorder is not None and animation_recorder.num_frames() > 0:

@@ -75,7 +75,9 @@ The `MultiViewSMILImageRegressor` adds:
 
 ### Inference, Testing and Validation
 - `test_smil_regressor_ground_truth.py`: Ground truth validation and 3D keypoint alignment
-- `run_singleview_inference.py`: Single-view inference on a trained checkpoint (folder of images or video input)
+- `run_singleview_inference.py`: Single-view inference on a trained checkpoint (preprocessed dataset, folder of images, or video input)
+- `inference_common.py`: Conventions shared by both inference entrypoints — temporal smoothing, sub-clip splitting, and the camera / shape-space / mesh-scaling rules that must stay identical between single-view and multi-view (issue #100)
+- `inference_ddp.py`: Distributed-inference plumbing shared by both entrypoints — IPv4 forcing, process-group setup, striped rank/index assignment, and the temp-storage gather for predictions and rendered frames
 - `run_multiview_inference.py`: Multi-view inference on a trained checkpoint
 - `benchmark_model.py`: Benchmarking script for single-view **and** multi-view models (auto-detects the mode from the checkpoint)
 
@@ -152,14 +154,55 @@ python -m smal_fitter.neuralSMIL.run_multiview_inference \
 #               --max_frames 100  --export_animation path/to/clip   (writes <clip>.npz / .json)
 ```
 
-**Single-view** — folder of images (`--input_folder`) or a video (`--input_video`):
+**Single-view** — a preprocessed dataset (`--dataset`), a folder of images (`--input_folder`), or a video (`--input_video`):
 
 ```bash
+# Preferred: dataset input, mirroring the multi-view entrypoint
+python -m smal_fitter.neuralSMIL.run_singleview_inference \
+    --checkpoint checkpoints/best_model.pth \
+    --dataset path/to/dataset.h5 \
+    --output_folder inference_out/
+
+# Raw images
 python -m smal_fitter.neuralSMIL.run_singleview_inference \
     --checkpoint checkpoints/best_model.pth \
     --input_folder path/to/images/ \
     --output_folder inference_out/
+
+# Multi-GPU (single node)
+python -m smal_fitter.neuralSMIL.run_singleview_inference \
+    --checkpoint checkpoints/best_model.pth \
+    --dataset path/to/dataset.h5 \
+    --output_folder inference_out/ \
+    --num_gpus 4
+
+# Distributed (single node, 4 GPUs) — or SLURM/multi-node via the usual env vars
+torchrun --nproc_per_node=4 -m smal_fitter.neuralSMIL.run_singleview_inference \
+    --checkpoint checkpoints/best_model.pth \
+    --dataset path/to/dataset.h5 \
+    --output_folder inference_out/
+
+# Useful dataset flags (same names/semantics as run_multiview_inference.py):
+#   --smoothing_window 5  --render_resolution 512  --max_frames 100
+#   --generate_num_subclips 4  --export_animation out/clip
+#   --disable_scaling  --disable_translation  --smal_file 3D_model_prep/SMILy_Mouse.pkl
+#   --num_gpus 4  --master-port 12355  --dist_timeout 14400
 ```
+
+Multi-GPU applies to `--dataset` only (the raw image/video paths stream from a single
+decoder). Ranks are striped across the dataset — rank 0 takes frames 0, N, 2N, ... —
+so a rank's slice spans the whole clip rather than one contiguous span. When
+`--smoothing_window > 0` the predictions are gathered across ranks *before* smoothing,
+because smoothing a striped subset would average frames `world_size` apart in time
+instead of adjacent ones.
+
+`--dataset` opens a multi-view HDF5 in single-view mode under the checkpoint's frame
+convention (`camera_centric` → fixed identity camera + calibrated FOV/aspect;
+`model_centric` → the predicted camera), expands every valid view into its own item,
+interprets `log_beta_scales` / `betas_trans` through `scale_trans_mode`, and places the
+mesh with the UE 10x scaling or the predicted `mesh_scale` — the same rules
+`benchmark_model.py` and `train_smil_regressor.py` apply. A `DATASET / CHECKPOINT
+COHERENCE` block at startup reports (and warns about) any mismatch.
 
 ### 5. Ground Truth Testing
 
@@ -265,7 +308,7 @@ For **training**, the SMAL/SMIL model file is set only via the JSON config — t
 "smal_model": { "smal_file": "3D_model_prep/SMILy_Mouse.pkl", "shape_family": null }
 ```
 
-A CLI override exists only on the non-training entrypoints (note the inconsistent flag spelling across scripts): `run_multiview_inference.py` (`--smal_file`), `dataset_preprocessing.py` (`--smal-file`), and `test_smil_regressor_ground_truth.py` (`--smal-file`). Either path reloads `config.py` globals (`dd`, `N_POSE`, `N_BETAS`) to match the specified model before any dataset or network construction.
+A CLI override exists only on the non-training entrypoints (note the inconsistent flag spelling across scripts): `run_multiview_inference.py` (`--smal_file`), `run_singleview_inference.py` (`--smal_file`), `dataset_preprocessing.py` (`--smal-file`), and `test_smil_regressor_ground_truth.py` (`--smal-file`). Either path reloads `config.py` globals (`dd`, `N_POSE`, `N_BETAS`) to match the specified model before any dataset or network construction.
 
 ## Distributed Training
 
@@ -336,7 +379,7 @@ checkpoint = torch.load('best_model.pth')
 #   shape_family, smal_file
 ```
 
-`run_multiview_inference.py` and `run_singleview_inference.py` prefer `checkpoint['config']` and fall back to `training_config.py` defaults for older checkpoints.
+`run_multiview_inference.py` and `run_singleview_inference.py` prefer `checkpoint['config']` and fall back to `training_config.py` defaults for older checkpoints. The frame-convention / camera / mesh-scale flags (`frame_convention`, `from_multiview`, `fixed_camera`, `use_ue_scaling`, `allow_mesh_scaling`, `init_mesh_scale`) live at the **top level** of `checkpoint['config']` and are resolved by `inference_common.resolve_frame_convention`, shared with `benchmark_model.py`.
 
 ## Known Architectural Issues and Status
 

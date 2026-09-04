@@ -269,7 +269,41 @@ Key arguments:
 
 ### Single-view
 
-The single-view script works directly on a raw video or a folder of images.
+The single-view script accepts three kinds of input: a **preprocessed HDF5 dataset** (`--dataset`), a raw **video** (`--input_video`), or a **folder of images** (`--input_folder`).
+
+#### Dataset input (recommended — mirrors multi-view inference)
+
+`--dataset` consumes exactly the datasets the trainer and `benchmark_model.py` use, and follows the same conventions rather than re-deriving them from raw pixels:
+
+- **Camera intrinsics / extrinsics.** A `camera_centric` checkpoint renders through the fixed PyTorch3D identity camera with the vertical FOV *and aspect ratio* from each sample's calibration; a `model_centric` checkpoint renders through its own predicted `cam_rot` / `cam_trans` / `fov`. A multi-view HDF5 is opened with `return_single_view=True` plus the checkpoint's `camera_centric` flag, so the dataset re-anchors the world onto the sampled camera before returning keypoints and 3D.
+- **Shape-space variation.** `log_beta_scales` / `betas_trans` are interpreted through `scale_trans_mode` — PCA weights are expanded to per-joint values, per-joint values are used directly, `ignore` skips them.
+- **Mesh scaling and cropping.** Placement uses the 10x UE scaling or the predicted per-sample `mesh_scale`, whichever the checkpoint was trained with; the dataset's own crop is used as-is (`--crop_mode` applies only to raw image/video input). Mismatches between dataset and checkpoint conventions are reported in a `DATASET / CHECKPOINT COHERENCE` block at startup.
+
+```bash
+python -m smal_fitter.neuralSMIL.run_singleview_inference \
+    --checkpoint checkpoints/best_model.pth \
+    --dataset output_dataset.h5 \
+    --output_folder /path/to/output \
+    --smoothing_window 5 \
+    --export_animation /path/to/output/clip \
+    --num_gpus 2
+```
+
+This writes `<dataset>_singleview_inference.mp4` to the output folder (plus `<clip>.npz` / `.json` when `--export_animation` is passed).
+
+Dataset mode is multi-GPU, using the same machinery as multi-view inference: frames are striped across ranks, gathered through shared temp storage and merged back into clip order by rank 0. Use `--num_gpus N` on a single node, or launch under `torchrun` / SLURM for multi-node (`RANK`, `LOCAL_RANK`, `WORLD_SIZE`, `MASTER_ADDR`, `MASTER_PORT` are auto-detected):
+
+```bash
+torchrun --nproc_per_node=4 -m smal_fitter.neuralSMIL.run_singleview_inference \
+    --checkpoint checkpoints/best_model.pth \
+    --dataset output_dataset.h5 \
+    --output_folder /path/to/output
+```
+
+> Multi-GPU applies to `--dataset` only — the raw image/video paths stream from a single decoder and gain nothing from extra ranks.
+
+#### Raw video / image input
+
 When `--crop_mode bbox_crop` is used, bounding boxes are derived from an existing SLEAP project, tightly cropping each frame around the detected specimen — this is the recommended mode when the model was trained with `bbox_crop`.
 
 ```bash
@@ -287,14 +321,23 @@ Key arguments:
 | Argument | Default | Description |
 |---|---|---|
 | `--checkpoint` | _(required)_ | Path to trained `.pth` checkpoint |
-| `--input_video` / `--input_folder` | _(required, one of)_ | Raw video file or folder of images |
+| `--dataset` / `--input_video` / `--input_folder` | _(required, one of)_ | Preprocessed `.h5` dataset, raw video file, or folder of images |
 | `--output_folder` | _(required)_ | Directory for results |
-| `--crop_mode` | `centred` | `centred` · `default` · `bbox_crop` — must match training preprocessing |
+| `--crop_mode` | `centred` | `centred` · `default` · `bbox_crop` — must match training preprocessing. Ignored for `--dataset` (frames are already cropped) |
 | `--sleap_project` | None | SLEAP session directory (required for `bbox_crop`) |
 | `--sleap_camera` | None | Camera name override when using `bbox_crop` with multi-camera data |
 | `--max_frames` | all | Cap frames processed |
+| `--generate_num_subclips` | 1 | Dataset mode: N evenly-spaced subclips of `--max_frames` each |
+| `--smoothing_window` | 0 | Moving-average window over **all** predicted parameters (same semantics as multi-view) |
+| `--camera_smoothing` | 0 | Legacy video-only moving average over the camera parameters (superseded by `--smoothing_window`) |
+| `--render_resolution` | native | Dataset mode: square render resolution for the mesh visualization |
+| `--num_gpus` | 1 | Dataset mode: number of GPUs (ignored under `torchrun`) |
+| `--master-port` | 12355 | Master port for distributed processing |
+| `--dist_timeout` | 14400 | Process-group timeout in seconds (`SMILIFY_DIST_TIMEOUT_S`) |
+| `--disable_scaling` / `--disable_translation` | off | Drop `log_beta_scales` / `betas_trans` when rendering, for comparison |
+| `--export_animation` | None | Path stem for the AMASS-style `.npz` + `.json` export (video and dataset modes) |
 | `--video_export_mode` | `overlay` | `overlay` (mesh blended onto input) or `side_by_side` |
-| `--camera_smoothing` | 0 | Moving-average window for camera parameter smoothing |
+| `--smal_file` / `--shape_family` | from checkpoint | Override the SMIL/SMAL model recorded in the checkpoint |
 
 > **Note:** For future use cases without SLEAP annotations, a lightweight detector model providing cropped specimen frames would be a natural drop-in replacement for the SLEAP-based bounding box extraction.
 
