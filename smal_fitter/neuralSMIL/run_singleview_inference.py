@@ -867,12 +867,25 @@ def render_model_only(
                 propagate_scaling=temp_fitter.propagate_scaling,
             )
 
+            root_joint = joints[:, 0:1, :]
             if model.use_ue_scaling:
                 # Apply UE scaling transformation (10x scale) — legacy replicAnt
-                verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
-                joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
+                verts = (verts - root_joint) * 10 + temp_fitter.trans.unsqueeze(1)
+                joints = (joints - root_joint) * 10 + temp_fitter.trans.unsqueeze(1)
+            elif getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
+                # Camera-centric: apply the predicted per-sample mesh scale. Without it the
+                # mesh renders at native size (~35x too large vs the metric 3D). Mirrors
+                # SMALFitter.generate_visualization / generate_visualization() above.
+                scale_val = predicted_params["mesh_scale"].to(device=device, dtype=torch.float32)
+                if scale_val.dim() == 0:
+                    scale_val = scale_val.view(1, 1)
+                elif scale_val.dim() == 1:
+                    scale_val = scale_val.unsqueeze(1)
+                scale_val = scale_val.unsqueeze(-1)  # (B, 1, 1)
+                verts = (verts - root_joint) * scale_val + temp_fitter.trans.unsqueeze(1)
+                joints = (joints - root_joint) * scale_val + temp_fitter.trans.unsqueeze(1)
             else:
-                # Camera-centric / no UE scaling: plain translation (scale baked in).
+                # No mesh scaling available: plain translation (scale baked in).
                 verts = verts + temp_fitter.trans.unsqueeze(1)
                 joints = joints + temp_fitter.trans.unsqueeze(1)
 
@@ -993,12 +1006,25 @@ def render_prediction_on_frame(
                 propagate_scaling=temp_fitter.propagate_scaling,
             )
 
+            root_joint = joints[:, 0:1, :]
             if model.use_ue_scaling:
                 # Apply UE scaling transformation (10x scale) — legacy replicAnt
-                verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
-                joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
+                verts = (verts - root_joint) * 10 + temp_fitter.trans.unsqueeze(1)
+                joints = (joints - root_joint) * 10 + temp_fitter.trans.unsqueeze(1)
+            elif getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
+                # Camera-centric: apply the predicted per-sample mesh scale. Without it the
+                # mesh renders at native size (~35x too large vs the metric 3D). Mirrors
+                # SMALFitter.generate_visualization / generate_visualization() above.
+                scale_val = predicted_params["mesh_scale"].to(device=device, dtype=torch.float32)
+                if scale_val.dim() == 0:
+                    scale_val = scale_val.view(1, 1)
+                elif scale_val.dim() == 1:
+                    scale_val = scale_val.unsqueeze(1)
+                scale_val = scale_val.unsqueeze(-1)  # (B, 1, 1)
+                verts = (verts - root_joint) * scale_val + temp_fitter.trans.unsqueeze(1)
+                joints = (joints - root_joint) * scale_val + temp_fitter.trans.unsqueeze(1)
             else:
-                # Camera-centric / no UE scaling: plain translation (scale baked in).
+                # No mesh scaling available: plain translation (scale baked in).
                 verts = verts + temp_fitter.trans.unsqueeze(1)
                 joints = joints + temp_fitter.trans.unsqueeze(1)
 
