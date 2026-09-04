@@ -1,0 +1,182 @@
+============================================================
+SMILify Benchmark (multiview)
+============================================================
+Model type: multiview
+Checkpoint: prior_study_results/mv_reference/.bench_ckpt/mv_reference.pth
+Dataset: SMILySTICKS_centred_reprojected_FIXED.h5
+Output dir: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED
+Timestamp: 2026-09-03T15:38:39
+Device: cuda
+Override original image size: 1530x1530
+
+HDF5 INVENTORY:
+GROUP:   auxiliary
+DATASET: auxiliary/camera_names | shape=(101250,) | dtype=object
+DATASET: auxiliary/frame_idx | shape=(101250,) | dtype=int64
+DATASET: auxiliary/has_3d_data | shape=(101250,) | dtype=bool
+DATASET: auxiliary/has_ground_truth_betas | shape=(101250,) | dtype=bool
+DATASET: auxiliary/num_views | shape=(101250,) | dtype=int64
+DATASET: auxiliary/session_name | shape=(101250,) | dtype=object
+GROUP:   metadata
+  ATTR metadata.backbone_name: vit_large_patch16_224
+  ATTR metadata.canonical_camera_order: ["A", "B", "C", "D", "E"]
+  ATTR metadata.crop_mode: centred
+  ATTR metadata.dataset_type: sleap_multiview
+  ATTR metadata.failed_samples: 0
+  ATTR metadata.frame_skip: 1
+  ATTR metadata.frames_3d_available: 16875
+  ATTR metadata.has_3d_keypoints: True
+  ATTR metadata.has_camera_parameters: True
+  ATTR metadata.is_multiview: True
+  ATTR metadata.jpeg_quality: 95
+  ATTR metadata.keypoints_3d_joint_order: smal
+  ATTR metadata.load_3d_data: True
+  ATTR metadata.max_frame_idx_requested: 16874
+  ATTR metadata.max_views: 5
+  ATTR metadata.min_frame_idx_requested: 0
+  ATTR metadata.min_views_per_sample: 2
+  ATTR metadata.n_betas: 5
+  ATTR metadata.n_joints: 55
+  ATTR metadata.n_pose: 54
+  ATTR metadata.num_samples: 101250
+  ATTR metadata.processed_samples: 101250
+  ATTR metadata.samples_3d_out_of_range: 0
+  ATTR metadata.samples_with_3d_data: 101250
+  ATTR metadata.samples_with_3d_in_range: 101250
+  ATTR metadata.samples_with_outliers_filtered: 0
+  ATTR metadata.sessions_failed: 0
+  ATTR metadata.sessions_processed: 6
+  ATTR metadata.sessions_with_3d_data: 6
+  ATTR metadata.skipped_insufficient_views: 0
+  ATTR metadata.target_resolution: 512
+  ATTR metadata.total_cameras: 5
+  ATTR metadata.total_multiview_samples: 101250
+  ATTR metadata.total_outlier_keypoints_filtered: 0
+  ATTR metadata.total_potential_views: 506250
+  ATTR metadata.total_sessions: 6
+  ATTR metadata.total_views_attempted: 506250
+  ATTR metadata.total_views_included: 506250
+  ATTR metadata.undistort_images: True
+  ATTR metadata.used_reprojections: True
+  ATTR metadata.views_excluded_no_camera_data: 0
+  ATTR metadata.views_excluded_no_keypoints: 0
+  ATTR metadata.views_excluded_no_video_capture: 0
+  ATTR metadata.views_excluded_position_correction_failed: 0
+  ATTR metadata.views_excluded_processing_error: 0
+  ATTR metadata.views_excluded_video_read_failed: 0
+  ATTR metadata.views_missing_annotations: 0
+  ATTR metadata.views_reprojected: 506250
+  ATTR metadata.views_undistorted: 506250
+GROUP:   multiview_images
+DATASET: multiview_images/image_jpeg_view_0 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_1 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_2 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_3 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_4 | shape=(101250,) | dtype=object
+DATASET: multiview_images/view_mask | shape=(101250, 5) | dtype=bool
+GROUP:   multiview_keypoints
+DATASET: multiview_keypoints/camera_extrinsics_R | shape=(101250, 5, 3, 3) | dtype=float32
+DATASET: multiview_keypoints/camera_extrinsics_t | shape=(101250, 5, 3) | dtype=float32
+DATASET: multiview_keypoints/camera_indices | shape=(101250, 5) | dtype=int32
+DATASET: multiview_keypoints/camera_intrinsics | shape=(101250, 5, 3, 3) | dtype=float32
+DATASET: multiview_keypoints/image_sizes | shape=(101250, 5, 2) | dtype=int32
+DATASET: multiview_keypoints/keypoint_visibility | shape=(101250, 5, 55) | dtype=float32
+DATASET: multiview_keypoints/keypoints_2d | shape=(101250, 5, 55, 2) | dtype=float32
+DATASET: multiview_keypoints/keypoints_3d | shape=(101250, 55, 3) | dtype=float32
+GROUP:   parameters
+DATASET: parameters/betas | shape=(101250, 5) | dtype=float32
+DATASET: parameters/global_rot | shape=(101250, 3) | dtype=float32
+DATASET: parameters/joint_rot | shape=(101250, 55, 3) | dtype=float32
+DATASET: parameters/trans | shape=(101250, 3) | dtype=float32
+
+DATASET SUMMARY:
+DATASET SUMMARY:
+  backbone_name: vit_large_patch16_224
+  canonical_camera_order: A, B, C, D, E
+  crop_mode: centred
+  dataset_type: sleap_multiview
+  is_multiview: True
+  max_views: 5
+  min_views_per_sample: 2
+  n_betas: 5
+  n_joints: 55
+  n_pose: 54
+  num_samples: 101250
+  num_views_to_use: None
+  rotation_representation: 6d
+  target_resolution: 512
+  has_camera_parameters: True
+  has_3d_keypoints: True
+  world_scale: 0.001
+
+Loaded data resolution (target): 512x512
+Original world scale: 0.001
+World scale conversion factor to original units: 1000.000000
+2D keypoint scaling: using override size 1530x1530
+
+Dataset split sizes:
+  Train: 86062
+  Val: 5062
+  Test: 10126
+
+Dataset max_views: 5
+Dataset canonical camera order: ['A', 'B', 'C', 'D', 'E']
+
+Inferring model architecture from checkpoint...
+Inferred max_views=5 from checkpoint view_embeddings.weight shape
+Inferred hidden_dim=1024 from checkpoint transformer_head.pos_embedding shape
+Model architecture: max_views=5, canonical_camera_order has 5 cameras
+
+Using input resolution: 224x224 (backbone: vit_large_patch16_224)
+Mesh scaling enabled with init=1.0
+GT camera initialization enabled - model predicts deltas from GT camera params
+PCK reported at TWO resolutions: [native override 1530x1530] and [input res 224px].
+
+==== BENCHMARK RESULTS (TEST SPLIT) ====
+
+-- PCK @ native override 1530x1530 --
+PCK@5px: 0.3350
+Mean 2D error (px): 8.7245
+Median 2D error (px): 7.0128
+2D joint errors count: 2121534
+PCK curve:
+  PCK@1px: 0.0204
+  PCK@2px: 0.0765
+  PCK@5px: 0.3350
+  PCK@10px: 0.6893
+  PCK@20px: 0.9444
+  PCK@30px: 0.9873
+  PCK@40px: 0.9941
+  PCK@50px: 0.9966
+
+-- PCK @ input res 224px --
+PCK@5px: 0.9915
+Mean 2D error (px): 1.2773
+Median 2D error (px): 1.0267
+2D joint errors count: 2121534
+PCK curve:
+  PCK@1px: 0.4862
+  PCK@2px: 0.8343
+  PCK@5px: 0.9915
+  PCK@10px: 0.9983
+  PCK@20px: 0.9995
+  PCK@30px: 0.9999
+  PCK@40px: 1.0000
+  PCK@50px: 1.0000
+
+MPJPE (mm): 0.9639
+Median MPJPE (mm): 0.8382
+MPJPE percentiles (mm):
+  P50: 0.8382
+  P75: 1.2417
+  P90: 1.7057
+  P95: 2.0367
+  P99: 3.0479
+3D samples with GT: 10126
+3D joint errors count: 424564
+
+Saved outputs to: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED
+  PCK plots: pck_curve_native.png, pck_curve_input.png
+  Error histograms: error_histogram_native.png, error_histogram_input.png
+  MPJPE histogram: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/mpjpe_histogram.png
+  3D percentile plots: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/sample_00_3d_keypoints_percentiles.png (and next 4)
