@@ -1,0 +1,418 @@
+# =============================================================================
+# JOINT-LIMIT PRIOR STUDY — MULTI-VIEW lambda sweep
+# RWTH CLAIX, account rwth2151.  Companion to cmnds.txt (the single-view run).
+#
+# Nothing in the repo needs editing: run_prior_study_train.sbatch already maps
+# array tasks 4-7 to multiview x {1e-4,1e-3,1e-2,1e-1}, and
+# run_prior_study_eval.sbatch maps 5 to mv_reference and 6-9 to the four arms.
+# prepare_lambda_sweep.sh takes `multiview` as its argument. Renders are the one
+# stage with no shared harness: section 7 gives the run_multiview_inference.py
+# counterpart to the run_singleview_inference.py calls you made by hand.
+#
+# TWO DELIBERATE DIFFERENCES FROM THE SINGLE-VIEW RUN — read section A first:
+#   * EXTRA_EPOCHS=25, not 50
+#   * --nodes=2 (8 ranks/arm) with BATCH_SIZE=4 to hold the effective batch
+# =============================================================================
+
+
+# =============================================================================
+# A. WHY 25 EPOCHS AND 2 NODES  (the answer to your two notices)
+# =============================================================================
+#
+# A1. EPOCH COUNT — halve it, yes, and there is a second reason to.
+#
+# The single-view arms all finished: sweep.csv shows checkpoint_epoch 435 for
+# every lambda (386 + 50 = 436, last periodic checkpoint at 435), at ~10-11 h on
+# 1 node x 4 H100 = ~13 min/epoch. And the curve was already decided long before
+# the end: violations collapse monotonically with lambda while MPJPE moves by
+# <0.1 mm. Nothing in the last 25 epochs changed the ranking.
+#
+# The second reason is specific to the multi-view config and matters more:
+#   multiview_SMILySTICKS_3D_ViT_Large_AUG_FIXED.json has curriculum_stages at
+#   epochs 300 and 400 (joint_angle_regularization 5e-7 -> 2e-7,
+#   limb_scale_regularization 5e-5 -> 1e-5). If the multi-view reference sits at
+#   epoch ~354 (the number the study README uses for its multi-view dry run),
+#   then:
+#       +50 epochs -> 404   CROSSES the 400 boundary; every arm changes loss
+#                           weighting 46 epochs in, mid-window
+#       +25 epochs -> 379   stays entirely inside stage [300, 400)
+#   The crossing is identical across arms, so lambda-vs-lambda stays clean
+#   either way — but +25 also keeps reference-vs-lambda free of it. Confirm the
+#   actual resume epoch in step 1 and re-check this arithmetic against it.
+#
+# The LR is not a problem here, unlike single-view: multi-view's lr_schedule is
+# {0: 1e-4, 120: 5e-5, 200: 1e-5}, so any resume past epoch 200 sits on a flat
+# 1e-5 for the whole window. No LR_FLAT needed. The [patch] lines in step 3 will
+# say "lr constant at 1e-05" — if they instead print a WARNING, stop and set
+# LR_FLAT to the value it suggests.
+#
+# COST OF 25: the multi-view arms are then NOT epoch-matched to the single-view
+# arms. State that in the report — compare lambdas within a modality, and treat
+# any single-view-vs-multi-view delta as qualitative.
+#
+#
+# A2. THE WALL — the levers, in the order worth pulling.
+#
+#   1. --nodes=2  (8 ranks/arm, 32 H100 for the sweep). Roughly halves the wall
+#      clock. Costs a longer queue wait and doubles the effective batch unless
+#      you pass BATCH_SIZE — hence BATCH_SIZE=4 below (config is batch_size 8
+#      per rank x gradient_accumulation_steps 2; 8 ranks x 4 x 2 = 64, the same
+#      effective batch as 4 ranks x 8 x 2).
+#
+#   2. Ask for LESS wall time. 24 h is the account cap, and asking for the cap
+#      makes you nearly unbackfillable. With 25 epochs on 2 nodes you should be
+#      well inside 12 h; --time=12:00:00 starts materially sooner. Only raise it
+#      if step 5's measured per-epoch time says you need to.
+#
+#   3. Submit to BOTH GPU partitions: --partition=c23g,c25g. Both are 4x hopper
+#      per node (c23g: 50 nodes/200 GPUs, c25g: 29 nodes/116 GPUs) and both have
+#      >=96 CPUs/node, so --cpus-per-task=96 is satisfiable on either. Slurm
+#      takes whichever frees first. This is free and you should always do it.
+#
+#   4. If it still will not fit: do NOT lower dataset_fraction — it is already
+#      0.2 in the multi-view config, and dropping it further makes the
+#      violation rates noisier, which is the number the whole study rests on.
+#      Chain instead. save_checkpoint_every is patched to 2, so a wall kill
+#      costs at most 2 epochs, and both the eval array (--dependency=afterany)
+#      and run_prior_study.sh fall back to the newest periodic checkpoint.
+#
+#   NOT useful here, despite appearances:
+#     * `devel` / `devel_low` (MaxTime 1 h) are CPU-only nodes — n23m0123 and
+#       r23m0124. There is no fast GPU debug queue on this cluster; the login
+#       node dry run in step 4 is the substitute.
+#     * the `_low` partitions are the same hardware at PriorityTier 10-70
+#       instead of 1000. They only make sense if you want to stop consuming
+#       fair-share and do not care when the job lands.
+#
+#   The real protection is not a partition trick: it is measuring the first
+#   epoch (step 5) and reacting within the first hour, while a scancel is cheap.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 0. ENVIRONMENT
+# -----------------------------------------------------------------------------
+cd "$HPCWORK/SMILify"
+conda activate pytorch3d
+mkdir -p logs configs_runs
+
+export ACCT=rwth2151
+export ENV_PREFIX="$(conda info --envs | awk '$1=="pytorch3d"{print $NF}')"
+echo "ENV_PREFIX=$ENV_PREFIX"          # must be a directory containing bin/python
+
+# Same RUNS_ROOT as the single-view study — prepare, train and eval all read it.
+export RUNS_ROOT="$HPCWORK/smilify_runs"
+
+# The multi-view checkpoint the sweep branches from, and the JSON that produced
+# it. Point MV_REF at wherever SMILySTICKS_ViT_model.pth actually lives.
+export MV_REF="$HPCWORK/SMILify/SMILySTICKS_ViT_model.pth"      # <- FIX THIS PATH
+export MV_BASE_CONFIG=smal_fitter/neuralSMIL/configs/examples/multiview_SMILySTICKS_3D_ViT_Large_AUG_FIXED.json
+
+ls -l "$MV_REF" "$MV_BASE_CONFIG" \
+      3D_model_prep/SMILy_STICK_limits_authored.pkl \
+      SMILySTICKS_centred_reprojected_FIXED.h5
+df -h "$HPCWORK"
+
+
+# -----------------------------------------------------------------------------
+# 1. IS THIS ACTUALLY A MULTI-VIEW CHECKPOINT, AND AT WHAT EPOCH?
+# -----------------------------------------------------------------------------
+# Everything downstream keys modality off `view_embeddings.weight`, not off the
+# filename, and SMILySTICKS_ViT_model.pth does not say which it is. The epoch is
+# what decides the +25-vs-+50 argument in section A1.
+
+python - "$MV_REF" <<'PY'
+import sys, torch
+ck = torch.load(sys.argv[1], map_location="cpu", weights_only=False)
+sd = ck.get("model_state_dict", ck)
+mode = "multiview" if "view_embeddings.weight" in sd else "SINGLEVIEW  <-- WRONG FILE"
+print(f"epoch : {ck.get('epoch')}")
+print(f"mode  : {mode}")
+cfg = ck.get("config") or {}
+print(f"embedded config keys: {sorted(cfg)[:12]}")
+PY
+
+# Read the epoch off that, call it E. Then:
+#   E + 25 must not cross 400 (or 300). If it does, pick EXTRA_EPOCHS so the
+#   whole window sits inside one curriculum stage, and use that same value for
+#   ALL FOUR arms.
+
+
+# -----------------------------------------------------------------------------
+# 2. SCORE THE MULTI-VIEW REFERENCE — FIRST, and before anything else
+# -----------------------------------------------------------------------------
+# This needs no training, so it runs immediately and in parallel with the rest.
+# Its violation table is the single most informative number in the study: if the
+# multi-view model is already inside the authored ranges, the hinge is near-zero
+# by construction at every lambda and the sweep has nothing to find.
+
+
+sbatch --array=5 --account=$ACCT \
+    --export=ALL,MV_REF,ENV_PREFIX,RUNS_ROOT \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+# When it lands, and BEFORE reading any lambda result:
+#   cat prior_study_results/mv_reference/arm.json          # confirm checkpoint + epoch
+#   column -s, -t prior_study_results/mv_reference/analysis/limit_violations.csv | head -20
+#
+# The single-view reference was 96/162 axes and 14.76 % of frames. Whatever this
+# one says is the "before" number every multi-view lambda is measured against —
+# and if it comes out far below the single-view figure, that is itself the
+# headline result (multi-view resolves geometrically what the prior had to
+# supply single-view), not a reason to abandon the sweep.
+
+
+# -----------------------------------------------------------------------------
+# 3. BUILD THE FOUR MULTI-VIEW CONFIGS (login node, CPU, ~1 min)
+# -----------------------------------------------------------------------------
+# BATCH_SIZE=4 pairs with --nodes=2 in step 5. If you decide to run on ONE node
+# (4 ranks), drop BATCH_SIZE entirely so the config's batch_size 8 stands.
+# Whatever you choose, it must be the same for all four arms.
+
+EXTRA_EPOCHS=25 BATCH_SIZE=4 \
+  bash scripts/prior_study/prepare_lambda_sweep.sh multiview
+
+# Writes configs_runs/multiview_lam{1e-4,1e-3,1e-2,1e-1}.json — exactly the
+# names array tasks 4-7 derive. Check the arithmetic it prints for EVERY lambda:
+#   [prepare] resume from epoch E+1, train 25 epoch(s) -> training.num_epochs = E+26
+#   [prepare] arm: CONSTRAINED (w=<lambda>)
+#   [patch]   lr constant at 1e-05 across [E+1, E+26) — nothing to confound
+#   [patch]   save_checkpoint_every: 5 -> 2
+#
+# num_epochs is an ABSOLUTE END epoch. A checkpoint at epoch 354 with
+# num_epochs=25 trains ZERO epochs and exits looking successful — which is why
+# the count is passed as --extra-epochs and never typed into the JSON.
+
+grep -H '"num_epochs"\|joint_limit_regularization\|checkpoint_dir\|"batch_size"\|smal_file' \
+     configs_runs/multiview_lam*.json
+
+# All four num_epochs IDENTICAL, all four lambdas DISTINCT, batch_size the same
+# in all four, and smal_file must be SMILy_STICK_limits_authored.pkl — the base
+# config ships SMILy_STICK.pkl, which has no joint_limits, and prepare overrides
+# it. If that override did not land, the hinge has nothing to act on.
+
+
+# -----------------------------------------------------------------------------
+# 4. PRE-FLIGHT (login node) — do not skip
+# -----------------------------------------------------------------------------
+# Catches the two failures that do NOT crash: architecture drift (resets the
+# epoch counter to 0, so "25 epochs" becomes E+26 from scratch and burns the
+# whole allocation) and test splits that disagree between arms.
+
+python scripts/prior_study/preflight_study.py \
+    --config configs_runs/multiview_lam1e-4.json --reference "$MV_REF" \
+    --config configs_runs/multiview_lam1e-3.json --reference "$MV_REF" \
+    --config configs_runs/multiview_lam1e-2.json --reference "$MV_REF" \
+    --config configs_runs/multiview_lam1e-1.json --reference "$MV_REF"
+
+# The batch script's own pre-flight, for the four MULTI-VIEW tasks, with
+# torchrun/srun stubbed out. SLURM_JOB_NUM_NODES=2 makes it do the rank
+# arithmetic for the shape you are actually about to submit.
+
+SLURM_JOB_NUM_NODES=2 \
+  bash hpc_files/rwth/dryrun_sbatch.sh hpc_files/rwth/run_prior_study_train.sbatch 4 5 6 7
+
+# Exit 0 = the only thing left that can fail is the GPU work itself.
+
+
+# -----------------------------------------------------------------------------
+# 5. TRAIN THE FOUR MULTI-VIEW ARMS
+# -----------------------------------------------------------------------------
+# Tasks 4-7 = multiview x {1e-4, 1e-3, 1e-2, 1e-1}. No % throttle: %2 halves the
+# GPUs in flight and roughly doubles the calendar time to a finished sweep.
+
+jid=$(sbatch --parsable --array=4-7 \
+        --nodes=2 --time=12:00:00 --partition=c23g,c25g --account=$ACCT \
+        --export=ALL,ENV_PREFIX,RUNS_ROOT \
+        hpc_files/rwth/run_prior_study_train.sbatch)
+echo "multiview training array: $jid"
+
+# Single node instead (16 GPUs total, ~2x the wall, shorter queue wait) — then
+# rebuild the configs in step 3 WITHOUT BATCH_SIZE=4:
+#   jid=$(sbatch --parsable --array=4-7 --time=24:00:00 --partition=c23g,c25g \
+#           --account=$ACCT --export=ALL,ENV_PREFIX,RUNS_ROOT \
+#           hpc_files/rwth/run_prior_study_train.sbatch)
+#
+# One lambda only (4=1e-4, 5=1e-3, 6=1e-2, 7=1e-1):
+#   sbatch --array=6 --nodes=2 --partition=c23g,c25g --account=$ACCT \
+#       --export=ALL,ENV_PREFIX,RUNS_ROOT hpc_files/rwth/run_prior_study_train.sbatch
+
+# --- CHECK ALL FOUR AGREE, as soon as they start ---
+grep -h "gpus   :\|SWEEP INVARIANT\|joint_limit_regularization:\|arm    :" \
+     logs/jl_train_${jid}_*.out
+
+# --- MEASURE THE FIRST EPOCH, within the first hour ---
+# The trainer has no epoch-time print; the tqdm bar (on stderr) carries the
+# elapsed/ETA per epoch. Read it, multiply by 25, compare against --time.
+tail -3 logs/jl_train_${jid}_4.err
+
+# If 25 epochs will not fit: scancel now (you have lost minutes, not hours) and
+# resubmit with a smaller EXTRA_EPOCHS from step 3 — the comparison holds as
+# long as every arm gets the same count. If it fits with room to spare, leave
+# it; do not raise the count mid-sweep.
+
+
+# -----------------------------------------------------------------------------
+# 6. SCORE THE SWEEP
+# -----------------------------------------------------------------------------
+# Tasks 6-9 = the four multi-view lambdas (task 5, mv_reference, ran in step 2).
+# afterany, not afterok: an arm killed at the wall still left periodic
+# checkpoints worth scoring. EXTRA_EPOCHS must match what you trained with — it
+# is written into the comparison tables as provenance.
+
+sbatch --array=6-9 --dependency=afterany:$jid --account=$ACCT \
+    --export=ALL,MV_REF,ENV_PREFIX,RUNS_ROOT,EXTRA_EPOCHS=25 \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+# Each task writes prior_study_results/lam<L>/mv_constrained/ next to the
+# existing sv_constrained/, symlinks mv_reference in beside it, and rebuilds
+# prior_study_results/sweep/sweep.{csv,md} from every arm on disk — so the final
+# table has both modalities in one place, sorted by (mode, lambda).
+
+
+# -----------------------------------------------------------------------------
+# 7. QUALITATIVE RENDERS — run_multiview_inference.py, the direct counterpart
+#    to the run_singleview_inference.py you used for the single-view arms
+# -----------------------------------------------------------------------------
+# (run_prior_study_render.sbatch is single-view-only and irrelevant here — you
+# did not use it for the single-view renders either.)
+#
+# The two entry points are NOT flag-compatible. What changes:
+#
+#   singleview                          multiview
+#   ----------------------------------  ----------------------------------------
+#   -v / --input_video <clip.mp4>       --dataset <the HDF5>      (REQUIRED)
+#   -o / --output_folder <dir>          (none — writes into the CWD)
+#   --max_frames N                      --max_frames N  = length of EACH subclip
+#   (pick clips by hand)                --generate_num_subclips K
+#   --camera_smoothing W                --smoothing_window W
+#   --crop_mode / --video_export_mode   (no equivalent)
+#   (smal file taken from the ckpt)     --smal_file <path>        (overridable)
+#   --save_frames                       (always writes per-frame PNG + params)
+#   n/a                                 --view_indices 0,4,11
+#   n/a                                 --disable_translation     <-- SEE BELOW
+#   n/a                                 --render_resolution, --num_gpus
+#
+# THREE THINGS THAT WILL BITE:
+#
+#  1. --disable_translation DEFAULTS TO TRUE. It is a BooleanOptionalAction with
+#     default=True, so plain invocation renders with per-part translation
+#     (betas_trans) switched OFF. The multi-view config trains with
+#     scale_trans_beta.mode="separate" and a betas_trans loss term, so the model
+#     DOES predict it — and the numbers in section 8 score the model with it on.
+#     Rendering with it off shows a different mesh than the one being measured.
+#     Pass --no-disable_translation for a like-for-like comparison.
+#
+#  2. THERE IS NO --output_folder. Outputs land in the CWD, named from the
+#     dataset: <dataset><range>_multiview_inference.avi (the grid) and
+#     <dataset><range>_singleview_inference_view<N>.mp4 (per view). Every arm
+#     produces the SAME filenames, so the arms must run sequentially and be
+#     moved aside between runs — an array job would overwrite itself.
+#
+#  3. Frames come from the dataset, not from a clip you chose. Subclip i starts
+#     at i * len(dataset) / K, which is deterministic — so the same
+#     --generate_num_subclips / --max_frames give byte-identical frame ranges
+#     across arms, which is what makes the panels comparable. Use the same two
+#     numbers for every arm, including the reference.
+#
+# Wrap this in a 1-GPU job (--time=04:00:00 is plenty for 3x300 frames per arm;
+# raise --dist_timeout instead if you ever render the full dataset multi-GPU).
+# Run from the repo root.
+
+mkdir -p prior_study_results/renders_mv
+DS=SMILySTICKS_centred_reprojected_FIXED.h5
+
+for ARM in mv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1; do
+  case "$ARM" in
+    mv_reference) CKPT="$MV_REF" ;;
+    *) CKPT="$RUNS_ROOT/multiview_${ARM}/checkpoints/best_model.pth"
+       # same fallback the eval stage applies, so pictures and tables describe
+       # the same weights
+       [[ -e "$CKPT" ]] || CKPT="$(ls -t "$(dirname "$CKPT")"/checkpoint_epoch_*.pth | head -1)" ;;
+  esac
+  echo "=== $ARM -> $CKPT ==="
+  mkdir -p "prior_study_results/renders_mv/$ARM"
+
+  python -m smal_fitter.neuralSMIL.run_multiview_inference \
+      --dataset "$DS" \
+      --checkpoint "$CKPT" \
+      --smal_file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+      --max_frames 300 --generate_num_subclips 3 \
+      --view_indices 0 \
+      --no-disable_translation \
+      --smoothing_window 0 \
+      --export_animation "prior_study_results/renders_mv/$ARM/${ARM}_anim"
+
+  mv "${DS%.h5}"*_multiview_inference.avi \
+     "${DS%.h5}"*_singleview_inference*.mp4 \
+     "prior_study_results/renders_mv/$ARM/" 2>/dev/null || true
+done
+
+# Sanity-check ONE arm before spending the other four: does the mesh track the
+# animal and do the legs swing through a stride, or does it jitter in place?
+# That question costs one GPU-minute and is the one the tables cannot answer.
+
+# Optional, to reuse stack_renders.sh: it globs <stem>_inference.mp4, so rename
+# the per-view files into that shape first.
+#   for a in prior_study_results/renders_mv/*/; do
+#     for f in "$a"*_singleview_inference_view0.mp4; do
+#       [[ -e "$f" ]] && mv "$f" "${f%_singleview_inference_view0.mp4}_inference.mp4"
+#     done
+#   done
+#   RENDER_ROOT=prior_study_results/renders_mv \
+#   ARMS="mv_reference lam1e-4 lam1e-3 lam1e-2 lam1e-1" \
+#     bash scripts/prior_study/stack_renders.sh
+#
+# The numbers in section 8 are the deliverable; these pictures are supporting
+# evidence and can wait until the tables say something worth illustrating.
+
+
+# -----------------------------------------------------------------------------
+# 8. READ THE RESULTS
+# -----------------------------------------------------------------------------
+#   prior_study_results/sweep/sweep.md   <- HEADLINE, now both modalities
+#   prior_study_results/sweep/sweep.csv
+#   prior_study_results/lam<L>/comparison/comparison.md
+#
+# The single-view curve to read the multi-view one against:
+#   lambda   axes    viol %   MPJPE mm
+#   0        96/162  14.76    1.09      (reference, +0 epochs)
+#   1e-4     89/162   2.73    0.97
+#   1e-3     85/162   0.26    1.01
+#   1e-2     73/162   0.02    1.02
+#   1e-1     41/162   0.00    1.05
+#   multiview reference: from step 2 — the sweep.md row predating this run
+#                        is a leftover and must not be quoted.
+#
+# WHAT TO EXPECT, and how to read it either way. Multi-view resolves depth
+# geometrically, so it has less for a pose prior to fix — a SMALLER multi-view
+# delta than the single-view one is a result, not a failure, and it is the
+# result the study predicts. What would be informative:
+#   * violations fall as steeply as single-view at matched lambda -> the
+#     violations were never about depth ambiguity; they are a model-capacity or
+#     parameterisation artefact that multi-view does not fix either.
+#   * violations fall much less -> the single-view gain really was the prior
+#     supplying information the single view lacked. That is the cleaner story.
+#   * MPJPE degrades where single-view's did not -> multi-view's fit is tighter
+#     against the data, so the same lambda buys less slack. Report the
+#     turnover lambda per modality rather than one global recommendation.
+#
+# CAVEATS to state alongside every number:
+#   1. The reference arm received ZERO extra epochs, so reference-vs-lambda
+#      mixes the prior with the continuation. Lambda-vs-lambda is clean.
+#   2. The multi-view arms got 25 extra epochs, the single-view arms 50. Do not
+#      cross-compare deltas between modalities as if they were matched.
+#   3. Effective weight scales with authored coverage (79.6 %), so lambda=1e-1
+#      is still ~1000x below the old w=100 run. If the whole multi-view curve is
+#      flat, the answer is to sweep upward — LAMBDAS="1 10 100" with the same
+#      EXTRA_EPOCHS — not to conclude the prior does nothing.
+
+
+# -----------------------------------------------------------------------------
+# MONITORING
+# -----------------------------------------------------------------------------
+# squeue --me
+# sacct -j $jid --format=JobID,JobName%18,State,Elapsed,MaxRSS,NodeList
+# tail -f logs/jl_train_${jid}_4.out      # 4=1e-4  5=1e-3  6=1e-2  7=1e-1
+# tail -f logs/jl_train_${jid}_4.err      # tqdm epoch timing lives here
+# scancel $jid
