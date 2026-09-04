@@ -872,27 +872,9 @@ def render_model_only(
                 verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
                 joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
             else:
-                # Apply the predicted per-sample mesh scale when the checkpoint
-                # has a mesh_scale head, exactly as
-                # SMALFitter.generate_visualization does: centre on the root
-                # joint, scale, then translate. WITHOUT this the mesh renders at
-                # native size (~35x too large vs the metric 3D) and floods the
-                # frame instead of sitting on the animal.
-                _ms = None
-                if getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
-                    _ms = predicted_params["mesh_scale"].to(device=device, dtype=torch.float32)
-                    if _ms.dim() == 0:
-                        _ms = _ms.unsqueeze(0).unsqueeze(0)
-                    elif _ms.dim() == 1:
-                        _ms = _ms.unsqueeze(1)
-                if _ms is not None:
-                    _root = joints[:, 0:1, :]
-                    verts = (verts - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
-                    joints = (joints - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
-                else:
-                    # Camera-centric / no UE scaling: plain translation (scale baked in).
-                    verts = verts + temp_fitter.trans.unsqueeze(1)
-                    joints = joints + temp_fitter.trans.unsqueeze(1)
+                # Camera-centric / no UE scaling: plain translation (scale baked in).
+                verts = verts + temp_fitter.trans.unsqueeze(1)
+                joints = joints + temp_fitter.trans.unsqueeze(1)
 
             # Get canonical model joints
             canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
@@ -1016,27 +998,9 @@ def render_prediction_on_frame(
                 verts = (verts - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
                 joints = (joints - joints[:, 0, :].unsqueeze(1)) * 10 + temp_fitter.trans.unsqueeze(1)
             else:
-                # Apply the predicted per-sample mesh scale when the checkpoint
-                # has a mesh_scale head, exactly as
-                # SMALFitter.generate_visualization does: centre on the root
-                # joint, scale, then translate. WITHOUT this the mesh renders at
-                # native size (~35x too large vs the metric 3D) and floods the
-                # frame instead of sitting on the animal.
-                _ms = None
-                if getattr(model, "allow_mesh_scaling", False) and "mesh_scale" in predicted_params:
-                    _ms = predicted_params["mesh_scale"].to(device=device, dtype=torch.float32)
-                    if _ms.dim() == 0:
-                        _ms = _ms.unsqueeze(0).unsqueeze(0)
-                    elif _ms.dim() == 1:
-                        _ms = _ms.unsqueeze(1)
-                if _ms is not None:
-                    _root = joints[:, 0:1, :]
-                    verts = (verts - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
-                    joints = (joints - _root) * _ms.unsqueeze(-1) + temp_fitter.trans.unsqueeze(1)
-                else:
-                    # Camera-centric / no UE scaling: plain translation (scale baked in).
-                    verts = verts + temp_fitter.trans.unsqueeze(1)
-                    joints = joints + temp_fitter.trans.unsqueeze(1)
+                # Camera-centric / no UE scaling: plain translation (scale baked in).
+                verts = verts + temp_fitter.trans.unsqueeze(1)
+                joints = joints + temp_fitter.trans.unsqueeze(1)
 
             # Get canonical model joints
             canonical_joints = joints[:, config.CANONICAL_MODEL_JOINTS]
@@ -1306,13 +1270,8 @@ def process_images_batch(
             # Run inference
             predicted_params = run_inference_on_image(model, preprocessed_tensor, device)
 
-            # Generate visualization with unique image name.
-            # Pass the preprocessed (cropped + resized) image rather than the
-            # original: the predicted camera/mesh is expressed in the crop's
-            # coordinate frame, so overlaying it on the uncropped image
-            # misaligns the mesh with the animal.
-            model_input_image = preprocessed_tensor[0].permute(1, 2, 0).cpu().numpy()
-            generate_visualization(model, predicted_params, model_input_image, image_exporter, image_name, device)
+            # Generate visualization with unique image name
+            generate_visualization(model, predicted_params, original_image, image_exporter, image_name, device)
 
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
@@ -1510,14 +1469,8 @@ def process_video(
                     # Render model only
                     rendered_model = render_model_only(model, smoothed_params, device, render_size)
 
-                    # Left panel must show exactly what the model saw: the
-                    # preprocessed (cropped + resized) image, NOT the full frame.
-                    # Squashing the full non-square frame here is what made the
-                    # rendered model fail to line up with the footage.
-                    input_resized = np.clip(preprocessed_image, 0.0, 1.0)
-                    input_resized = (input_resized * 255).astype(np.uint8)
-                    if input_resized.shape[:2] != (render_size, render_size):
-                        input_resized = cv2.resize(input_resized, (render_size, render_size))
+                    # Resize input frame to match render_size
+                    input_resized = cv2.resize(frame_rgb, (render_size, render_size))
 
                     # Create side-by-side visualization
                     side_by_side = np.hstack([input_resized, rendered_model])
@@ -1540,11 +1493,7 @@ def process_video(
                 if save_frames and frame_idx % 10 == 0:  # Save every 10th frame
                     frame_name = f"frame_{frame_idx:06d}"
                     try:
-                        # Use the preprocessed (cropped) image, not frame_rgb:
-                        # predictions live in the crop's coordinate frame.
-                        generate_visualization(
-                            model, predicted_params, preprocessed_image, frame_exporter, frame_name, device
-                        )
+                        generate_visualization(model, predicted_params, frame_rgb, frame_exporter, frame_name, device)
                     except Exception as e:
                         print(f"Warning: Failed to save frame {frame_idx}: {e}")
 
