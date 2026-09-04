@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """
-Resolve the two undetermined facts about the SBeA release, empirically.
+v3 — Resolve the SBeA coords3d column layout and the world-frame convention.
 
-    1. How are the 96 columns of id3d.mat's `coords3d` laid out?
-       Four orderings are plausible and the MAT file carries no metadata to
-       distinguish them.
-    2. Which axis of caliParas.mat's `cam_mat_all` (3,4,4) is the camera?
+WHAT CHANGED FROM v2, AND WHY
+-----------------------------
+v2 ranked candidates by "fraction of reprojected points on-image". That is a
+weak signal: a scrambled layout still puts points roughly inside the arena
+volume, so everything scored 20-60% and nothing separated. v2's own output
+carried the real evidence — a median within-animal diameter of 838 units when
+the cameras sit 714-1002 units from the origin, i.e. millimetres, i.e. a mouse
+supposedly 84 cm across.
 
-Both are settled by the same test: reproject the 3D points through each
-candidate projection matrix and count how many land inside the image. The
-correct combination puts ~all points on the mouse; every wrong one scatters
-them off-frame or behind the camera. This is unit-free, so it does not matter
-whether SBeA stores millimetres or metres.
+So v3 ranks by RIGID-BODY CONSISTENCY instead. Distances between keypoints on
+one animal are invariant to any rotation, translation or choice of frame, so
+this test is independent of the calibration question entirely. The skull is
+rigid: the left-ear-to-right-ear distance must be near-constant across frames.
+Under a wrong layout that distance mixes one point's X with another's Y and
+becomes noise. Coefficient of variation therefore separates the layouts
+cleanly, and being a ratio it needs no knowledge of the units.
+
+Only once the layout is fixed does v3 search the frame convention. id3d.mat is
+"rotated to ground" per the tracker README, while cam_mat_all projects from the
+camera-3 frame (camera 3 has |t| = 0). The rotation/translation stored in
+caliParas is that ground transform and must be undone before reprojecting.
 
 Run:
-    conda activate "$HPCWORK/conda_envs/pytorch3d"
     python diagnostics/sbea_decode_PROBE.py \
-        "/hpcwork/<user>/datasets/SBeA/fig2_data/pose tracking/rec11-A1A2-20220803" \
-        --gt-dir "/hpcwork/<user>/datasets/SBeA/SM_fig1_data/gt_data"
-
-Pass the session STEM — the path without the -caliParas.mat / -id3d.mat suffix.
+        "<...>/fig2_data/pose tracking/rec11-A1A2-20220803" \
+        --gt-dir "<...>/SM_fig1_data/gt_data"
 """
 
 from __future__ import annotations
@@ -31,109 +39,52 @@ from pathlib import Path
 
 import numpy as np
 
-N_KP = 16
-N_ANIMALS = 2
+N_KP, N_ANIMALS, N_DIM = 16, 2, 3
+
+# Index into the DLC bodypart order, confirmed from the gt_data CSV header.
+NOSE, EAR_L, EAR_R, NECK = 0, 1, 2, 3
+BACK, ROOT_TAIL, MID_TAIL, TIP_TAIL = 12, 13, 14, 15
+
+# Pairs spanning rigid or near-rigid structure. The skull pair is the strongest
+# signal; the tail segments are individually rigid even though the chain flexes.
+RIGID_PAIRS = [
+    ("ear_L-ear_R", EAR_L, EAR_R),
+    ("nose-neck", NOSE, NECK),
+    ("root-mid tail", ROOT_TAIL, MID_TAIL),
+    ("mid-tip tail", MID_TAIL, TIP_TAIL),
+]
 
 
 def rule(t: str) -> None:
-    print(f"\n{'=' * 74}\n{t}\n{'=' * 74}")
+    print(f"\n{'=' * 76}\n{t}\n{'=' * 76}")
 
 
 # ------------------------------------------------------- MATLAB unwrapping
 
 def unwrap(o):
-    """Peel MATLAB's 1x1 cell/object wrappers until something real appears."""
     while isinstance(o, np.ndarray) and o.dtype == object and o.size == 1:
         o = o.flat[0]
     return o
 
 
-def dump(o, name: str = "", depth: int = 0, max_depth: int = 4) -> None:
-    pad = "  " * depth
-    o = unwrap(o)
-    if depth > max_depth:
-        print(f"{pad}{name}: ...")
-        return
-    fields = getattr(o, "_fieldnames", None)
-    if fields:
-        print(f"{pad}{name}: struct{{{', '.join(fields)}}}")
-        for f in fields:
-            dump(getattr(o, f), f, depth + 1, max_depth)
-    elif isinstance(o, np.ndarray):
-        if o.dtype == object:
-            print(f"{pad}{name}: cell{o.shape}")
-            for i, sub in enumerate(o.flat):
-                if i >= 6:
-                    print(f"{pad}  ... {o.size - 6} more")
-                    break
-                dump(sub, f"[{i}]", depth + 1, max_depth)
-        else:
-            flat = o.ravel()
-            preview = np.array2string(flat[:6], precision=4, suppress_small=True)
-            print(f"{pad}{name}: array{o.shape} {o.dtype}  {preview}")
-    else:
-        print(f"{pad}{name}: {type(o).__name__}  {o}")
-
-
-# ------------------------------------------------------------- calibration
-
 def load_calibration(stem: Path):
     from scipy.io import loadmat
 
-    path = Path(str(stem) + "-caliParas.mat")
-    md = loadmat(path, struct_as_record=False, squeeze_me=False)
+    md = loadmat(Path(f"{stem}-caliParas.mat"), struct_as_record=False, squeeze_me=False)
+    root = next(unwrap(v) for k, v in md.items() if not k.startswith("__"))
+    cam_mat = np.asarray(root.cam_mat_all, dtype=np.float64)
+    R_g = np.asarray(unwrap(root.rotation), dtype=np.float64).reshape(3, 3)
+    t_g = np.asarray(unwrap(root.translation), dtype=np.float64).ravel()[:3]
 
-    rule(f"CALIBRATION  —  {path.name}")
-    root = None
-    for k, v in md.items():
-        if not k.startswith("__"):
-            print(f"\n[{k}]")
-            dump(v, k)
-            if root is None:
-                root = unwrap(v)
-
-    cam_mat = np.asarray(getattr(root, "cam_mat_all"))
-    print(f"\ncam_mat_all: shape {cam_mat.shape}")
-    return cam_mat, root
-
-
-def candidate_projections(cam_mat: np.ndarray) -> dict[str, list[np.ndarray]]:
-    """Every reading of cam_mat_all as N 3x4 projection matrices.
-
-    For the observed (3, 4, 4) the camera axis can only be axis 1 or axis 2 —
-    axis 0 has size 3, which is the row count of a 3x4 projection matrix.
-    Built defensively so an unexpected shape reports instead of crashing.
-    """
-    out: dict[str, list[np.ndarray]] = {}
-    nd = cam_mat.ndim
-    if nd != 3:
-        print(f"!! cam_mat_all has ndim {nd}, expected 3 — no candidates built")
-        return out
-
-    for axis in range(3):
-        n_cam = cam_mat.shape[axis]
-        if n_cam < 2:
-            continue
-        mats = [np.take(cam_mat, k, axis=axis) for k in range(n_cam)]
-        cleaned = []
-        for m in mats:
-            m = np.asarray(m, dtype=np.float64)
-            if m.shape == (4, 4):
-                m = m[:3]
-            if m.shape == (4, 3):
-                m = m.T
-            if m.shape == (3, 4):
-                cleaned.append(m)
-        if len(cleaned) == n_cam:
-            label = {0: "cam_mat_all[k, :, :]",
-                     1: "cam_mat_all[:, k, :]",
-                     2: "cam_mat_all[:, :, k]"}[axis]
-            out[f"{label}  (n={n_cam})"] = cleaned
-    return out
+    rule("CALIBRATION")
+    print(f"cam_mat_all {cam_mat.shape} -> reading [:, :, k] as 4 projection matrices")
+    print(f"ground rotation R:\n{np.array2string(R_g, precision=4)}")
+    print(f"ground translation t: {np.array2string(t_g, precision=3)}")
+    print(f"det(R) = {np.linalg.det(R_g):.6f}   (should be +1 for a pure rotation)")
+    return [cam_mat[:, :, k] for k in range(cam_mat.shape[2])], R_g, t_g
 
 
 def decompose(P: np.ndarray):
-    """P (3x4) -> K, R, t via RQ, normalised to a positive-diagonal K, det(R)=+1."""
     from scipy.linalg import rq
 
     K, R = rq(P[:, :3])
@@ -141,8 +92,6 @@ def decompose(P: np.ndarray):
     K, R = K @ S, S @ R
     if K[2, 2] != 0:
         K = K / K[2, 2]
-    if np.linalg.det(R) < 0:
-        R = -R
     t = np.linalg.solve(K, P[:, 3])
     if np.linalg.det(R) < 0:
         R, t = -R, -t
@@ -154,102 +103,78 @@ def decompose(P: np.ndarray):
 def load_coords(stem: Path):
     from scipy.io import loadmat
 
-    path = Path(str(stem) + "-id3d.mat")
-    md = loadmat(path, struct_as_record=False, squeeze_me=True)
+    md = loadmat(Path(f"{stem}-id3d.mat"), struct_as_record=False, squeeze_me=True)
     coords = np.asarray(md["coords3d"], dtype=np.float64)
-    names = md.get("name3d")
-    names = [str(n) for n in np.atleast_1d(names)]
-
-    rule(f"3D POSES  —  {path.name}")
-    print(f"coords3d : {coords.shape}  {coords.dtype}")
-    print(f"name3d   : {names}")
-    finite = np.isfinite(coords)
-    print(f"finite   : {100 * finite.mean():.1f}%   "
-          f"fully-NaN frames: {int((~finite).all(axis=1).sum())}")
-    with np.errstate(invalid="ignore"):
-        print(f"range    : min {np.nanmin(coords):.2f}  max {np.nanmax(coords):.2f}  "
-              f"(units unknown — the reprojection test does not care)")
+    names = [str(n) for n in np.atleast_1d(md.get("name3d"))]
+    rule("3D POSES")
+    print(f"coords3d {coords.shape}   identities {names}")
     return coords, names
 
 
-def layout_hypotheses(coords: np.ndarray) -> dict[str, np.ndarray]:
-    """Reshape (F, 96) into (F, A, J, 3) under each plausible column order."""
+def all_layouts(coords: np.ndarray) -> dict[str, np.ndarray]:
+    """Every way (F, 96) unflattens into (F, animal, keypoint, coord).
+
+    96 = 2 x 16 x 3 and the three factors are distinct, so each of the six
+    reshape orders assigns axis roles unambiguously.
+    """
     f = coords.shape[0]
-    h: dict[str, np.ndarray] = {}
-
-    # A) animal-major, then coordinate blocks:  a1[X*16, Y*16, Z*16], a2[...]
-    h["animal / coord-block / kp"] = (
-        coords.reshape(f, N_ANIMALS, 3, N_KP).transpose(0, 1, 3, 2))
-
-    # B) animal-major, then per-keypoint xyz triples: a1[(x,y,z)*16], a2[...]
-    h["animal / kp / xyz"] = coords.reshape(f, N_ANIMALS, N_KP, 3)
-
-    # C) coordinate blocks outermost, spanning both animals:
-    #    X for all 32 points, then Y, then Z
-    h["coord-block / animal / kp"] = (
-        coords.reshape(f, 3, N_ANIMALS, N_KP).transpose(0, 2, 3, 1))
-
-    # D) keypoint-major triples spanning both animals interleaved
-    h["kp / animal / xyz"] = (
-        coords.reshape(f, N_KP, N_ANIMALS, 3).transpose(0, 2, 1, 3))
-
-    return h
+    role = {N_ANIMALS: "animal", N_KP: "kp", N_DIM: "xyz"}
+    out: dict[str, np.ndarray] = {}
+    for perm in itertools.permutations((N_ANIMALS, N_KP, N_DIM)):
+        arr = coords.reshape(f, *perm)
+        ax = {perm[i]: i + 1 for i in range(3)}
+        arr = np.transpose(arr, (0, ax[N_ANIMALS], ax[N_KP], ax[N_DIM]))
+        out[" / ".join(role[p] for p in perm)] = arr
+    return out
 
 
-# ------------------------------------------------------------------- score
+# ----------------------------------------------------------- rigidity test
 
-def video_survey(stem: Path, n_rows_3d: int) -> tuple[int, int]:
-    """Report every camera's size and frame count, and flag any mismatch with the 3D."""
-    import cv2
+def rigidity(arr: np.ndarray, n_frames: int = 500) -> dict:
+    """Distance statistics for rigid pairs. Frame-invariant by construction."""
+    idx = np.linspace(0, arr.shape[0] - 1, min(n_frames, arr.shape[0])).astype(int)
+    sub = arr[idx]                                    # (n, A, J, 3)
+    stats: dict = {}
 
-    rule("VIDEO vs 3D  —  do the frame counts agree?")
-    sizes, counts = [], []
-    for cam in range(8):
-        p = Path(f"{stem}-camera-{cam}.avi")
-        if not p.exists():
+    cvs = []
+    for label, i, j in RIGID_PAIRS:
+        d = np.linalg.norm(sub[:, :, i] - sub[:, :, j], axis=-1).ravel()
+        d = d[np.isfinite(d) & (d > 0)]
+        if len(d) < 10:
+            stats[label] = (np.nan, np.nan)
             continue
-        cap = cv2.VideoCapture(str(p))
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        cap.release()
-        # CAP_PROP_FRAME_COUNT can lie on some AVIs; confirm by decoding to the end.
-        real = n
-        if n <= 0:
-            cap = cv2.VideoCapture(str(p))
-            real = 0
-            while cap.grab():
-                real += 1
-            cap.release()
-        sizes.append((w, h))
-        counts.append(real)
-        print(f"  camera-{cam}: {w}x{h}  {real} frames  @{fps:.1f}fps  "
-              f"({p.stat().st_size / 1e6:.1f} MB)")
+        med, cv = float(np.median(d)), float(np.std(d) / max(np.mean(d), 1e-9))
+        stats[label] = (med, cv)
+        cvs.append(cv)
 
-    if not sizes:
-        print("  !! no videos found — falling back to 640x480")
-        return 640, 480
+    span = np.linalg.norm(sub[:, :, NOSE] - sub[:, :, TIP_TAIL], axis=-1).ravel()
+    span = span[np.isfinite(span)]
+    stats["nose-tip span"] = float(np.median(span)) if len(span) else np.nan
 
-    print(f"\n  coords3d rows : {n_rows_3d}")
-    print(f"  video frames  : {counts[0]}")
-    if counts[0] and n_rows_3d % counts[0] == 0 and n_rows_3d != counts[0]:
-        print(f"  ratio         : {n_rows_3d // counts[0]}x — the 3D covers a LONGER")
-        print("                  recording than the released video excerpt.")
-        print("                  Which rows the excerpt maps to must be established")
-        print("                  before pairing images with poses.")
-    elif counts[0] != n_rows_3d:
-        print(f"  MISMATCH      : {n_rows_3d} vs {counts[0]}, not an integer ratio.")
-    else:
-        print("  aligned 1:1.")
+    d = np.linalg.norm(sub[:, :, :, None, :] - sub[:, :, None, :, :], axis=-1)
+    stats["diameter"] = float(np.median(np.nanmax(d, axis=(2, 3))))
+    stats["mean_cv"] = float(np.mean(cvs)) if cvs else np.inf
 
-    if len(set(sizes)) > 1:
-        print(f"  !! cameras differ in resolution: {set(sizes)}")
-    return sizes[0]
+    ear = stats.get("ear_L-ear_R", (np.nan, np.nan))[0]
+    stats["span/ear"] = float(stats["nose-tip span"] / ear) if ear and ear > 0 else np.nan
+    return stats
 
 
-def project(P: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """pts (N,3) -> (N,2) pixels and (N,) depth."""
+# -------------------------------------------------------- frame conventions
+
+def frame_variants(R_g: np.ndarray, t_g: np.ndarray) -> dict:
+    """Candidate maps from the stored 3D frame into the calibration frame."""
+    Rt = R_g.T
+    return {
+        "as stored (no transform)": lambda X: X,
+        "R^T (X - t)   [undo ground]": lambda X: (X - t_g) @ Rt.T,
+        "R X + t       [apply ground]": lambda X: X @ R_g.T + t_g,
+        "R^T X         [rotation only]": lambda X: X @ Rt.T,
+        "R (X - t)": lambda X: (X - t_g) @ R_g.T,
+    }
+
+
+def project(P: np.ndarray, pts: np.ndarray):
     hom = np.concatenate([pts, np.ones((len(pts), 1))], axis=1)
     cam = hom @ P.T
     w = cam[:, 2]
@@ -258,8 +183,7 @@ def project(P: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return uv, w
 
 
-def score(pts: np.ndarray, mats: list[np.ndarray], w: int, h: int) -> float:
-    """Fraction of points that project in front of the camera and on-image."""
+def onimage(pts: np.ndarray, mats, w: int, h: int) -> float:
     good = total = 0
     for P in mats:
         uv, depth = project(P, pts)
@@ -270,130 +194,145 @@ def score(pts: np.ndarray, mats: list[np.ndarray], w: int, h: int) -> float:
     return good / max(total, 1)
 
 
-def sample_points(arr: np.ndarray, n_frames: int = 300) -> np.ndarray:
-    """(F,A,J,3) -> (N,3) finite points from evenly spaced frames."""
-    f = arr.shape[0]
-    idx = np.linspace(0, f - 1, min(n_frames, f)).astype(int)
+def sample(arr: np.ndarray, n: int = 400) -> np.ndarray:
+    idx = np.linspace(0, arr.shape[0] - 1, min(n, arr.shape[0])).astype(int)
     pts = arr[idx].reshape(-1, 3)
     return pts[np.isfinite(pts).all(axis=1)]
 
 
-def spread(arr: np.ndarray) -> float:
-    """Median within-animal diameter — a sanity cross-check on the winner."""
-    idx = np.linspace(0, arr.shape[0] - 1, min(200, arr.shape[0])).astype(int)
-    d = []
-    for fr in arr[idx]:
-        for a in fr:
-            a = a[np.isfinite(a).all(axis=1)]
-            if len(a) > 2:
-                d.append(np.linalg.norm(a[:, None] - a[None], axis=-1).max())
-    return float(np.median(d)) if d else float("nan")
+# ------------------------------------------------------------------- video
+
+def video_info(stem: Path, n_rows: int):
+    import cv2
+
+    rule("VIDEO")
+    size, counts = None, []
+    for cam in range(8):
+        p = Path(f"{stem}-camera-{cam}.avi")
+        if not p.exists():
+            continue
+        cap = cv2.VideoCapture(str(p))
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        size = size or (w, h)
+        counts.append(n)
+        print(f"  camera-{cam}: {w}x{h}  {n} frames")
+    if not size:
+        return 640, 480, None
+    n_vid = counts[0]
+    if n_vid and n_rows % n_vid == 0:
+        print(f"\n  coords3d {n_rows} rows = {n_rows // n_vid}x the {n_vid}-frame video.")
+        print("  Candidate pairings tested below.")
+    return size[0], size[1], n_vid
 
 
-# ------------------------------------------------------------ bodypart names
-
-def bodypart_names(gt_dir: Path | None) -> list[str]:
-    if not gt_dir or not gt_dir.is_dir():
-        return []
-    csvs = sorted(gt_dir.glob("*.csv"))
-    if not csvs:
-        return []
-    with open(csvs[0]) as fh:
-        fh.readline()                       # scorer
-        parts = fh.readline().rstrip("\n").split(",")[1:]
-    seen: list[str] = []
-    for p in parts:
-        if p and p not in seen:
-            seen.append(p)
-    rule(f"BODYPART ORDER  —  {csvs[0].name}")
-    for i, nm in enumerate(seen):
-        print(f"  {i:>2}  {nm}")
-    print(f"\n{len(seen)} unique bodyparts — this is the joint_lookup.csv source of truth.")
-    return seen
+def test_subsampling(arr, mats, R_g, t_g, w, h, n_vid, frame_fn):
+    """Which 900 of the 27000 rows correspond to the released excerpt?"""
+    if not n_vid or arr.shape[0] == n_vid:
+        return
+    stride = arr.shape[0] // n_vid
+    rule(f"WHICH ROWS MATCH THE {n_vid}-FRAME EXCERPT?")
+    print("Reprojection cannot distinguish these — every candidate is valid 3D.")
+    print("Listed for the record; settle it by overlaying on real frames.\n")
+    cands = {
+        f"first {n_vid} rows": slice(0, n_vid),
+        f"last {n_vid} rows": slice(-n_vid, None),
+        f"every {stride}th row": slice(0, None, stride),
+        f"middle {n_vid} rows": slice((arr.shape[0] - n_vid) // 2,
+                                      (arr.shape[0] - n_vid) // 2 + n_vid),
+    }
+    for label, sl in cands.items():
+        pts = frame_fn(sample(arr[sl]))
+        print(f"  {label:<24} on-image {onimage(pts, mats, w, h):6.1%}")
 
 
 # -------------------------------------------------------------------- main
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stem", help="session path WITHOUT the -caliParas.mat suffix")
-    ap.add_argument("--gt-dir", default=None, help="SM_fig1_data/gt_data, for bodypart names")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("stem")
+    ap.add_argument("--gt-dir", default=None)
     args = ap.parse_args()
 
     stem = Path(args.stem)
-    if not Path(str(stem) + "-id3d.mat").exists():
-        print(f"ERROR: {stem}-id3d.mat not found. Pass the session stem, not a file.",
-              file=sys.stderr)
+    if not Path(f"{stem}-id3d.mat").exists():
+        print(f"ERROR: {stem}-id3d.mat not found.", file=sys.stderr)
         return 1
 
-    cam_mat, _root = load_calibration(stem)
+    mats, R_g, t_g = load_calibration(stem)
     coords, names = load_coords(stem)
+    w, h, n_vid = video_info(stem, coords.shape[0])
 
-    if coords.shape[1] != N_ANIMALS * N_KP * 3:
-        print(f"\n!! expected {N_ANIMALS * N_KP * 3} columns, got {coords.shape[1]} — "
-              f"the animal/keypoint counts differ from the paper. Stopping.")
-        return 1
+    print("\nrecovered intrinsics:")
+    for k, P in enumerate(mats):
+        K, _R, t = decompose(P)
+        print(f"  cam{k}: fx={K[0, 0]:7.1f} fy={K[1, 1]:7.1f} "
+              f"cx={K[0, 2]:6.1f} cy={K[1, 2]:6.1f} |t|={np.linalg.norm(t):7.1f}")
 
-    w, h = video_survey(stem, coords.shape[0])
-    projections = candidate_projections(cam_mat)
-    hypotheses = layout_hypotheses(coords)
+    # ---- STEP 1: layout, by rigid-body consistency (no projection involved)
+    layouts = all_layouts(coords)
+    rule("STEP 1 — COLUMN LAYOUT, by rigid-body consistency")
+    print("A rigid pair's length cannot vary. CV = std/mean of that length over")
+    print("frames; the correct layout minimises it. Frame-invariant, unit-free.\n")
+    print(f"{'layout (outer/mid/inner)':<26}{'ear-ear':>10}{'CV':>8}"
+          f"{'nose-tip':>10}{'diam':>8}{'span/ear':>10}{'meanCV':>9}")
+    print("-" * 81)
 
-    rule("INTRINSICS recovered by RQ decomposition")
-    print("K comes from P's left 3x3 block; caliParas stores no K and no distortion.")
-    print(f"Principal point should sit near the image centre ({w / 2:.0f}, {h / 2:.0f}).\n")
-    for pname, mats in projections.items():
-        print(f"[{pname}]")
-        for k, P in enumerate(mats):
-            try:
-                K, R, t = decompose(P)
-                print(f"  cam{k}: fx={K[0, 0]:9.1f} fy={K[1, 1]:9.1f} "
-                      f"cx={K[0, 2]:8.1f} cy={K[1, 2]:8.1f} "
-                      f"|t|={np.linalg.norm(t):8.1f}")
-            except Exception as exc:  # noqa: BLE001
-                print(f"  cam{k}: decomposition failed — {exc}")
-        print()
+    scored = []
+    for name, arr in layouts.items():
+        s = rigidity(arr)
+        ear_med, ear_cv = s["ear_L-ear_R"]
+        scored.append((s["mean_cv"], name, arr, s))
+        print(f"{name:<26}{ear_med:>10.1f}{ear_cv:>8.3f}"
+              f"{s['nose-tip span']:>10.1f}{s['diameter']:>8.1f}"
+              f"{s['span/ear']:>10.1f}{s['mean_cv']:>9.3f}")
 
-    rule("RESOLVING: column layout x projection-matrix axis")
-    print("Score = fraction of reprojected points in front of the camera AND on-image,")
-    print("averaged over all four views. The correct pair should stand alone.\n")
+    scored.sort(key=lambda r: r[0])
+    best_cv, best_name, best_arr, best_stats = scored[0]
+    runner_cv = scored[1][0]
 
-    print(f"{'column layout':<30}{'projection reading':<26}{'score':>8}")
-    print("-" * 64)
-    results = []
-    for (hname, arr), (pname, mats) in itertools.product(hypotheses.items(),
-                                                         projections.items()):
-        s = score(sample_points(arr), mats, w, h)
-        results.append((s, hname, pname, arr))
-        print(f"{hname:<30}{pname:<26}{s:>7.1%}")
+    print(f"\nbest: {best_name}   mean CV {best_cv:.3f}   (runner-up {runner_cv:.3f})")
+    print("\nSanity anchors for a mouse, if units are mm:")
+    print("  ear-to-ear 10-30 | nose-to-tail-tip 120-260 | span/ear ratio 6-15")
+    ok = (best_cv < 0.25 and 5 < best_stats["span/ear"] < 20)
+    print(f"  -> {'PLAUSIBLE' if ok else 'STILL IMPLAUSIBLE — see notes below'}")
 
-    results.sort(key=lambda r: -r[0])
-    best_s, best_h, best_p, best_arr = results[0]
-    runner_up = results[1][0] if len(results) > 1 else 0.0
+    # ---- STEP 2: frame convention, by reprojection
+    rule("STEP 2 — WORLD-FRAME CONVENTION, by reprojection")
+    print(f"Layout fixed to '{best_name}'. id3d is ground-aligned; cam_mat_all")
+    print("projects from the camera-3 frame, so the ground transform must be undone.\n")
+    print(f"{'convention':<32}{'on-image':>10}")
+    print("-" * 42)
+    pts0 = sample(best_arr)
+    frames = frame_variants(R_g, t_g)
+    fscored = []
+    for label, fn in frames.items():
+        sc = onimage(fn(pts0), mats, w, h)
+        fscored.append((sc, label, fn))
+        print(f"{label:<32}{sc:>9.1%}")
 
+    fscored.sort(key=lambda r: -r[0])
+    best_f, flabel, ffn = fscored[0]
+    print(f"\nbest: {flabel}   {best_f:.1%}   (runner-up {fscored[1][0]:.1%})")
+
+    test_subsampling(best_arr, mats, R_g, t_g, w, h, n_vid, ffn)
+
+    # ---- verdict
     rule("VERDICT")
-    if best_s < 0.5:
-        print(f"INCONCLUSIVE — best score only {best_s:.1%}.")
-        print("No layout reprojects onto the image. Likely causes: the projection")
-        print("matrices need R/t composed separately, or the 3D is in a world frame")
-        print("the matrices do not map from. Paste this whole report back.")
-        return 0
-
-    print(f"column layout      : {best_h}")
-    print(f"projection reading : {best_p}")
-    print(f"score              : {best_s:.1%}   (runner-up {runner_up:.1%})")
-    print(f"animal identities  : {names}")
-    print(f"median within-animal diameter: {spread(best_arr):.2f} (dataset units)")
-    if best_s - runner_up < 0.15:
-        print("\n!! WARNING: the top two are close. Do not trust this without the")
-        print("   gt_data reprojection check before converting all 40 sessions.")
+    print(f"column layout : {best_name}")
+    print(f"projection    : cam_mat_all[:, :, k]")
+    print(f"frame         : {flabel}")
+    print(f"identities    : {names}")
+    print(f"tracks shape  : ({best_arr.shape[0]}, {best_arr.shape[1]}, {best_arr.shape[2]}, 3)")
+    if best_f > 0.9 and ok:
+        print("\nBoth halves resolved. Ready to write the converter.")
     else:
-        print("\nUnambiguous. Safe to write the converter against this layout.")
-
-    print(f"\ntracks array for points3d.h5 would be: "
-          f"({best_arr.shape[0]}, {best_arr.shape[1]}, {best_arr.shape[2]}, 3)")
-
-    bodypart_names(Path(args.gt_dir) if args.gt_dir else None)
+        print("\nNOT resolved. Paste this report back — the numbers say which half failed:")
+        print("  layout implausible  -> coords3d is not a plain 2x16x3 flatten")
+        print("  frame below ~90%    -> cam_mat_all needs the ground transform composed")
+        print("                         differently, or maps from raw3d not id3d")
     return 0
 
 
