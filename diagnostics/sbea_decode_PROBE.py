@@ -98,26 +98,55 @@ def load_calibration(stem: Path):
 
 
 def candidate_projections(cam_mat: np.ndarray) -> dict[str, list[np.ndarray]]:
-    """Every reading of a (3,4,4) array as four 3x4 projection matrices."""
+    """Every reading of cam_mat_all as N 3x4 projection matrices.
+
+    For the observed (3, 4, 4) the camera axis can only be axis 1 or axis 2 —
+    axis 0 has size 3, which is the row count of a 3x4 projection matrix.
+    Built defensively so an unexpected shape reports instead of crashing.
+    """
     out: dict[str, list[np.ndarray]] = {}
-    if cam_mat.shape == (3, 4, 4):
-        out["cam_mat_all[:, :, k]"] = [cam_mat[:, :, k] for k in range(4)]
-        out["cam_mat_all[k]"] = [cam_mat[k] for k in range(4)]           # (4,4) -> take first 3 rows
-        out["cam_mat_all[k][:3]"] = [cam_mat[k][:3] for k in range(4)]
-        out["cam_mat_all[:, k, :]"] = [cam_mat[:, k, :] for k in range(4)]
-    # Normalise: every candidate must end up 3x4.
-    cleaned = {}
-    for name, mats in out.items():
-        ok = []
+    nd = cam_mat.ndim
+    if nd != 3:
+        print(f"!! cam_mat_all has ndim {nd}, expected 3 — no candidates built")
+        return out
+
+    for axis in range(3):
+        n_cam = cam_mat.shape[axis]
+        if n_cam < 2:
+            continue
+        mats = [np.take(cam_mat, k, axis=axis) for k in range(n_cam)]
+        cleaned = []
         for m in mats:
             m = np.asarray(m, dtype=np.float64)
             if m.shape == (4, 4):
                 m = m[:3]
+            if m.shape == (4, 3):
+                m = m.T
             if m.shape == (3, 4):
-                ok.append(m)
-        if len(ok) == 4:
-            cleaned[name] = ok
-    return cleaned
+                cleaned.append(m)
+        if len(cleaned) == n_cam:
+            label = {0: "cam_mat_all[k, :, :]",
+                     1: "cam_mat_all[:, k, :]",
+                     2: "cam_mat_all[:, :, k]"}[axis]
+            out[f"{label}  (n={n_cam})"] = cleaned
+    return out
+
+
+def decompose(P: np.ndarray):
+    """P (3x4) -> K, R, t via RQ, normalised to a positive-diagonal K, det(R)=+1."""
+    from scipy.linalg import rq
+
+    K, R = rq(P[:, :3])
+    S = np.diag(np.sign(np.diag(K)))
+    K, R = K @ S, S @ R
+    if K[2, 2] != 0:
+        K = K / K[2, 2]
+    if np.linalg.det(R) < 0:
+        R = -R
+    t = np.linalg.solve(K, P[:, 3])
+    if np.linalg.det(R) < 0:
+        R, t = -R, -t
+    return K, R, t
 
 
 # ---------------------------------------------------------------- 3D poses
@@ -169,22 +198,54 @@ def layout_hypotheses(coords: np.ndarray) -> dict[str, np.ndarray]:
 
 # ------------------------------------------------------------------- score
 
-def image_size(stem: Path) -> tuple[int, int]:
+def video_survey(stem: Path, n_rows_3d: int) -> tuple[int, int]:
+    """Report every camera's size and frame count, and flag any mismatch with the 3D."""
     import cv2
 
-    for cam in (0, 1):
+    rule("VIDEO vs 3D  —  do the frame counts agree?")
+    sizes, counts = [], []
+    for cam in range(8):
         p = Path(f"{stem}-camera-{cam}.avi")
-        if p.exists():
+        if not p.exists():
+            continue
+        cap = cv2.VideoCapture(str(p))
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
+        # CAP_PROP_FRAME_COUNT can lie on some AVIs; confirm by decoding to the end.
+        real = n
+        if n <= 0:
             cap = cv2.VideoCapture(str(p))
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            hgt = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            real = 0
+            while cap.grab():
+                real += 1
             cap.release()
-            if w and hgt:
-                print(f"\nimage size from {p.name}: {w} x {hgt}   ({n} frames)")
-                return w, hgt
-    print("\n!! no video found — falling back to 640x480")
-    return 640, 480
+        sizes.append((w, h))
+        counts.append(real)
+        print(f"  camera-{cam}: {w}x{h}  {real} frames  @{fps:.1f}fps  "
+              f"({p.stat().st_size / 1e6:.1f} MB)")
+
+    if not sizes:
+        print("  !! no videos found — falling back to 640x480")
+        return 640, 480
+
+    print(f"\n  coords3d rows : {n_rows_3d}")
+    print(f"  video frames  : {counts[0]}")
+    if counts[0] and n_rows_3d % counts[0] == 0 and n_rows_3d != counts[0]:
+        print(f"  ratio         : {n_rows_3d // counts[0]}x — the 3D covers a LONGER")
+        print("                  recording than the released video excerpt.")
+        print("                  Which rows the excerpt maps to must be established")
+        print("                  before pairing images with poses.")
+    elif counts[0] != n_rows_3d:
+        print(f"  MISMATCH      : {n_rows_3d} vs {counts[0]}, not an integer ratio.")
+    else:
+        print("  aligned 1:1.")
+
+    if len(set(sizes)) > 1:
+        print(f"  !! cameras differ in resolution: {set(sizes)}")
+    return sizes[0]
 
 
 def project(P: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -274,9 +335,24 @@ def main() -> int:
               f"the animal/keypoint counts differ from the paper. Stopping.")
         return 1
 
-    w, h = image_size(stem)
+    w, h = video_survey(stem, coords.shape[0])
     projections = candidate_projections(cam_mat)
     hypotheses = layout_hypotheses(coords)
+
+    rule("INTRINSICS recovered by RQ decomposition")
+    print("K comes from P's left 3x3 block; caliParas stores no K and no distortion.")
+    print(f"Principal point should sit near the image centre ({w / 2:.0f}, {h / 2:.0f}).\n")
+    for pname, mats in projections.items():
+        print(f"[{pname}]")
+        for k, P in enumerate(mats):
+            try:
+                K, R, t = decompose(P)
+                print(f"  cam{k}: fx={K[0, 0]:9.1f} fy={K[1, 1]:9.1f} "
+                      f"cx={K[0, 2]:8.1f} cy={K[1, 2]:8.1f} "
+                      f"|t|={np.linalg.norm(t):8.1f}")
+            except Exception as exc:  # noqa: BLE001
+                print(f"  cam{k}: decomposition failed — {exc}")
+        print()
 
     rule("RESOLVING: column layout x projection-matrix axis")
     print("Score = fraction of reprojected points in front of the camera AND on-image,")
