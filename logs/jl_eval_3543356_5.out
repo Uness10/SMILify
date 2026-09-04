@@ -1,0 +1,287 @@
+==================================================================
+Job 3543356 task 5 on n23g0014.hpc.itc.rwth-aachen.de — Thu Sep  3 15:35:45 CEST 2026
+  arm        : mv_reference — downloaded multi-view checkpoint (set MV_REF=<path>)
+  checkpoint : /hpcwork/mkd34160/SMILify/SMILySTICKS_ViT_model.pth
+  out dir    : prior_study_results/mv_reference
+  dataset    : SMILySTICKS_centred_reprojected_FIXED.h5
+  smal file  : 3D_model_prep/SMILy_STICK_limits_authored.pkl
+==================================================================
+==================================================================
+ Prior study arm | label=mv_reference
+ modality   : multiview  (detected from the checkpoint's weights)
+ checkpoint : /hpcwork/mkd34160/SMILify/SMILySTICKS_ViT_model.pth  (epoch 345)
+ dataset    : SMILySTICKS_centred_reprojected_FIXED.h5
+ smal file  : 3D_model_prep/SMILy_STICK_limits_authored.pkl
+ out dir    : prior_study_results/mv_reference
+ limits     : <from SMAL_FILE joint_limits>
+==================================================================
+  authored limits: 129/162 non-root axes constrained (80%), 43 joints
+
+[1/3] Benchmarking (MPJPE mm + PCK)...
+============================================================
+SMILify Benchmark (multiview)
+============================================================
+Model type: multiview
+Checkpoint: prior_study_results/mv_reference/.bench_ckpt/mv_reference.pth
+Dataset: SMILySTICKS_centred_reprojected_FIXED.h5
+Output dir: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED
+Timestamp: 2026-09-03T15:38:39
+Device: cuda
+Override original image size: 1530x1530
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+
+HDF5 INVENTORY:
+GROUP:   auxiliary
+DATASET: auxiliary/camera_names | shape=(101250,) | dtype=object
+DATASET: auxiliary/frame_idx | shape=(101250,) | dtype=int64
+DATASET: auxiliary/has_3d_data | shape=(101250,) | dtype=bool
+DATASET: auxiliary/has_ground_truth_betas | shape=(101250,) | dtype=bool
+DATASET: auxiliary/num_views | shape=(101250,) | dtype=int64
+DATASET: auxiliary/session_name | shape=(101250,) | dtype=object
+GROUP:   metadata
+  ATTR metadata.backbone_name: vit_large_patch16_224
+  ATTR metadata.canonical_camera_order: ["A", "B", "C", "D", "E"]
+  ATTR metadata.crop_mode: centred
+  ATTR metadata.dataset_type: sleap_multiview
+  ATTR metadata.failed_samples: 0
+  ATTR metadata.frame_skip: 1
+  ATTR metadata.frames_3d_available: 16875
+  ATTR metadata.has_3d_keypoints: True
+  ATTR metadata.has_camera_parameters: True
+  ATTR metadata.is_multiview: True
+  ATTR metadata.jpeg_quality: 95
+  ATTR metadata.keypoints_3d_joint_order: smal
+  ATTR metadata.load_3d_data: True
+  ATTR metadata.max_frame_idx_requested: 16874
+  ATTR metadata.max_views: 5
+  ATTR metadata.min_frame_idx_requested: 0
+  ATTR metadata.min_views_per_sample: 2
+  ATTR metadata.n_betas: 5
+  ATTR metadata.n_joints: 55
+  ATTR metadata.n_pose: 54
+  ATTR metadata.num_samples: 101250
+  ATTR metadata.processed_samples: 101250
+  ATTR metadata.samples_3d_out_of_range: 0
+  ATTR metadata.samples_with_3d_data: 101250
+  ATTR metadata.samples_with_3d_in_range: 101250
+  ATTR metadata.samples_with_outliers_filtered: 0
+  ATTR metadata.sessions_failed: 0
+  ATTR metadata.sessions_processed: 6
+  ATTR metadata.sessions_with_3d_data: 6
+  ATTR metadata.skipped_insufficient_views: 0
+  ATTR metadata.target_resolution: 512
+  ATTR metadata.total_cameras: 5
+  ATTR metadata.total_multiview_samples: 101250
+  ATTR metadata.total_outlier_keypoints_filtered: 0
+  ATTR metadata.total_potential_views: 506250
+  ATTR metadata.total_sessions: 6
+  ATTR metadata.total_views_attempted: 506250
+  ATTR metadata.total_views_included: 506250
+  ATTR metadata.undistort_images: True
+  ATTR metadata.used_reprojections: True
+  ATTR metadata.views_excluded_no_camera_data: 0
+  ATTR metadata.views_excluded_no_keypoints: 0
+  ATTR metadata.views_excluded_no_video_capture: 0
+  ATTR metadata.views_excluded_position_correction_failed: 0
+  ATTR metadata.views_excluded_processing_error: 0
+  ATTR metadata.views_excluded_video_read_failed: 0
+  ATTR metadata.views_missing_annotations: 0
+  ATTR metadata.views_reprojected: 506250
+  ATTR metadata.views_undistorted: 506250
+GROUP:   multiview_images
+DATASET: multiview_images/image_jpeg_view_0 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_1 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_2 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_3 | shape=(101250,) | dtype=object
+DATASET: multiview_images/image_jpeg_view_4 | shape=(101250,) | dtype=object
+DATASET: multiview_images/view_mask | shape=(101250, 5) | dtype=bool
+GROUP:   multiview_keypoints
+DATASET: multiview_keypoints/camera_extrinsics_R | shape=(101250, 5, 3, 3) | dtype=float32
+DATASET: multiview_keypoints/camera_extrinsics_t | shape=(101250, 5, 3) | dtype=float32
+DATASET: multiview_keypoints/camera_indices | shape=(101250, 5) | dtype=int32
+DATASET: multiview_keypoints/camera_intrinsics | shape=(101250, 5, 3, 3) | dtype=float32
+DATASET: multiview_keypoints/image_sizes | shape=(101250, 5, 2) | dtype=int32
+DATASET: multiview_keypoints/keypoint_visibility | shape=(101250, 5, 55) | dtype=float32
+DATASET: multiview_keypoints/keypoints_2d | shape=(101250, 5, 55, 2) | dtype=float32
+DATASET: multiview_keypoints/keypoints_3d | shape=(101250, 55, 3) | dtype=float32
+GROUP:   parameters
+DATASET: parameters/betas | shape=(101250, 5) | dtype=float32
+DATASET: parameters/global_rot | shape=(101250, 3) | dtype=float32
+DATASET: parameters/joint_rot | shape=(101250, 55, 3) | dtype=float32
+DATASET: parameters/trans | shape=(101250, 3) | dtype=float32
+
+DATASET SUMMARY:
+DATASET SUMMARY:
+  backbone_name: vit_large_patch16_224
+  canonical_camera_order: A, B, C, D, E
+  crop_mode: centred
+  dataset_type: sleap_multiview
+  is_multiview: True
+  max_views: 5
+  min_views_per_sample: 2
+  n_betas: 5
+  n_joints: 55
+  n_pose: 54
+  num_samples: 101250
+  num_views_to_use: None
+  rotation_representation: 6d
+  target_resolution: 512
+  has_camera_parameters: True
+  has_3d_keypoints: True
+  world_scale: 0.001
+
+Loaded data resolution (target): 512x512
+Original world scale: 0.001
+World scale conversion factor to original units: 1000.000000
+2D keypoint scaling: using override size 1530x1530
+
+Dataset split sizes:
+  Train: 86062
+  Val: 5062
+  Test: 10126
+
+Dataset max_views: 5
+Dataset canonical camera order: ['A', 'B', 'C', 'D', 'E']
+
+Inferring model architecture from checkpoint...
+Inferred max_views=5 from checkpoint view_embeddings.weight shape
+Inferred hidden_dim=1024 from checkpoint transformer_head.pos_embedding shape
+Model architecture: max_views=5, canonical_camera_order has 5 cameras
+
+Using input resolution: 224x224 (backbone: vit_large_patch16_224)
+Mesh scaling enabled with init=1.0
+GT camera initialization enabled - model predicts deltas from GT camera params
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+PCK reported at TWO resolutions: [native override 1530x1530] and [input res 224px].
+/hpcwork/mkd34160/conda_envs/pytorch3d/lib/python3.10/site-packages/torch/nn/modules/conv.py:456: UserWarning: Applied workaround for CuDNN issue, install nvrtc.so (Triggered internally at /opt/conda/conda-bld/pytorch_1716905971132/work/aten/src/ATen/native/cudnn/Conv_v8.cpp:84.)
+  return F.conv2d(input, weight, bias, self.stride,
+
+==== BENCHMARK RESULTS (TEST SPLIT) ====
+
+-- PCK @ native override 1530x1530 --
+PCK@5px: 0.3350
+Mean 2D error (px): 8.7245
+Median 2D error (px): 7.0128
+2D joint errors count: 2121534
+PCK curve:
+  PCK@1px: 0.0204
+  PCK@2px: 0.0765
+  PCK@5px: 0.3350
+  PCK@10px: 0.6893
+  PCK@20px: 0.9444
+  PCK@30px: 0.9873
+  PCK@40px: 0.9941
+  PCK@50px: 0.9966
+
+-- PCK @ input res 224px --
+PCK@5px: 0.9915
+Mean 2D error (px): 1.2773
+Median 2D error (px): 1.0267
+2D joint errors count: 2121534
+PCK curve:
+  PCK@1px: 0.4862
+  PCK@2px: 0.8343
+  PCK@5px: 0.9915
+  PCK@10px: 0.9983
+  PCK@20px: 0.9995
+  PCK@30px: 0.9999
+  PCK@40px: 1.0000
+  PCK@50px: 1.0000
+
+MPJPE (mm): 0.9639
+Median MPJPE (mm): 0.8382
+MPJPE percentiles (mm):
+  P50: 0.8382
+  P75: 1.2417
+  P90: 1.7057
+  P95: 2.0367
+  P99: 3.0479
+3D samples with GT: 10126
+3D joint errors count: 424564
+
+Saved outputs to: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED
+  PCK plots: pck_curve_native.png, pck_curve_input.png
+  Error histograms: error_histogram_native.png, error_histogram_input.png
+  MPJPE histogram: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/mpjpe_histogram.png
+  3D percentile plots: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/sample_00_3d_keypoints_percentiles.png (and next 4)
+
+Report saved to: /rwthfs/rz/cluster/home/mkd34160/test/SMILify/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/benchmark_report.txt
+  report: prior_study_results/mv_reference/benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/benchmark_report.txt
+
+[2/3] Exporting predicted poses over the benchmark test split...
+Device: cuda
+Checkpoint kind : multiview
+Checkpoint epoch: 345
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+  smal file: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+Dataset size: 101250  (random_view_sampling=False)
+  split: multi-view sample-level, seed=42 -> 10126 test samples (re-sorted)
+
+Dataset max_views: 5
+Dataset canonical camera order: ['A', 'B', 'C', 'D', 'E']
+
+Inferring model architecture from checkpoint...
+Inferred max_views=5 from checkpoint view_embeddings.weight shape
+Inferred hidden_dim=1024 from checkpoint transformer_head.pos_embedding shape
+Model architecture: max_views=5, canonical_camera_order has 5 cameras
+
+Using input resolution: 224x224 (backbone: vit_large_patch16_224)
+Mesh scaling enabled with init=1.0
+GT camera initialization enabled - model predicts deltas from GT camera params
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+/hpcwork/mkd34160/conda_envs/pytorch3d/lib/python3.10/site-packages/torch/nn/modules/conv.py:456: UserWarning: Applied workaround for CuDNN issue, install nvrtc.so (Triggered internally at /opt/conda/conda-bld/pytorch_1716905971132/work/aten/src/ATen/native/cudnn/Conv_v8.cpp:84.)
+  return F.conv2d(input, weight, bias, self.stride,
+
+Exported 10126 frames:
+  prior_study_results/mv_reference/clip_mv_reference.npz
+  prior_study_results/mv_reference/clip_mv_reference.json
+
+PROBE:
+  poses shape      : (10126, 55, 3)  (F, J, 3 axis-angle)
+  finite           : True
+  |aa| deg  min/med/max: 0.02 / 16.20 / 79.19
+  exported: prior_study_results/mv_reference/clip_mv_reference.npz
+
+[3/3] Analysing poses (distributions, ROM, violations, trajectories)...
+[ok] baseline analysis written to prior_study_results/mv_reference/analysis
+     limits source: pkl:SMILy_STICK_limits_authored.pkl:joint_limits
+
+==================================================================
+ Done. Results in: prior_study_results/mv_reference
+   - analysis/baseline_summary.md      (headline tables)
+   - analysis/limit_violations.csv     (the before/after number)
+   - analysis/joint_angle_distributions.png
+   - analysis/range_of_motion.png
+   - benchmark_multiview_mv_reference_on_SMILySTICKS_centred_reprojected_FIXED/          (accuracy report + histograms)
+==================================================================
+
+[eval] refreshing the sweep table from whatever arms are on disk...
+[compare] arms found: mv_reference, sv_constrained, sv_reference
+[compare] wrote /rwthfs/rz/cluster/home/mkd34160/test/SMILify/prior_study_results/sweep/comparison.md
+[compare] wrote /rwthfs/rz/cluster/home/mkd34160/test/SMILify/prior_study_results/sweep/arms.csv
+[sweep] wrote prior_study_results/sweep/sweep.csv and prior_study_results/sweep/sweep.md (6 arm(s))
+# Joint-limit prior — lambda sweep
+
+`lambda = 0` is the reference checkpoint scored as-is: it received **zero**
+additional epochs, so every row below differs from it by *the prior plus the
+continuation*, not the prior alone. Comparisons BETWEEN lambdas are clean —
+they share the epoch count — so read the sweep as a curve first and the
+reference row as context.
+
+| mode | lambda | violating axes | mean viol. rate % | mean overshoot deg | MPJPE mm | PCK@5px (native) |
+|---|---|---|---|---|---|---|
+| multiview | 0 | 76/162 | 13.96 | 2.65 | 0.96 | — |
+| singleview | 0 | 96/162 | 14.76 | 2.53 | 1.09 | — |
+| singleview | 0.0001 | 89/162 | 2.73 | 0.14 | 0.97 | — |
+| singleview | 0.001 | 85/162 | 0.26 | 0.00 | 1.01 | — |
+| singleview | 0.01 | 73/162 | 0.02 | 0.00 | 1.02 | — |
+| singleview | 0.1 | 41/162 | 0.00 | 0.00 | 1.05 | — |
+
+Lower is better for violations, overshoot and MPJPE; higher for PCK.
+A lambda that lowers violations while leaving MPJPE/PCK flat is the win
+condition; one that lowers both violations and PCK is the prior overriding
+the data, which is what the low end of this sweep is meant to avoid.
+
+Done (mv_reference) — Thu Sep  3 15:53:36 CEST 2026
