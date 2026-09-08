@@ -318,8 +318,83 @@ def _find_default_checkpoint() -> Path:
     return Path(DEFAULT_CHECKPOINTS[0])
 
 
+def load_checkpoint_and_config(checkpoint_path: Path, map_location: str = "cpu") -> Tuple[dict, dict]:
+    """Load a checkpoint once and return ``(checkpoint, ckpt_config)``.
+
+    The SMAL/SMIL model file recorded in the checkpoint has to be applied to
+    config.py BEFORE the model is constructed, but it can only be read by
+    opening the checkpoint. Loading it once here and passing the result on to
+    load_multiview_model_from_checkpoint() avoids reading a multi-GB file twice.
+    """
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    checkpoint = torch.load(str(checkpoint_path), map_location=map_location)
+    return checkpoint, checkpoint.get("config", {}) or {}
+
+
+def resolve_smal_file_for_checkpoint(
+    ckpt_config: dict,
+    cli_smal_file: Optional[str],
+    cli_shape_family: Optional[int],
+    rank: int = 0,
+) -> None:
+    """Apply the SMAL/SMIL model this checkpoint was trained with.
+
+    config.py derives ``dd``, ``N_POSE``, ``N_BETAS`` and the joint tables from
+    the SMAL pickle at import time, and the network's head widths are sized from
+    them. If the checkpoint was trained on a different model than config.py's
+    default, building the model without this override produces head shapes that
+    do not match the saved weights — e.g. a 5-beta model loaded against a
+    13-beta default fails with a `betas_head` / `token_embedding` size mismatch.
+
+    train_multiview_regressor.py records ``smal_file`` and ``shape_family`` in
+    the checkpoint precisely so inference can reproduce them, so the checkpoint
+    is the default source and ``--smal_file`` is an explicit override of it.
+    This mirrors load_model_from_checkpoint() in run_singleview_inference.py.
+    """
+    ckpt_smal_file = ckpt_config.get("smal_file")
+    smal_file = cli_smal_file or ckpt_smal_file
+    if not smal_file:
+        return
+
+    if cli_shape_family is not None:
+        shape_family = cli_shape_family
+    elif ckpt_config.get("shape_family") is not None:
+        shape_family = ckpt_config["shape_family"]
+    else:
+        shape_family = config.SHAPE_FAMILY
+
+    source = "--smal_file" if cli_smal_file else "checkpoint"
+    if not Path(smal_file).exists():
+        msg = (
+            f"SMAL model file from {source} does not exist: {smal_file}\n"
+            f"  The path was recorded on the training machine and may not resolve here "
+            f"(paths like '3D_model_prep/...' are relative to the repo root).\n"
+            f"  Pass --smal_file /path/to/model.pkl (and --shape_family) to point at it."
+        )
+        if cli_smal_file:
+            raise FileNotFoundError(msg)
+        # Checkpoint-sourced path: warn rather than hard-fail, since the model
+        # may still match config.py's current default.
+        if rank == 0:
+            print(f"WARNING: {msg}")
+        return
+
+    if rank == 0:
+        print(f"Applying SMAL file override from {source}: {smal_file}")
+    apply_smal_file_override(smal_file, shape_family=shape_family)
+    if rank == 0:
+        print(f"  Shape family: {config.SHAPE_FAMILY}")
+        print(f"  N_POSE: {config.N_POSE}")
+        print(f"  N_BETAS: {config.N_BETAS}")
+
+
 def load_multiview_model_from_checkpoint(
-    checkpoint_path: Path, device: str, max_views: int = None, canonical_camera_order: List[str] = None
+    checkpoint_path: Path,
+    device: str,
+    max_views: int = None,
+    canonical_camera_order: List[str] = None,
+    checkpoint: Optional[dict] = None,
 ) -> MultiViewSMILImageRegressor:
     """
     Load a trained MultiViewSMILImageRegressor model from checkpoint.
@@ -334,15 +409,19 @@ def load_multiview_model_from_checkpoint(
         device: PyTorch device
         max_views: Optional max_views (if None, inferred from checkpoint)
         canonical_camera_order: Optional canonical camera order (if None, loaded from checkpoint)
+        checkpoint: Optional already-loaded checkpoint dict (from
+            load_checkpoint_and_config), to avoid reading the file twice.
 
     Returns:
         MultiViewSMILImageRegressor model
     """
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-
-    print(f"Loading checkpoint: {checkpoint_path}")
-    checkpoint = torch.load(str(checkpoint_path), map_location=device)
+    if checkpoint is None:
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        print(f"Loading checkpoint: {checkpoint_path}")
+        checkpoint = torch.load(str(checkpoint_path), map_location=device)
+    else:
+        print(f"Using checkpoint: {checkpoint_path}")
     ckpt_config = checkpoint.get("config", {})
 
     # Get state dict for inferring model structure
@@ -441,7 +520,20 @@ def load_multiview_model_from_checkpoint(
         for k, v in state_dict.items()
         if not any(k == param or k.startswith(param + ".") for param in smal_optimization_params)
     }
-    model.load_state_dict(nn_state_dict, strict=False)
+    try:
+        model.load_state_dict(nn_state_dict, strict=False)
+    except RuntimeError as e:
+        if "size mismatch" in str(e):
+            raise RuntimeError(
+                f"{e}\n\n"
+                f"Head widths are derived from config.py's SMAL/SMIL model "
+                f"(N_BETAS={config.N_BETAS}, N_POSE={config.N_POSE}). A size mismatch here means the "
+                f"checkpoint was trained with a DIFFERENT model file than the one currently loaded.\n"
+                f"  Checkpoint's recorded smal_file: {ckpt_config.get('smal_file', '(none recorded)')}\n"
+                f"  Currently loaded SMAL_FILE:      {getattr(config, 'SMAL_FILE', '(unset)')}\n"
+                f"  Fix: pass --smal_file <that model>.pkl (and --shape_family if it differs)."
+            ) from e
+        raise
     model.eval()
     return model
 
@@ -1142,17 +1234,12 @@ def main_inference(
         else:
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Apply SMAL model override if provided (similar to training script)
-    # This must be done before loading the dataset/model to ensure config.dd, config.N_POSE, etc. are correct
-    if args.smal_file:
-        if rank == 0:
-            print(f"Applying SMAL file override: {args.smal_file}")
-        shape_family = args.shape_family if args.shape_family is not None else config.SHAPE_FAMILY
-        apply_smal_file_override(args.smal_file, shape_family=shape_family)
-        if rank == 0:
-            print(f"  Shape family: {config.SHAPE_FAMILY}")
-            print(f"  N_POSE: {config.N_POSE}")
-            print(f"  N_BETAS: {config.N_BETAS}")
+    # Resolve and read the checkpoint up front: the SMAL/SMIL model it was
+    # trained with must be applied to config.py BEFORE the dataset and model are
+    # built, and that model is recorded inside the checkpoint.
+    checkpoint_path = Path(args.checkpoint) if args.checkpoint else _find_default_checkpoint()
+    checkpoint, ckpt_config = load_checkpoint_and_config(checkpoint_path)
+    resolve_smal_file_for_checkpoint(ckpt_config, args.smal_file, args.shape_family, rank=rank)
 
     # Parse view indices from comma-separated string
     view_indices = [int(x.strip()) for x in args.view_indices.split(",")]
@@ -1177,8 +1264,6 @@ def main_inference(
         if args.smoothing_window > 0:
             print(f"Temporal smoothing: {args.smoothing_window} frames")
         print(f"{'=' * 60}\n")
-
-    checkpoint_path = Path(args.checkpoint) if args.checkpoint else _find_default_checkpoint()
 
     # Load dataset
     # Use num_views_to_use=None to use all available views per sample (same as training)
@@ -1208,7 +1293,9 @@ def main_inference(
         device=device,
         max_views=None,  # Infer from checkpoint
         canonical_camera_order=None,  # Load from checkpoint
+        checkpoint=checkpoint,  # already read above for the SMAL override
     )
+    del checkpoint  # the model owns its weights now; free the CPU copy
 
     # Get model's max_views (from checkpoint architecture)
     model_max_views = model.max_views
@@ -1582,7 +1669,12 @@ def main():
         help="Master port for distributed processing (default: from MASTER_PORT env var or 12355)",
     )
     parser.add_argument(
-        "--smal_file", type=str, default=None, help="Path to SMAL model file to override config.py SMAL_FILE (optional)"
+        "--smal_file",
+        type=str,
+        default=None,
+        help="Path to a SMAL/SMIL model file overriding config.py SMAL_FILE. Normally unnecessary: "
+        "the checkpoint's own recorded smal_file is applied automatically. Use this only to override "
+        "it, or when the recorded path does not resolve on this machine.",
     )
     parser.add_argument(
         "--shape_family",
