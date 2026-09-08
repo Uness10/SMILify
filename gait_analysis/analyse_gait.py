@@ -165,7 +165,17 @@ def main():
                          f"[{args.frame_offset}, {args.frame_offset + F - 1}]")
             wins.append((max(a, 0), min(b, F - 1)))
 
-    print(f"{args.label}: {F} frames @ {fps} fps, body length {BL:.4f} model units")
+    print(f"{args.label}: {F} frames @ {fps} fps")
+    print(f"  rig: {os.path.basename(args.smal_file)}  "
+          f"({model.n_joints} joints, {model.shapedirs.shape[2]} betas, "
+          f"body length {BL:.4f} model units)")
+    print("  rest pose (absolute angles are measured from these — they must match "
+          "the rig the checkpoint was trained on):")
+    print(f"    {'leg':<11}{'alpha':>8}{'beta':>8}{'gamma':>8}{'delta':>8}")
+    for leg in ana.LEGS:
+        r = ana.rest_angles(model, *leg)
+        print(f"    {ana.LEG_LABEL[leg]:<11}{r['alpha']:8.1f}{r['beta']:8.1f}"
+              f"{r['gamma']:8.1f}{r['delta']:8.1f}")
     for leg in ana.LEGS:
         per = np.diff([s[0] for s in STEPS[leg]])
         if len(per):

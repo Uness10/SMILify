@@ -74,6 +74,32 @@ python gait_analysis/analyse_gait.py \
 `run_on_cluster.sh` does both steps for the three checkpoints; fill in the
 checkpoint/dataset paths at the top.
 
+### One rig per run
+
+The three runs do **not** share a rig:
+
+| run | `--smal-file` |
+|---|---|
+| `sv_ref` | `3D_model_prep/SMILy_STICK.pkl` |
+| `1e-4` | `3D_model_prep/SMILy_STICK_limits_authored.pkl` |
+| `1e-1` | `3D_model_prep/SMILy_STICK_limits_authored.pkl` |
+
+`run_on_cluster.sh` carries this per run (`STICK_PLAIN` / `STICK_LIMITS` at the
+top). It matters: the analysis reads the rest pose, the joint hierarchy and the
+leg-plane hinge axes out of that file, and **absolute angles are measured from
+the rest pose**, so the wrong pkl shifts every number without erroring. Inference
+itself applies the checkpoint's own `smal_file` automatically — the `--smal_file`
+flag there is only an explicit override — but `analyse_gait.py` has no checkpoint
+to read it from, so it has to be told.
+
+Each run prints the rest-pose α/β/γ/δ of all six legs on startup. **Compare that
+block across the three runs before overlaying their absolute angles.** If the
+authored-limits rig has a different rest pose from `SMILy_STICK.pkl`, the
+absolute columns are not on a common baseline and you should compare the
+`*_rel` columns in `angles_<run>.csv` instead (those are relative to each rig's
+own rest pose, so a difference there is a difference in predicted motion rather
+than in the rig).
+
 Flags worth knowing:
 
 * `--propagate-scaling` — set it if the checkpoint was trained/rendered with
