@@ -2177,72 +2177,82 @@ def process_dataset(
                 smoothed = dict(raw_predictions)
             del raw_predictions
 
-            # ── Phase 3: render ─────────────────────────────────────────────
+            # ── Phase 3+4: render and stream straight into the video ────────
+            #
+            # Frames are written to the VideoWriter as they are produced rather
+            # than buffered. A full pass over a large dataset is easily 10^5
+            # frames per view; at 512x512x3 that is ~0.8 MB each, so buffering
+            # would need hundreds of GB of RAM. The writer is opened lazily on
+            # the first successful render because its frame size comes from the
+            # rendered collage, and every later frame is padded/resized to match.
             frame_exporter = None
             if save_frames:
                 frames_folder = os.path.join(output_folder, f"frames{view_suffix}{range_suffix}")
                 os.makedirs(frames_folder, exist_ok=True)
                 frame_exporter = InferenceImageExporter(frames_folder)
 
-            frames: List[np.ndarray] = []
-            frame_size: Optional[Tuple[int, int]] = None
-
-            for i, item_idx in enumerate(tqdm(clip_items, desc=f"Rendering ({label})")):
-                if item_idx not in smoothed:
-                    continue
-                try:
-                    x_data, y_data = dataset[item_idx]
-                    params = _params_to_device(smoothed[item_idx], device)
-                    collage = render_dataset_sample_collage(
-                        model,
-                        x_data,
-                        y_data,
-                        params,
-                        device,
-                        disable_scaling=disable_scaling,
-                        disable_translation=disable_translation,
-                        render_resolution=render_resolution,
-                        img_idx=i,
-                        use_calibrated_aspect=use_calibrated_aspect,
-                    )
-                    if collage is None:
-                        continue
-                    if frame_size is None:
-                        frame_size = (collage.shape[1], collage.shape[0])
-                    frames.append(cv2.cvtColor(_pad_or_resize(collage, frame_size), cv2.COLOR_RGB2BGR))
-
-                    if frame_exporter is not None and i % 10 == 0:
-                        frame_exporter.export(
-                            collage,
-                            0,
-                            item_idx,
-                            {k: v.cpu().numpy() for k, v in params.items() if isinstance(v, torch.Tensor)},
-                            torch.zeros(1, 1, 3),
-                            np.zeros((1, 3), dtype=int),
-                            img_idx=i,
-                            image_name=f"item_{item_idx:06d}",
-                        )
-                except Exception as e:
-                    print(f"Warning: render failed for item {item_idx}: {e}")
-                    continue
-
-            del smoothed
-
-            # ── Phase 4: write video ────────────────────────────────────────
-            if not frames or frame_size is None:
-                print(f"  No frames rendered for {label}.")
-                continue
-
             out_path = os.path.join(
                 output_folder, f"{dataset_name}{view_suffix}{range_suffix}_singleview_inference.mp4"
             )
-            writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, frame_size)
-            if not writer.isOpened():
-                raise RuntimeError(f"Failed to open VideoWriter for {out_path} at {frame_size}")
-            for frame in frames:
-                writer.write(frame)
-            writer.release()
-            print(f"  Wrote {out_path} ({len(frames)} frames at {frame_size[0]}x{frame_size[1]})")
+            writer: Optional[cv2.VideoWriter] = None
+            frame_size: Optional[Tuple[int, int]] = None
+            frames_written = 0
+
+            try:
+                for i, item_idx in enumerate(tqdm(clip_items, desc=f"Rendering ({label})")):
+                    if item_idx not in smoothed:
+                        continue
+                    try:
+                        x_data, y_data = dataset[item_idx]
+                        params = _params_to_device(smoothed[item_idx], device)
+                        collage = render_dataset_sample_collage(
+                            model,
+                            x_data,
+                            y_data,
+                            params,
+                            device,
+                            disable_scaling=disable_scaling,
+                            disable_translation=disable_translation,
+                            render_resolution=render_resolution,
+                            img_idx=i,
+                            use_calibrated_aspect=use_calibrated_aspect,
+                        )
+                        if collage is None:
+                            continue
+
+                        if writer is None:
+                            frame_size = (collage.shape[1], collage.shape[0])
+                            writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, frame_size)
+                            if not writer.isOpened():
+                                raise RuntimeError(f"Failed to open VideoWriter for {out_path} at {frame_size}")
+
+                        writer.write(cv2.cvtColor(_pad_or_resize(collage, frame_size), cv2.COLOR_RGB2BGR))
+                        frames_written += 1
+
+                        if frame_exporter is not None and i % 10 == 0:
+                            frame_exporter.export(
+                                collage,
+                                0,
+                                item_idx,
+                                {k: v.cpu().numpy() for k, v in params.items() if isinstance(v, torch.Tensor)},
+                                torch.zeros(1, 1, 3),
+                                np.zeros((1, 3), dtype=int),
+                                img_idx=i,
+                                image_name=f"item_{item_idx:06d}",
+                            )
+                    except Exception as e:
+                        print(f"Warning: render failed for item {item_idx}: {e}")
+                        continue
+            finally:
+                if writer is not None:
+                    writer.release()
+
+            del smoothed
+
+            if frames_written == 0 or frame_size is None:
+                print(f"  No frames rendered for {label}.")
+                continue
+            print(f"  Wrote {out_path} ({frames_written} frames at {frame_size[0]}x{frame_size[1]})")
 
     if hasattr(dataset, "close"):
         try:
