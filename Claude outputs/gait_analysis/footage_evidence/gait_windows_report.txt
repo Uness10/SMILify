@@ -1,0 +1,35 @@
+500 frames; marker detection rate
+  b_h          1.00
+  b_a_5        1.00
+  l_1_pt_r     1.00
+  l_2_pt_r     1.00
+  l_3_pt_r     1.00
+  l_1_pt_l     0.99
+  l_2_pt_l     1.00
+  l_3_pt_l     1.00
+legs used for scoring: l_1_r, l_2_r, l_3_r, l_2_l, l_3_l
+median step period 41.0 frames
+body heading range 13.2 deg, head-tail distance CV 0.010
+
+3-cycle windows (123 frames) — lower score = more regular:
+  frames   62- 185   score 0.0430
+  frames    8- 131   score 0.0441
+  frames  372- 495   score 0.0527
+  frames   92- 215   score 0.0564
+  frames  234- 357   score 0.0568
+
+4-cycle windows (164 frames) — lower score = more regular:
+  frames    0- 164   score 0.0556
+  frames   32- 196   score 0.0561
+  frames   62- 226   score 0.0729
+  frames  102- 266   score 0.0824
+  frames  178- 342   score 0.0831
+
+5-cycle windows (205 frames) — lower score = more regular:
+  frames    0- 205   score 0.0611
+  frames   30- 235   score 0.0778
+  frames   62- 267   score 0.0837
+  frames  126- 331   score 0.0916
+  frames  290- 495   score 0.0958
+
+wrote /home/claude/out/footage_evidence/gait_windows_GT_sv_ref.png
