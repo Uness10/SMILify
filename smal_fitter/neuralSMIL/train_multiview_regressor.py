@@ -3064,6 +3064,12 @@ if __name__ == "__main__":
 
             # Sync scale_trans_mode to legacy TrainingConfig
             TrainingConfig.SCALE_TRANS_BETA_CONFIG["mode"] = new_config.scale_trans_beta.mode
+            # ...and the mode's loss weights, which get_loss_weights_for_epoch
+            # applies after the curriculum (training_config.py:534). Mirrors the
+            # single-view trainer; a no-op unless a config overrides them.
+            TrainingConfig.SCALE_TRANS_BETA_CONFIG.setdefault(new_config.scale_trans_beta.mode, {})[
+                "loss_weights"
+            ] = dict(new_config.scale_trans_beta.get_mode_loss_weights())
 
             # Sync joint_importance to legacy TrainingConfig
             TrainingConfig.JOINT_IMPORTANCE_CONFIG = {

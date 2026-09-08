@@ -693,6 +693,18 @@ class BaseTrainingConfig:
             },
             "scale_trans_beta": {
                 "mode": self.scale_trans_beta.mode,
+                # The per-mode weights, not just the mode name.
+                # TrainingConfig.get_loss_weights_for_epoch applies this block
+                # AFTER the curriculum (training_config.py:534), so it is the
+                # last word on betas / log_beta_scales / betas_trans. Emitting
+                # only "mode" left the legacy class-level dict in charge, which
+                # made the *_loss_weights fields of this dataclass unreachable
+                # from a JSON config: an ablation that zeroed `betas` in
+                # base_weights would still have trained with betas=0.0005.
+                # The dataclass defaults are value-identical to the legacy
+                # dict's, so this is a no-op for every config that does not
+                # override them.
+                "loss_weights": self.scale_trans_beta.get_mode_loss_weights(),
             },
             "mesh_scaling": {
                 "allow_mesh_scaling": self.mesh_scaling.allow_mesh_scaling,

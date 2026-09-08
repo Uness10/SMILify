@@ -1,0 +1,316 @@
+# =============================================================================
+# 2D-ONLY STUDY — single-view, FROM SCRATCH, no 3D supervision, joint-limit prior
+# RWTH CLAIX-2023, account rwth2151 (MaxWall 24 h, MaxSubmit 1000, MaxJobs 800)
+#
+# The question: with the 3D supervision removed, does the authored joint-limit
+# prior buy anything? The earlier lambda sweep could not answer it — those arms
+# were 3D-supervised continuations of a 3D-supervised checkpoint, so the prior
+# was competing against a keypoint_3d term at weight 20 that already pinned the
+# pose. Take that term away and the prior is one of the few things left holding
+# the articulation.
+#
+# Design:
+#   - 3 arms, SINGLE-VIEW, all trained FROM SCRATCH for the SAME schedule
+#       lambda = 0      CONTROL — 2D-only, no prior
+#       lambda = 1e-4   low end of the earlier sweep
+#       lambda = 1e-1   high end
+#   - the training setup is the one that produced sv_reference, byte-for-byte,
+#     with exactly two changes: the 3D supervision weights are 0, and the
+#     joint-limit weight is the swept lambda
+#   - the control is the baseline. sv_reference is NOT a baseline for these arms:
+#     it is 3D-supervised, so a delta against it mixes "no 3D" with "prior".
+#
+# What "no 3D supervision" means here (decided, not guessed):
+#   DROPPED  keypoint_3d, global_rot, joint_rot, betas, trans,
+#            log_beta_scales, betas_trans
+#   KEPT     keypoint_2d, fov, cam_rot, cam_trans, and every regularizer
+#            (joint_angle, limb_scale, limb_trans, joint_limit)
+#   Dropping only keypoint_3d would have left the model supervised on the exact
+#   GT joint rotations and translation — the same 3D information in parameter
+#   space. Keeping the camera terms is deliberate: they anchor the projection,
+#   and without them the 2D loss is reduced by moving the CAMERA instead of
+#   posing the animal.
+#
+# Run everything from the repo root on $HPCWORK.
+# =============================================================================
+
+cd "$HPCWORK/SMILify"          # or wherever your checkout lives
+conda activate pytorch3d
+mkdir -p logs configs_runs
+
+export ACCT=rwth2151
+export ENV_PREFIX="$(conda info --envs | awk '$1=="pytorch3d"{print $NF}')"
+echo "ENV_PREFIX=$ENV_PREFIX"     # sanity: must be a directory containing bin/python
+
+# These arms train the FULL schedule from scratch and checkpoint every 2 epochs,
+# so they write MORE than the +50-epoch sweep did, not less. $HOME's quota will
+# stop a run mid-epoch with an unhandled OSError inside torch.save.
+export RUNS_ROOT="$HPCWORK/smilify_runs"
+df -h "$HOME" "$HPCWORK"
+
+# The JSON that PRODUCED sv_reference. Not the checkpoint's embedded config
+# block — that is written from the runtime TrainingConfig and carries stale
+# defaults (job 15521637 got a MOUSE data_path for a STICK model that way, and
+# trained without error).
+export SV_BASE_CONFIG=singleview_SMILySTICKS_3D_ViT.json
+# Only needed for the optional split cross-check in step 2.
+export SV_REF=singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth
+
+ls -l "$SV_BASE_CONFIG" "$SV_REF" \
+      3D_model_prep/SMILy_STICK_limits_authored.pkl \
+      SMILySTICKS_centred_reprojected_FIXED.h5
+
+
+# -----------------------------------------------------------------------------
+# 0. ONE-TIME: the code change this study depends on
+# -----------------------------------------------------------------------------
+# TrainingConfig.get_loss_weights_for_epoch applies the scale/trans mode's loss
+# weights LAST, after base_weights and the whole curriculum (training_config.py:534).
+# With mode = entangled_with_betas those weights are betas=0.0005,
+# log_beta_scales=0.01, betas_trans=0.01 — and until now they came from a
+# class-level dict that no JSON config could reach, because
+# BaseTrainingConfig.to_legacy_dict() emitted only "mode".
+#
+# So without the patch, a config that zeroes `betas` in base_weights STILL
+# trains with betas=0.0005: the run looks 2D-only in the JSON and is partly
+# 3D-supervised on the GPU. Nothing crashes and nothing warns.
+#
+# The patch makes to_legacy_dict emit the per-mode loss_weights and the trainers
+# push them into the legacy dict. The dataclass defaults are value-identical to
+# the legacy ones, so it is a no-op for every existing config.
+#
+# Confirm it is in this checkout before anything else:
+
+grep -n 'loss_weights.*get_mode_loss_weights' smal_fitter/neuralSMIL/configs/base_config.py
+grep -n 'SCALE_TRANS_BETA_CONFIG.setdefault' smal_fitter/neuralSMIL/train_smil_regressor.py
+
+# Both must print. prepare_scratch_config.py refuses to write a config if the
+# first one is missing, so a forgotten patch cannot silently reach the GPUs.
+
+
+# -----------------------------------------------------------------------------
+# 1. BUILD THE THREE CONFIGS (login node, CPU, ~1 min)
+# -----------------------------------------------------------------------------
+# One call, three arms, so the only things that can differ between them are
+# lambda and the output paths.
+#
+# num_epochs is NOT typed in: it comes from $SV_BASE_CONFIG, which is what "the
+# same training setup" means. It is an ABSOLUTE end epoch and these arms start
+# at 0, so the value is the whole schedule.
+#
+# BATCH_SIZE: batch_size is PER PROCESS under DDP. On 4 ranks a config written
+# for one process runs at 4x the effective batch while inheriting that run's LR
+# curriculum. Pass BATCH_SIZE=<orig/4> to reproduce sv_reference's regime, or
+# accept 4x knowingly — but it is the same for all three arms either way.
+
+bash scripts/prior_study/prepare_2d_only_sweep.sh
+
+# Read what it prints for EVERY arm. The important block is the effective-weight
+# table, which is resolved through the REAL loader (curriculum + scale/trans
+# override), not read off the JSON:
+#
+#   [prepare] OK: every dropped term is 0.0 across all <N> epochs
+#   [prepare] EFFECTIVE loss weights ...
+#     epoch | keypoint_3d | joint_rot | ... | keypoint_2d | joint_limit_regularization
+#         0 |           0 |         0 | ... |         0.1 |                      0.0001
+#
+# Expect two loud notices, both intentional:
+#   - SCALE/DEPTH DEGENERACY (see the caveats at the bottom of this file)
+#   - "lambda is not comparable across studies"
+
+grep -H '"num_epochs"\|"resume_checkpoint"\|joint_limit_regularization\|checkpoint_dir' \
+    configs_runs/singleview_2d_lam*.json
+
+# All three num_epochs identical, all three resume_checkpoint null, all three
+# lambdas distinct, all three checkpoint_dirs distinct.
+
+
+# -----------------------------------------------------------------------------
+# 2. PRE-FLIGHT (login node) — do not skip
+# -----------------------------------------------------------------------------
+# Catches the failures that do NOT crash: a curriculum stage re-enabling a
+# supervision term the config zeroed, the scale/trans override resurrecting
+# betas, two arms accidentally carrying the same lambda, arms that differ in
+# something other than lambda, and a test split that disagrees with the
+# reference's (which would stop these arms from being scorable on the same
+# frames as sv_reference).
+
+python scripts/prior_study/preflight_2d_only.py \
+    --config configs_runs/singleview_2d_lam0.json \
+    --config configs_runs/singleview_2d_lam1e-4.json \
+    --config configs_runs/singleview_2d_lam1e-1.json \
+    --reference "$SV_REF"
+
+# And the batch script's own pre-flight on the login node, for all 3 tasks, with
+# torchrun/srun stubbed out. Exit 0 here means the only thing left that can fail
+# is the GPU work itself.
+
+bash hpc_files/rwth/dryrun_sbatch.sh hpc_files/rwth/run_2d_only_train.sbatch 0 1 2
+
+
+# -----------------------------------------------------------------------------
+# 3. WALL-CLOCK CHECK — how many links does the chain need?
+# -----------------------------------------------------------------------------
+# The account cap is 24 h and these arms train the whole schedule from scratch,
+# so one submission finishes none of them. Submit ONE link first, read the
+# per-epoch time out of its log, then size the chain:
+#
+#     CHAIN = ceil(num_epochs * epoch_hours / 23)
+#
+# Leave the hour of slack: the 24 h is wall clock and includes dataset
+# construction, the first backbone load and the first checkpoint write.
+
+jid=$(sbatch --parsable --array=0-2 --account=$ACCT \
+        --export=ALL,ENV_PREFIX,RUNS_ROOT \
+        hpc_files/rwth/run_2d_only_train.sbatch)
+echo "first link: $jid"
+
+# When epochs start landing:
+grep -h "Epoch\|epoch" logs/jl2d_train_${jid}_*.out | grep -i "time\|elapsed\|completed" | tail -20
+
+# Confirm all three landed on 4 GPUs each and agree on the schedule:
+grep -h "gpus   :\|STUDY INVARIANT\|joint_limit_regularization:\|3D supervision" logs/jl2d_train_${jid}_*.out
+
+
+# -----------------------------------------------------------------------------
+# 4. CHAIN THE REST
+# -----------------------------------------------------------------------------
+# Each link is an array over all three arms and resumes each arm from the newest
+# checkpoint in its own checkpoint_dir. A link that finds its arm already at
+# num_epochs exits 0 without allocating anything, so over-provisioning the chain
+# is cheap and running short means coming back to submit more.
+#
+# afterany, not afterok: a job killed at the 24 h wall exits non-zero and that is
+# the NORMAL case — it left checkpoints and the next link should pick them up.
+
+CHAIN=8 bash hpc_files/rwth/chain_2d_only.sh
+
+# One arm only (0 = control, 1 = 1e-4, 2 = 1e-1):
+#   CHAIN=8 ARRAY=1 bash hpc_files/rwth/chain_2d_only.sh
+#
+# Two nodes per arm (halves the wall clock, DOUBLES the effective batch — use
+# the same value for every arm or they are different optimisation problems):
+#   CHAIN=4 SBATCH_EXTRA="--nodes=2" bash hpc_files/rwth/chain_2d_only.sh
+
+
+# -----------------------------------------------------------------------------
+# 5. SCORE THE ARMS
+# -----------------------------------------------------------------------------
+# Reuses run_prior_study_eval.sbatch with overrides. The mapping is the only
+# fiddly part: that script's task 0 writes to <RESULTS_ROOT>/sv_reference and
+# tasks 1-4 write to <RESULTS_ROOT>/lam<L>/sv_constrained, and compare_arms.py
+# pairs "sv_constrained" against "sv_reference". So the CONTROL arm is scored as
+# task 0 — it is this study's reference — and the two constrained arms as tasks
+# 1 and 2 with LAMBDAS reordered to match.
+#
+# RESULTS_ROOT is separate from the continuation study's so the two sets of
+# numbers can never be read as one table.
+
+export RESULTS_2D=prior_study_results_2d
+
+# 5a. the control, scored as this study's reference
+SV_REF="$RUNS_ROOT/singleview_2d_lam0/checkpoints/best_model.pth" \
+RESULTS_ROOT=$RESULTS_2D \
+sbatch --array=0 --account=$ACCT \
+    --export=ALL,SV_REF,ENV_PREFIX,RUNS_ROOT,RESULTS_ROOT,EXTRA_EPOCHS=0 \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+# 5b. the two constrained arms
+for L in 1e-4 1e-1; do
+    IDX=$([ "$L" = "1e-4" ] && echo 1 || echo 2)
+    SV_CON="$RUNS_ROOT/singleview_2d_lam${L}/checkpoints/best_model.pth" \
+    RESULTS_ROOT=$RESULTS_2D LAMBDAS="1e-4 1e-1 x x" \
+    sbatch --array=$IDX --account=$ACCT \
+        --export=ALL,SV_CON,ENV_PREFIX,RUNS_ROOT,RESULTS_ROOT,LAMBDAS,EXTRA_EPOCHS=0 \
+        hpc_files/rwth/run_prior_study_eval.sbatch
+done
+
+# 5c. rebuild the comparison markdown with the caveat that actually applies.
+# The eval sbatch calls compare_arms.py without --from-scratch, so the report it
+# writes carries the CONTINUATION study's caveat paragraph: "the reference arms
+# received zero additional epochs" and "a w_limit = 0 control ... is not part of
+# this study". Both are FALSE here — every arm trained the same schedule and the
+# control IS the reference row. Re-run it by hand:
+
+for L in 1e-4 1e-1; do
+    ln -sfn ../sv_reference "$RESULTS_2D/lam${L}/sv_reference"
+    python scripts/prior_study/compare_arms.py \
+        --results-root "$RESULTS_2D/lam${L}" \
+        --out "$RESULTS_2D/lam${L}/comparison" \
+        --joint-limit-weight "$L" \
+        --from-scratch
+done
+
+
+# -----------------------------------------------------------------------------
+# 6. QUALITATIVE RENDERS
+# -----------------------------------------------------------------------------
+# Same idea as the continuation study: render the EXPORTED poses, not raw video,
+# so the pictures and the tables describe the same predictions.
+#
+# Pick the windows ONCE, from the CONTROL arm's export — every arm must render
+# the same frames or the grid is not a comparison. Do NOT reuse
+# prior_study_results/renders/segments.json: it was picked from the 3D-supervised
+# sv_reference export and indexes a different set of predictions.
+
+python scripts/prior_study/pick_segments.py \
+    --npz $RESULTS_2D/sv_reference/clip_sv_reference.npz \
+    --dataset SMILySTICKS_centred_reprojected_FIXED.h5 \
+    --smal-file 3D_model_prep/SMILy_STICK_limits_authored.pkl \
+    --segments 3 --length 300 --select worst --one-per-camera \
+    --out $RESULTS_2D/renders/segments.json
+
+# Then render each arm over those windows and stack them. Check
+# run_prior_study_render.sbatch's task->arm mapping before submitting; it was
+# written for the continuation study's five arms.
+
+
+# -----------------------------------------------------------------------------
+# 7. READ THE RESULTS — and the caveats that belong next to every number
+# -----------------------------------------------------------------------------
+#   $RESULTS_2D/sweep/sweep.md                       <- the curve
+#   $RESULTS_2D/lam<L>/comparison/comparison.md      <- control vs that lambda
+#
+# Win condition, same as before: a lambda that lowers the violation rate while
+# leaving MPJPE and PCK flat RELATIVE TO THE CONTROL.
+#
+# CAVEAT 1 — the lambdas are not the earlier study's lambdas. That sweep ran
+# against a total loss dominated by keypoint_3d at weight 20. With 3D gone, the
+# same numeric lambda is a far larger fraction of the loss, so 1e-1 here is a
+# much stronger prior than 1e-1 there. Do not put the two tables side by side.
+#
+# CAVEAT 2 — best_model.pth is selected on total validation loss, and the limit
+# penalty is part of that loss. A constrained arm's "best" epoch is therefore
+# chosen under a different objective than the control's. If a delta is small,
+# check it also holds at the last checkpoint of each arm, not only at best.
+#
+# CAVEAT 3 — scale/depth degeneracy. mesh_scaling.allow_mesh_scaling is left ON
+# because the study is specified as the reference setup MINUS 3D supervision, and
+# TrainingConfig.MESH_SCALING_CONFIG says in as many words that the global mesh
+# scale "is trained implicitly via 3D keypoint losses". With keypoint_3d and the
+# GT translation both at 0, a uniformly larger animal further from the camera
+# reprojects to the same pixels; only the limb_scale / limb_trans regularizers
+# and the limit prior hold it. Expect MPJPE (a metric scale) to be worse than
+# sv_reference's 1.09 mm across the board — that is the experiment, not a bug.
+# If the control's scale drifts far enough to make the numbers unreadable, the
+# fix is mesh_scaling.allow_mesh_scaling=false in $SV_BASE_CONFIG, re-run step 1,
+# and re-train ALL THREE arms.
+#
+# CAVEAT 4 — comparing any of this to sv_reference measures "no 3D supervision"
+# and "the prior" at once. The control is what separates them, which is why it
+# is in the study.
+
+
+# -----------------------------------------------------------------------------
+# MONITORING
+# -----------------------------------------------------------------------------
+# squeue --me
+# sacct -j $jid --format=JobID,JobName%18,State,Elapsed,MaxRSS,NodeList
+# tail -f logs/jl2d_train_${jid}_0.out
+# scancel $jid
+#
+# Per-arm progress without opening a log:
+#   for L in 0 1e-4 1e-1; do
+#     echo -n "lam$L: "; ls -v $RUNS_ROOT/singleview_2d_lam$L/checkpoints/checkpoint_epoch_*.pth \
+#       2>/dev/null | tail -n1 || echo "(nothing yet)"
+#   done

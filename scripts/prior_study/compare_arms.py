@@ -199,6 +199,15 @@ def main() -> int:
     p.add_argument("--out", default="prior_study_results/comparison", help="Output directory")
     p.add_argument("--extra-epochs", type=int, default=None, help="Recorded in the report header for provenance")
     p.add_argument("--joint-limit-weight", type=float, default=None, help="Recorded in the report header")
+    p.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="The arms were trained from scratch for the same schedule, and the '*_reference' arm "
+        "is a lambda=0 CONTROL rather than an un-continued checkpoint. Swaps the fine-tuning "
+        "caveat, which is false for such a study, for the caveats that do apply. Used by the "
+        "2D-only study; without it the report would claim a confound it does not have and deny "
+        "the control it does.",
+    )
     args = p.parse_args()
 
     root = Path(args.results_root)
@@ -268,20 +277,40 @@ def main() -> int:
         header_bits.append(f"`joint_limit_regularization` = **{args.joint_limit_weight}**")
     if header_bits:
         lines += ["  |  ".join(header_bits), ""]
-    lines += [
-        "Each `*_constrained` arm is its `*_reference` checkpoint continued for the same number of "
-        "epochs with the limit penalty enabled. **All four arms are scored against the same authored "
-        "ranges**, so the reference rows are the honest \"before\" number.",
-        "",
-        "> **Caveat — the fine-tuning confound.** The reference arms received zero additional epochs, "
-        "so any difference below is *the prior plus continued training*, not the prior alone. "
-        "A `w_limit = 0` control fine-tuned for the same epochs would separate the two; it is not "
-        "part of this study by design.",
-        "",
-        "Deltas are `constrained - reference`. Lower is better for violations and MPJPE; "
-        "higher is better for PCK.",
-        "",
-    ]
+    if args.from_scratch:
+        lines += [
+            "Every arm was trained **from scratch for the same schedule**; the `*_reference` row is "
+            "the **lambda = 0 control**, identical to the constrained arms in everything but the "
+            "limit weight. All arms are scored against the same authored ranges.",
+            "",
+            "> **What this comparison does and does not isolate.** Training length, seed, split and "
+            "batch are identical across arms, so the delta is the prior alone — there is no "
+            "fine-tuning confound. Two caveats remain. (1) `best_model.pth` is selected on total "
+            "validation loss, and the limit penalty is *part of* that loss, so a constrained arm's "
+            "best epoch is chosen under a different objective than the control's. (2) These lambdas "
+            "are not on the same scale as the continuation study's: that one ran against a loss "
+            "dominated by `keypoint_3d` at weight 20, and with 3D supervision removed the same "
+            "lambda is a much larger fraction of the total.",
+            "",
+            "Deltas are `constrained - control`. Lower is better for violations and MPJPE; "
+            "higher is better for PCK.",
+            "",
+        ]
+    else:
+        lines += [
+            "Each `*_constrained` arm is its `*_reference` checkpoint continued for the same number of "
+            "epochs with the limit penalty enabled. **All four arms are scored against the same authored "
+            "ranges**, so the reference rows are the honest \"before\" number.",
+            "",
+            "> **Caveat — the fine-tuning confound.** The reference arms received zero additional epochs, "
+            "so any difference below is *the prior plus continued training*, not the prior alone. "
+            "A `w_limit = 0` control fine-tuned for the same epochs would separate the two; it is not "
+            "part of this study by design.",
+            "",
+            "Deltas are `constrained - reference`. Lower is better for violations and MPJPE; "
+            "higher is better for PCK.",
+            "",
+        ]
 
     for mode, ref_name, con_name in PAIRS:
         ref, con = arms.get(ref_name), arms.get(con_name)

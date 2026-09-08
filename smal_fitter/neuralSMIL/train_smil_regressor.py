@@ -1407,6 +1407,16 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
         _stb = config_override.get("scale_trans_beta")
         if _stb:
             TrainingConfig.SCALE_TRANS_BETA_CONFIG["mode"] = _stb["mode"]
+            # Carry the mode's loss weights into the spawned worker too. Without
+            # this the worker falls back to the class-level defaults and silently
+            # re-enables betas / log_beta_scales / betas_trans supervision that
+            # the config switched off. (Under torchrun every rank re-runs
+            # __main__ and picks these up from the load_config path above; under
+            # mp.spawn this is the only place they arrive.)
+            if _stb.get("loss_weights"):
+                TrainingConfig.SCALE_TRANS_BETA_CONFIG.setdefault(_stb["mode"], {})["loss_weights"] = dict(
+                    _stb["loss_weights"]
+                )
         _ji = config_override.get("joint_importance")
         if _ji:
             TrainingConfig.JOINT_IMPORTANCE_CONFIG = _ji
@@ -2406,6 +2416,16 @@ if __name__ == "__main__":
 
         # Sync scale_trans_mode to legacy TrainingConfig (still read by some code paths)
         TrainingConfig.SCALE_TRANS_BETA_CONFIG["mode"] = new_config.scale_trans_beta.mode
+        # ...and the mode's loss weights. get_loss_weights_for_epoch applies these
+        # LAST (training_config.py:534), after base_weights and the curriculum, so
+        # leaving the class-level defaults in place made scale_trans_beta's
+        # *_loss_weights fields unreachable from a JSON config. The dataclass
+        # defaults equal the legacy values, so this changes nothing unless a config
+        # deliberately overrides them (e.g. the 2D-only study, which zeroes betas /
+        # log_beta_scales / betas_trans).
+        TrainingConfig.SCALE_TRANS_BETA_CONFIG.setdefault(new_config.scale_trans_beta.mode, {})[
+            "loss_weights"
+        ] = dict(new_config.scale_trans_beta.get_mode_loss_weights())
 
         # Sync joint_importance to legacy TrainingConfig
         TrainingConfig.JOINT_IMPORTANCE_CONFIG = {
