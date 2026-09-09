@@ -1,0 +1,12 @@
+Done :
+-  Fix issues: 24,25,56
+-  Extracted Joint limits from literature
+-  Effect of JLR on SV performance: metrics, viz
+
+In progress:
+- Fix issue 100
+- Effect of JLR on MV performance
+- Effect of removing 3d supervision on SV performance
+
+Future:
+- Multianimal work?
