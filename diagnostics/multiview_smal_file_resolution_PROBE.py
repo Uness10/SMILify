@@ -30,15 +30,21 @@ Usage:  python diagnostics/multiview_smal_file_resolution_PROBE.py
 """
 
 import os
+
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "smal_fitter", "neuralSMIL"))
 
 import ast, io, sys
+
 src = io.open("run_multiview_inference.py", encoding="utf-8").read()
 tree = ast.parse(src)
 ok = True
+
+
 def check(c, m):
     global ok
-    print(("PASS  " if c else "FAIL  ") + m); ok = ok and c
+    print(("PASS  " if c else "FAIL  ") + m)
+    ok = ok and c
+
 
 top = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
 check("load_checkpoint_and_config" in top, "defined: load_checkpoint_and_config")
@@ -50,15 +56,13 @@ body_src = ast.get_source_segment(src, mi)
 # ordering: checkpoint read + SMAL override must precede dataset and model construction
 i_ckpt = body_src.index("load_checkpoint_and_config(")
 i_smal = body_src.index("resolve_smal_file_for_checkpoint(")
-i_ds   = body_src.index("SLEAPMultiViewDataset(")
-i_model= body_src.index("load_multiview_model_from_checkpoint(")
-check(i_ckpt < i_smal < i_ds < i_model,
-      "order: read checkpoint -> apply SMAL override -> build dataset -> build model")
+i_ds = body_src.index("SLEAPMultiViewDataset(")
+i_model = body_src.index("load_multiview_model_from_checkpoint(")
+check(i_ckpt < i_smal < i_ds < i_model, "order: read checkpoint -> apply SMAL override -> build dataset -> build model")
 
 check(body_src.count("_find_default_checkpoint()") == 1, "checkpoint path resolved exactly once")
 check("checkpoint=checkpoint" in body_src, "pre-loaded checkpoint is reused (file not read twice)")
-check(src.count("torch.load(str(checkpoint_path)") == 2,
-      "torch.load call sites: helper + guarded fallback only")
+check(src.count("torch.load(str(checkpoint_path)") == 2, "torch.load call sites: helper + guarded fallback only")
 
 # the loader must tolerate a pre-loaded checkpoint
 ld = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "load_multiview_model_from_checkpoint")
@@ -70,33 +74,46 @@ check("N_BETAS={config.N_BETAS}" in src, "the error reports the currently loaded
 # behavioural: exercise resolve_smal_file_for_checkpoint with stubs
 node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "resolve_smal_file_for_checkpoint")
 import types, typing, os
+
 calls = []
 cfgmod = types.SimpleNamespace(SHAPE_FAMILY=0, N_POSE=1, N_BETAS=13, SMAL_FILE="default.pkl")
-ns = {"Optional": typing.Optional, "config": cfgmod, "Path": __import__("pathlib").Path,
-      "apply_smal_file_override": lambda f, shape_family=None: calls.append((f, shape_family))}
+ns = {
+    "Optional": typing.Optional,
+    "config": cfgmod,
+    "Path": __import__("pathlib").Path,
+    "apply_smal_file_override": lambda f, shape_family=None: calls.append((f, shape_family)),
+}
 exec(compile(ast.Module(body=[node], type_ignores=[]), "<x>", "exec"), ns)
 fn = ns["resolve_smal_file_for_checkpoint"]
 
-real = "/tmp/_fake_smal.pkl"; open(real, "w").close()
+real = "/tmp/_fake_smal.pkl"
+open(real, "w").close()
 
-calls.clear(); fn({"smal_file": real, "shape_family": -1}, None, None)
+calls.clear()
+fn({"smal_file": real, "shape_family": -1}, None, None)
 check(calls == [(real, -1)], f"checkpoint's smal_file is applied when no CLI override: {calls}")
 
-calls.clear(); fn({"smal_file": real, "shape_family": -1}, real, 7)
+calls.clear()
+fn({"smal_file": real, "shape_family": -1}, real, 7)
 check(calls == [(real, 7)], f"--smal_file/--shape_family override the checkpoint: {calls}")
 
-calls.clear(); fn({}, None, None)
+calls.clear()
+fn({}, None, None)
 check(calls == [], "no smal_file anywhere -> config.py default left alone")
 
-calls.clear(); fn({"smal_file": "/nope/missing.pkl"}, None, None)
+calls.clear()
+fn({"smal_file": "/nope/missing.pkl"}, None, None)
 check(calls == [], "unresolvable checkpoint path warns instead of applying")
 
 try:
-    fn({}, "/nope/missing.pkl", None); raised = False
-except FileNotFoundError: raised = True
+    fn({}, "/nope/missing.pkl", None)
+    raised = False
+except FileNotFoundError:
+    raised = True
 check(raised, "explicitly passed --smal_file that is missing raises")
 
-calls.clear(); fn({"smal_file": real}, None, None)
+calls.clear()
+fn({"smal_file": real}, None, None)
 check(calls == [(real, 0)], f"missing shape_family falls back to config.SHAPE_FAMILY: {calls}")
 
 print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
