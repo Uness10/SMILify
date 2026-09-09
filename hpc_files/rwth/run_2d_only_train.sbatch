@@ -23,6 +23,11 @@
 # Override the lambda list with LAMBDAS="0 1e-4 1e-1" (same order as the array
 # indices) and the config path with CONFIG=<file> for a one-off.
 #
+# The dataset defaults to $DATA_ROOT/SMILySTICKS_centred_reprojected_FIXED.h5
+# with DATA_ROOT=$HPCWORK/SMILify. Override DATA_ROOT (directory) or DATA_PATH
+# (full file path) if the .h5 lives somewhere else, and remember to add it to
+# --export when submitting: --export=ALL,ENV_PREFIX,RUNS_ROOT,DATA_PATH
+#
 # HOW THIS DIFFERS FROM run_prior_study_train.sbatch
 # --------------------------------------------------
 # That script trains CONTINUATIONS and enforces it: it exits if
@@ -81,6 +86,23 @@ MODE="singleview"
 TRAIN_MODULE="smal_fitter.neuralSMIL.train_smil_regressor"
 TAG="2d_lam${LAMBDA}"
 CONFIG="${CONFIG:-configs_runs/${MODE}_${TAG}.json}"
+
+# --- dataset path, resolved dynamically (not trusted from the JSON) --------
+# h5py.File() resolves whatever string it gets against the process CWD at the
+# moment train_smil_regressor.py opens it. A bare filename baked into the
+# config only works by accident if the job happens to `cd` into the one
+# directory that has it, and a stale/copied config can silently point at the
+# wrong file. Resolve an absolute path here and pass it with --data_path,
+# which overrides the config (CLI > JSON per configs/base_config.py's
+# precedence), so this arm's dataset never depends on the submit directory.
+DATA_ROOT="${DATA_ROOT:-$HPCWORK/SMILify}"
+DATA_PATH="${DATA_PATH:-$DATA_ROOT/SMILySTICKS_centred_reprojected_FIXED.h5}"
+if [[ ! -f "$DATA_PATH" ]]; then
+    echo "ERROR: dataset not found at $DATA_PATH" >&2
+    echo "       Set DATA_ROOT (directory) or DATA_PATH (full file path) explicitly, e.g.:" >&2
+    echo "         DATA_PATH=/path/to/file.h5 sbatch --export=ALL,ENV_PREFIX,RUNS_ROOT,DATA_PATH ... $0" >&2
+    exit 1
+fi
 
 # Backbone weights must already be cached (hpc_files/download_backbone_weights.py
 # on the login node); c23g compute nodes have no outbound network. This matters
@@ -188,6 +210,7 @@ echo "  wall   : ${SLURM_JOB_END_TIME:+ends $(date -d @"$SLURM_JOB_END_TIME" 2>/
 echo "  repo   : $REPO_DIR"
 echo "  env    : $CONDA_PREFIX"
 echo "  config : $CONFIG"
+echo "  data   : $DATA_PATH"
 echo "  gpus   : $GPUS_PER_NODE per node x $NNODES node(s) = $WORLD rank(s)  [from $GPU_SRC]"
 echo "=================================================================="
 python -c "import torch; print(f'  torch  : {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.device_count()} GPU(s) visible')"
@@ -556,6 +579,6 @@ RESUME_ARGS=()
     --rdzv-endpoint="$RDZV_ENDPOINT" \
     --nnodes="$NNODES" \
     --nproc_per_node="$GPUS_PER_NODE" \
-    -m "$TRAIN_MODULE" --config "$CONFIG" "${RESUME_ARGS[@]}"
+    -m "$TRAIN_MODULE" --config "$CONFIG" --data_path "$DATA_PATH" "${RESUME_ARGS[@]}"
 
 echo "Done (2D-only, $MODE, lambda=$LAMBDA, $WORLD rank(s)) — $(date)"
