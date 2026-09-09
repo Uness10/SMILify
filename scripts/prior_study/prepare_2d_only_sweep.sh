@@ -62,7 +62,7 @@ cd "$REPO_ROOT"
 
 read -r -a LAMBDA_ARR <<< "${LAMBDAS:-0 1e-4 1e-1}"
 SMAL_FILE="${SMAL_FILE:-3D_model_prep/SMILy_STICK_limits_authored.pkl}"
-DATASET="${DATASET:-SMILySTICKS_centred_reprojected_FIXED.h5}"
+DATASET="${DATASET:-$DATA_ROOT/SMILySTICKS_centred_reprojected_FIXED.h5}
 SAVE_EVERY="${SAVE_EVERY:-2}"
 VIZ_EVERY="${VIZ_EVERY:-10}"
 PLOT_EVERY="${PLOT_EVERY:-10}"
