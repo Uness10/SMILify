@@ -33,7 +33,9 @@ import os
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "smal_fitter", "neuralSMIL"))
 
-import ast, io, sys
+import ast
+import io
+import sys
 
 src = io.open("run_singleview_inference.py", encoding="utf-8").read()
 tree = ast.parse(src)

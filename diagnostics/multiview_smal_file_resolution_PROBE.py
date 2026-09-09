@@ -33,7 +33,9 @@ import os
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "smal_fitter", "neuralSMIL"))
 
-import ast, io, sys
+import ast
+import io
+import sys
 
 src = io.open("run_multiview_inference.py", encoding="utf-8").read()
 tree = ast.parse(src)
@@ -73,7 +75,8 @@ check("N_BETAS={config.N_BETAS}" in src, "the error reports the currently loaded
 
 # behavioural: exercise resolve_smal_file_for_checkpoint with stubs
 node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "resolve_smal_file_for_checkpoint")
-import types, typing, os
+import types
+import typing
 
 calls = []
 cfgmod = types.SimpleNamespace(SHAPE_FAMILY=0, N_POSE=1, N_BETAS=13, SMAL_FILE="default.pkl")
