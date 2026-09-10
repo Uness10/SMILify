@@ -21,6 +21,11 @@
 #                            config, which carries stale defaults.
 #   EXTRA_EPOCHS             additional epochs per arm         (default: 50)
 #   LAMBDAS                  space-separated override          (default: 1e-4 1e-3 1e-2 1e-1)
+#                            LAMBDAS=0 builds the CONTINUED REFERENCE instead
+#                            of a sweep point: configs_runs/<mode>_refcont.json,
+#                            hinge off, everything else identical. Run it with
+#                            the SAME EXTRA_EPOCHS / BATCH_SIZE / LR_FLAT you
+#                            used for the sweep or it is not epoch-matched.
 #   SMAL_FILE                model .pkl carrying joint_limits
 #                            (default: 3D_model_prep/SMILy_STICK_limits_authored.pkl)
 #   DATASET                  HDF5 (default: SMILySTICKS_centred_reprojected_FIXED.h5)
@@ -128,7 +133,15 @@ echo "=================================================================="
 
 WRITTEN=()
 for LAMBDA in "${LAMBDA_ARR[@]}"; do
-    TAG="lam${LAMBDA}"
+    # lambda = 0 is not a sweep point, it is the EPOCH-MATCHED BASELINE: the same
+    # checkpoint continued for the same EXTRA_EPOCHS with the hinge off. It gets
+    # its own tag so it can never be mistaken for a fifth lambda, and so array
+    # tasks 8/9 of run_prior_study_train.sbatch can find its config by name.
+    if [[ "$(python -c "print(float('$LAMBDA') == 0.0)")" == "True" ]]; then
+        TAG="refcont"
+    else
+        TAG="lam${LAMBDA}"
+    fi
     OUT="configs_runs/${MODE}_${TAG}.json"
 
     echo
@@ -286,7 +299,10 @@ echo "$PREFLIGHT"
 echo
 echo " Then submit all ${#WRITTEN[@]} arms at once — no % throttle, so every arm gets"
 echo " its own 4-GPU node concurrently:"
-if [[ "$MODE" == "singleview" ]]; then
+if [[ "${LAMBDA_ARR[*]}" == "0" ]]; then
+    # the continued reference only — one task, not a sweep
+    [[ "$MODE" == "singleview" ]] && ARRAY_SPEC="8" || ARRAY_SPEC="9"
+elif [[ "$MODE" == "singleview" ]]; then
     ARRAY_SPEC="0-3"
 else
     ARRAY_SPEC="4-7"

@@ -27,8 +27,24 @@
 #     7   mv_constrained @ 1e-3  $RUNS_ROOT/multiview_lam1e-3/checkpoints/best_model.pth
 #     8   mv_constrained @ 1e-2  $RUNS_ROOT/multiview_lam1e-2/checkpoints/best_model.pth
 #     9   mv_constrained @ 1e-1  $RUNS_ROOT/multiview_lam1e-1/checkpoints/best_model.pth
+#    10   sv_reference (cont.)   $RUNS_ROOT/singleview_refcont/checkpoints/best_model.pth
+#    11   mv_reference (cont.)   $RUNS_ROOT/multiview_refcont/checkpoints/best_model.pth
 #
 # Default --array=0-4 is the single-view sweep. Use --array=5-9 for multi-view.
+#
+# Tasks 10 and 11 score the CONTINUED REFERENCE — the lambda=0 arm trained by
+# run_prior_study_train.sbatch tasks 8/9 for the same extra epochs as the sweep.
+# They deliberately carry the label "sv_reference" / "mv_reference" in arm.json,
+# because compare_arms.py keys its pairs off that label and the whole point is
+# to substitute this arm for the un-continued one. To keep both stories on disk
+# they are written into a SEPARATE results root:
+#
+#   $RESULTS_ROOT          reference = downloaded checkpoint, +0 epochs (published)
+#   $MATCHED_ROOT          reference = same checkpoint, +EXTRA_EPOCHS at lambda=0
+#
+# scripts/prior_study/build_matched_study.sh links the already-scored constrained
+# arms into $MATCHED_ROOT and rebuilds the tables there, so the epoch-matched
+# study costs one training run per modality and no re-scoring of the lambdas.
 #
 # ---------------------------------------------------------------------------
 # RESULT LAYOUT — why each lambda gets its own subfolder
@@ -98,6 +114,9 @@ RESULTS_ROOT="${RESULTS_ROOT:-prior_study_results}"
 # $HPCWORK (quota) and forgetting to tell this script is how all four eval tasks
 # end up looking in an empty runs/ and reporting "checkpoint not found".
 RUNS_ROOT="${RUNS_ROOT:-runs}"
+# Where the epoch-matched study lives (tasks 10/11). Kept apart from
+# RESULTS_ROOT so the published tables are never overwritten in place.
+MATCHED_ROOT="${MATCHED_ROOT:-${RESULTS_ROOT}_matched}"
 
 # --- which arm is this array task? -------------------------------------------
 # The constrained checkpoints are written by the training job into
@@ -129,8 +148,22 @@ elif (( TASK >= 6 && TASK <= 9 )); then
     CHECKPOINT="${MV_CON:-$RUNS_ROOT/multiview_lam${LAMBDA}/checkpoints/best_model.pth}"
     WHAT="multi-view continuation at lambda=$LAMBDA"
     OUT_DIR="$RESULTS_ROOT/lam${LAMBDA}/mv_constrained"
+elif (( TASK == 10 )); then
+    # Continued reference, single-view. LABEL is "sv_reference" on purpose: it is
+    # the same model at the same epoch budget as the constrained arms, and
+    # compare_arms.py pairs on that label. MATCHED_ROOT keeps it from colliding
+    # with the un-continued reference already scored by task 0.
+    MODE="singleview"; LABEL="sv_reference"
+    CHECKPOINT="${SV_CONT:-$RUNS_ROOT/singleview_refcont/checkpoints/best_model.pth}"
+    WHAT="single-view continuation at lambda=0 (train array task 8)"
+    OUT_DIR="$MATCHED_ROOT/sv_reference"
+elif (( TASK == 11 )); then
+    MODE="multiview"; LABEL="mv_reference"
+    CHECKPOINT="${MV_CONT:-$RUNS_ROOT/multiview_refcont/checkpoints/best_model.pth}"
+    WHAT="multi-view continuation at lambda=0 (train array task 9)"
+    OUT_DIR="$MATCHED_ROOT/mv_reference"
 else
-    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-9)." >&2
+    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-11)." >&2
     exit 1
 fi
 
@@ -205,6 +238,8 @@ if [[ -z "$CHECKPOINT" ]]; then
     echo "ERROR: no checkpoint for arm '$LABEL'." >&2
     echo "       This arm needs $WHAT." >&2
     echo "       Re-submit with --export=ALL,SV_REF (and MV_REF for tasks 5-9)." >&2
+    echo "       Tasks 10/11 need the lambda=0 continuation to have finished first" >&2
+    echo "       (run_prior_study_train.sbatch --array=8 / --array=9)." >&2
     exit 1
 fi
 
@@ -224,6 +259,12 @@ fi
 # same time write into the same benchmark_singleview_best_model_on_*/ directory
 # and quietly interleave their reports.
 BENCH_TAG="${LABEL}${LAMBDA:+_lam$LAMBDA}"
+# Tasks 10/11 share LABEL with tasks 0/5 by design and carry no lambda, so
+# without this they would benchmark into the SAME directory as the un-continued
+# reference and interleave two reports for two different checkpoints.
+if (( TASK >= 10 )); then
+    BENCH_TAG="${LABEL}_cont"
+fi
 
 LABEL="$LABEL" CHECKPOINT="$CHECKPOINT" OUT_DIR="$OUT_DIR" BENCH_TAG="$BENCH_TAG" \
   bash scripts/prior_study/run_prior_study.sh
@@ -251,6 +292,15 @@ if [[ -n "$LAMBDA" ]]; then
         --extra-epochs "${EXTRA_EPOCHS:-50}" \
         --joint-limit-weight "$LAMBDA" || \
       echo "[eval] (comparison incomplete — expected until the reference has run)"
+fi
+
+# --- epoch-matched study: next step -----------------------------------------
+if (( TASK >= 10 )); then
+    echo
+    echo "[eval] continued reference scored into $OUT_DIR"
+    echo "[eval] build the epoch-matched tables once BOTH modalities are done:"
+    echo "         RESULTS_ROOT=$RESULTS_ROOT MATCHED_ROOT=$MATCHED_ROOT \\"
+    echo "         EXTRA_EPOCHS=${EXTRA_EPOCHS:-50} bash scripts/prior_study/build_matched_study.sh"
 fi
 
 # --- the sweep table ---------------------------------------------------------

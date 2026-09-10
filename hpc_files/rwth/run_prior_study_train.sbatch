@@ -26,6 +26,8 @@
 #     5   multiview   1e-3     configs_runs/multiview_lam1e-3.json
 #     6   multiview   1e-2     configs_runs/multiview_lam1e-2.json
 #     7   multiview   1e-1     configs_runs/multiview_lam1e-1.json
+#     8   singleview  0        configs_runs/singleview_refcont.json   <- baseline
+#     9   multiview   0        configs_runs/multiview_refcont.json    <- baseline
 #
 # The DEFAULT array (0-3) is the single-view sweep — the modality where the
 # problem is underdetermined and the prior has the most to do. Tasks 4-7 exist
@@ -33,8 +35,10 @@
 # editing this file; they are NOT submitted by default.
 #
 # Each task gets its own node with 4x H100 and runs torchrun over every GPU the
-# allocation actually contains. There is still no unconstrained arm: the
-# reference is each downloaded checkpoint evaluated as-is (eval sbatch task 0).
+# allocation actually contains. Tasks 8 (singleview) and 9 (multiview) are the
+# UNCONSTRAINED arm: the same checkpoint continued for the same extra epochs at
+# lambda=0, so the study has an epoch-matched baseline as well as the downloaded
+# checkpoint evaluated as-is (eval sbatch task 0 / 5).
 #
 # ---------------------------------------------------------------------------
 # HOW MANY GPUs
@@ -168,16 +172,38 @@ fi
 # --- which point of the sweep is this array task? ----------------------------
 # Task -> (mode, lambda). Tasks 0-3 are the single-view sweep (the default
 # --array), 4-7 the same four lambdas on multi-view.
+#
+# Tasks 8 and 9 are the CONTINUED REFERENCE (lambda = 0): the same checkpoint,
+# the same number of extra epochs, the same LR window, batch size and allocation
+# shape as the constrained arms — with the hinge switched off. It is the arm
+# that answers "is the gain the prior, or is it just 50 more epochs?", and
+# without it every reference row in the study mixes the prior with the
+# continuation. It is NOT a fifth sweep point: it is the epoch-matched baseline.
 LAMBDAS=(1e-4 1e-3 1e-2 1e-1)
 
 TASK="${SLURM_ARRAY_TASK_ID:-0}"
-if (( TASK < 0 || TASK > 7 )); then
-    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-7)." >&2
-    echo "       0-3 = singleview x {${LAMBDAS[*]}}, 4-7 = multiview x the same." >&2
+if (( TASK < 0 || TASK > 9 )); then
+    echo "ERROR: unexpected SLURM_ARRAY_TASK_ID=$TASK (expected 0-9)." >&2
+    echo "       0-3 = singleview x {${LAMBDAS[*]}}, 4-7 = multiview x the same," >&2
+    echo "       8   = singleview continued reference (lambda=0)," >&2
+    echo "       9   = multiview  continued reference (lambda=0)." >&2
     exit 1
 fi
 
-if (( TASK < 4 )); then
+# ARM is "constrained" for the sweep points, "refcont" for the epoch-matched
+# lambda=0 baseline. It is the ONLY thing that unlocks a zero weight below.
+ARM="constrained"
+if (( TASK == 8 )); then
+    ARM="refcont"
+    MODE="singleview"
+    TRAIN_MODULE="smal_fitter.neuralSMIL.train_smil_regressor"
+    LAMBDA="0"
+elif (( TASK == 9 )); then
+    ARM="refcont"
+    MODE="multiview"
+    TRAIN_MODULE="smal_fitter.neuralSMIL.train_multiview_regressor"
+    LAMBDA="0"
+elif (( TASK < 4 )); then
     MODE="singleview"
     TRAIN_MODULE="smal_fitter.neuralSMIL.train_smil_regressor"
     LAMBDA="${LAMBDAS[$TASK]}"
@@ -187,8 +213,13 @@ else
     LAMBDA="${LAMBDAS[$((TASK - 4))]}"
 fi
 
-# Tag matches prepare_lambda_sweep.sh: "lam1e-3", "lam1e-2", ...
-TAG="lam${LAMBDA}"
+# Tag matches prepare_lambda_sweep.sh: "lam1e-3", "lam1e-2", ... and "refcont"
+# for the lambda=0 continuation (LAMBDAS=0 there produces the same name).
+if [[ "$ARM" == "refcont" ]]; then
+    TAG="refcont"
+else
+    TAG="lam${LAMBDA}"
+fi
 CONFIG="${CONFIG:-configs_runs/${MODE}_${TAG}.json}"
 
 # Backbone weights must already be cached (hpc_files/download_backbone_weights.py
@@ -322,7 +353,11 @@ cd "$REPO_DIR"
 
 echo "=================================================================="
 echo "Job ${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID} task $TASK on $(hostname) — $(date)"
-echo "  arm    : CONSTRAINED / $MODE / lambda=$LAMBDA"
+if [[ "$ARM" == "refcont" ]]; then
+    echo "  arm    : CONTINUED REFERENCE (lambda=0, epoch-matched baseline) / $MODE"
+else
+    echo "  arm    : CONSTRAINED / $MODE / lambda=$LAMBDA"
+fi
 echo "  cluster: RWTH CLAIX-2023 | partition ${SLURM_JOB_PARTITION:-?} | account $SLURM_JOB_ACCOUNT"
 echo "  wall   : ${SLURM_JOB_END_TIME:+ends $(date -d @"$SLURM_JOB_END_TIME" 2>/dev/null)}"
 echo "  repo   : $REPO_DIR"
@@ -344,12 +379,13 @@ fi
 # Each check below corresponds to a way this job can "succeed" while producing a
 # result that does not answer the question. All of them are cheap and run before
 # the GPUs are touched.
-python - "$CONFIG" "$MODE" "$LAMBDA" "$WORLD" <<'PY' || exit 1
+python - "$CONFIG" "$MODE" "$LAMBDA" "$WORLD" "$ARM" <<'PY' || exit 1
 import json, math, os, pickle, sys
 import numpy as np
 import torch
 
 cfg_path, expected_mode, expected_lambda = sys.argv[1], sys.argv[2], float(sys.argv[3])
+arm = sys.argv[5] if len(sys.argv) > 5 else "constrained"
 world = int(sys.argv[4])
 cfg = json.load(open(cfg_path))
 
@@ -385,7 +421,8 @@ print(f"  -> will train {n_train} epoch(s)")
 # A lambda sweep in which the arms trained for different lengths compares
 # lambda AND training length at once. Nothing here can enforce it across tasks,
 # so record it loudly in the log where compare_arms' provenance can be checked.
-print(f"  SWEEP INVARIANT   : this arm trains {n_train} epochs — every other lambda MUST match.")
+print(f"  SWEEP INVARIANT   : this arm trains {n_train} epochs — every other lambda "
+      f"AND the continued reference (task 8/9) MUST match.")
 
 # 3. the checkpoint really is this modality ---------------------------------
 sd = ck.get("model_state_dict", ck)
@@ -399,9 +436,16 @@ if ckpt_mode != expected_mode:
 # identical rows at different labels.
 w = (cfg.get("loss_curriculum", {}).get("base_weights", {}) or {}).get("joint_limit_regularization", 0.0)
 print(f"  joint_limit_regularization: {w}  (array task expects {expected_lambda})")
-if not w:
-    sys.exit("ERROR: joint_limit_regularization is 0 — this study has only CONSTRAINED arms.\n"
-             "       Re-run prepare_resume_config.py with --joint-limit-weight <lambda>.")
+if not w and arm != "refcont":
+    sys.exit("ERROR: joint_limit_regularization is 0 — the sweep arms are all CONSTRAINED.\n"
+             "       Re-run prepare_resume_config.py with --joint-limit-weight <lambda>,\n"
+             "       or submit array task 8/9 if you meant the epoch-matched lambda=0 baseline.")
+if w and arm == "refcont":
+    sys.exit(f"ERROR: this is the CONTINUED REFERENCE arm but the config carries\n"
+             f"       joint_limit_regularization={w}. It must be exactly 0, or the baseline\n"
+             f"       that is supposed to isolate the extra epochs carries the prior too.\n"
+             f"       Rebuild with: LAMBDAS=0 EXTRA_EPOCHS=<same as the sweep> \\\n"
+             f"           bash scripts/prior_study/prepare_lambda_sweep.sh {expected_mode}")
 if not math.isclose(float(w), expected_lambda, rel_tol=1e-9):
     sys.exit(f"ERROR: config weight {w} != the lambda this array task is for ({expected_lambda}).\n"
              f"       {cfg_path} was prepared for a different sweep point. Two arms of the\n"
@@ -648,4 +692,4 @@ fi
     --nproc_per_node="$GPUS_PER_NODE" \
     -m "$TRAIN_MODULE" --config "$CONFIG"
 
-echo "Done ($MODE, lambda=$LAMBDA, $WORLD rank(s)) — $(date)"
+echo "Done ($MODE, $ARM, lambda=$LAMBDA, $WORLD rank(s)) — $(date)"

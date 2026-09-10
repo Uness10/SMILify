@@ -1,0 +1,228 @@
+# =============================================================================
+# JOINT-LIMIT PRIOR STUDY — CONTINUED REFERENCE (lambda = 0)
+# Closing the fine-tuning confound. RWTH CLAIX-2023, account rwth2151.
+#
+# WHY
+#   Every constrained arm in the study is the reference checkpoint + N extra
+#   epochs WITH the hinge. Every reference row is that checkpoint + 0 epochs.
+#   So each published delta is "the prior AND the continuation", and sweep.md
+#   already says so in its own header. This runbook trains the missing arm: the
+#   same checkpoint, the same N epochs, the same everything, hinge OFF.
+#
+#     singleview   +50 epochs at lambda=0   (matches the sv sweep)
+#     multiview    +25 epochs at lambda=0   (matches the mv sweep)
+#
+#   Cost: one training run per modality — 1/4 of what the sweep already cost.
+#   Nothing is re-trained and nothing is re-scored; the constrained arms are
+#   linked, not copied, so both tables describe the identical checkpoints.
+#
+# THE ONE RULE
+#   The baseline is only worth submitting if it differs from the sweep arms in
+#   NOTHING but the weight. Same EXTRA_EPOCHS, same BATCH_SIZE, same LR_FLAT (or
+#   same absence of it), same SAVE_EVERY, same --nodes, same partition, same
+#   dataset, same .pkl. Step 1 recovers those values from the sweep itself
+#   rather than trusting memory, and step 3 refuses to continue if they drift.
+#
+# WHAT WAS ADDED TO THE REPO FOR THIS
+#   prepare_lambda_sweep.sh          LAMBDAS=0 -> configs_runs/<mode>_refcont.json
+#   run_prior_study_train.sbatch     array tasks 8 (sv) and 9 (mv)
+#   run_prior_study_eval.sbatch      array tasks 10 (sv) and 11 (mv)
+#   scripts/prior_study/check_matched_config.py    the drift guard
+#   scripts/prior_study/build_matched_study.sh     rebuilds the tables
+# =============================================================================
+
+cd "$HPCWORK/SMILify"
+conda activate pytorch3d
+
+export ACCT=rwth2151
+export ENV_PREFIX="$(conda info --envs | awk '$1=="pytorch3d"{print $NF}')"
+export RUNS_ROOT="$HPCWORK/smilify_runs"
+export SV_REF=singleview_SMILySTICKS_3D_ViT_checkpoints/best_model.pth   # epoch 386
+export SV_BASE_CONFIG=singleview_SMILySTICKS_3D_ViT.json
+export MV_REF="$HPCWORK/SMILify/SMILySTICKS_ViT_model.pth"
+export MV_BASE_CONFIG=smal_fitter/neuralSMIL/configs/examples/multiview_SMILySTICKS_3D_ViT_Large_AUG_FIXED.json
+
+
+# -----------------------------------------------------------------------------
+# 1. RECOVER WHAT THE SWEEP ACTUALLY RAN WITH — do not reconstruct from memory
+# -----------------------------------------------------------------------------
+# The sweep configs are on disk and they are the ground truth. Read the numbers
+# off them; whatever they say is what the baseline must use.
+
+python - <<'PY'
+import json, glob, pathlib
+for mode in ("singleview", "multiview"):
+    files = sorted(glob.glob(f"configs_runs/{mode}_lam*.json"))
+    if not files:
+        print(f"{mode}: no sweep configs on disk"); continue
+    print(f"\n=== {mode} ({len(files)} arm(s)) ===")
+    for f in files:
+        c = json.load(open(f))
+        t, o, opt = c.get("training", {}), c.get("output", {}), c.get("optimizer", {})
+        w = (c.get("loss_curriculum", {}).get("base_weights", {}) or {}).get(
+            "joint_limit_regularization")
+        print(f"  {pathlib.Path(f).name:32s} num_epochs={t.get('num_epochs')} "
+              f"batch={t.get('batch_size')} save_every={o.get('save_checkpoint_every')} "
+              f"lr={opt.get('learning_rate')} sched={opt.get('lr_schedule')} lambda={w}")
+PY
+
+# From that output write down, per modality:
+#   EXTRA_EPOCHS = num_epochs - (reference epoch + 1)      -> 50 for sv, 25 for mv
+#   BATCH_SIZE   = batch_size                              -> mv used 4, sv used the default
+#   LR_FLAT      = set only if lr_schedule is a single pinned value
+#
+# And the allocation shape, from the training logs of the sweep itself:
+grep -h "gpus   :\|arm    :\|SWEEP INVARIANT" logs/jl_train_*.out | sort -u | head -20
+sacct --format=JobID%18,JobName%20,NNodes,ReqTRES%40,Elapsed -X --name=jl_train 2>/dev/null | head -20
+#   -> the --nodes and --time you must reuse below. Different node counts mean a
+#      different effective batch under DDP, which is exactly the kind of silent
+#      mismatch this whole exercise exists to remove.
+
+
+# -----------------------------------------------------------------------------
+# 2. BUILD THE TWO BASELINE CONFIGS (login node, CPU, ~1 min)
+# -----------------------------------------------------------------------------
+# LAMBDAS=0 is the switch. It writes configs_runs/<mode>_refcont.json — hinge
+# off, run dir $RUNS_ROOT/<mode>_refcont — through the exact same code path,
+# post-patch and LR bookkeeping as every sweep arm.
+#
+# Pass the SAME extras step 1 recovered. If the sweep used no BATCH_SIZE and no
+# LR_FLAT, pass none here either — matching means matching the absences too.
+
+EXTRA_EPOCHS=50 \
+  bash scripts/prior_study/prepare_lambda_sweep.sh singleview
+
+EXTRA_EPOCHS=25 BATCH_SIZE=4 \
+  bash scripts/prior_study/prepare_lambda_sweep.sh multiview
+
+# It prints, per arm:
+#   [prepare] resume from epoch 387, train 50 epoch(s) -> training.num_epochs = 437
+#   [prepare] arm: UNCONSTRAINED
+# UNCONSTRAINED is the line you want here. CONSTRAINED means LAMBDAS did not
+# take and you are about to train a fifth lambda instead of a baseline.
+
+
+# -----------------------------------------------------------------------------
+# 3. THE DRIFT GUARD — the whole point of the exercise, in one command
+# -----------------------------------------------------------------------------
+# Diffs the baseline against a real sweep arm and fails on ANY difference that
+# is not the weight or a per-arm output path. num_epochs, batch_size, lr,
+# schedule, dataset, smal_file, curriculum — all of it.
+
+python scripts/prior_study/check_matched_config.py \
+    --refcont configs_runs/singleview_refcont.json \
+    --arm     configs_runs/singleview_lam1e-2.json
+
+python scripts/prior_study/check_matched_config.py \
+    --refcont configs_runs/multiview_refcont.json \
+    --arm     configs_runs/multiview_lam1e-2.json
+
+# Both must print "OK — epoch-matched". A FAIL line names the key that drifted;
+# fix it in step 2 and re-run. Do not submit past a FAIL — a baseline with a
+# second confound in it is worse than no baseline, because the table then looks
+# rigorous while being wrong.
+
+# Then the usual study pre-flight (architecture drift, test-split agreement):
+python scripts/prior_study/preflight_study.py \
+    --config configs_runs/singleview_refcont.json --reference "$SV_REF" \
+    --config configs_runs/multiview_refcont.json  --reference "$MV_REF"
+
+# And the batch script's own pre-flight for the two new tasks, srun stubbed out:
+bash hpc_files/rwth/dryrun_sbatch.sh hpc_files/rwth/run_prior_study_train.sbatch 8
+SLURM_JOB_NUM_NODES=2 \
+  bash hpc_files/rwth/dryrun_sbatch.sh hpc_files/rwth/run_prior_study_train.sbatch 9
+
+
+# -----------------------------------------------------------------------------
+# 4. TRAIN — one task per modality, same shape as the sweep
+# -----------------------------------------------------------------------------
+# Task 8 = singleview lambda=0, task 9 = multiview lambda=0. They are separate
+# submissions because the sweep submitted the two modalities differently; mirror
+# step 1's findings exactly (--nodes, --time, --partition).
+
+sv=$(sbatch --parsable --array=8 --account=$ACCT \
+        --export=ALL,ENV_PREFIX,RUNS_ROOT \
+        hpc_files/rwth/run_prior_study_train.sbatch)
+echo "sv continued reference: $sv"
+
+mv_=$(sbatch --parsable --array=9 \
+        --nodes=2 --time=12:00:00 --partition=c23g,c25g --account=$ACCT \
+        --export=ALL,ENV_PREFIX,RUNS_ROOT \
+        hpc_files/rwth/run_prior_study_train.sbatch)
+echo "mv continued reference: $mv_"
+
+# Confirm both report the baseline arm and the same epoch count as the sweep:
+grep -h "arm    :\|SWEEP INVARIANT\|joint_limit_regularization:\|gpus   :" \
+     logs/jl_train_${sv}_8.out logs/jl_train_${mv_}_9.out
+#   arm    : CONTINUED REFERENCE (lambda=0, epoch-matched baseline) / singleview
+#   joint_limit_regularization: 0.0  (array task expects 0.0)
+#   SWEEP INVARIANT   : this arm trains 50 epochs — ...
+#
+# The train script now refuses a non-zero weight on tasks 8/9 and a zero weight
+# on tasks 0-7, so a config swapped between the two cannot run silently.
+
+
+# -----------------------------------------------------------------------------
+# 5. SCORE THE TWO BASELINES
+# -----------------------------------------------------------------------------
+# Tasks 10/11. They write into prior_study_results_matched/ — a SEPARATE root —
+# under the labels sv_reference / mv_reference, because compare_arms.py pairs on
+# that label and the baseline is meant to stand in for the reference. The
+# published prior_study_results/ is never touched.
+
+sbatch --array=10 --dependency=afterany:$sv --account=$ACCT \
+    --export=ALL,ENV_PREFIX,RUNS_ROOT,EXTRA_EPOCHS=50 \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+sbatch --array=11 --dependency=afterany:$mv_ --account=$ACCT \
+    --export=ALL,ENV_PREFIX,RUNS_ROOT,EXTRA_EPOCHS=25 \
+    hpc_files/rwth/run_prior_study_eval.sbatch
+
+# afterany, not afterok: an arm killed at the wall still left periodic
+# checkpoints, and run_prior_study.sh falls back to the newest one. If that
+# happens, note the epoch it actually scored — a baseline that got 44 of its 50
+# epochs is still usable, but the number belongs in the caption.
+#   cat prior_study_results_matched/sv_reference/arm.json
+
+
+# -----------------------------------------------------------------------------
+# 6. REBUILD THE TABLES (login node, seconds, no GPU)
+# -----------------------------------------------------------------------------
+# Links the already-scored constrained arms in beside the new reference and
+# re-runs compare_arms.py there. Run it once per modality's EXTRA_EPOCHS, or
+# once with each — the lambda dirs it can reach are the ones it rebuilds.
+
+RESULTS_ROOT=prior_study_results MATCHED_ROOT=prior_study_results_matched \
+  EXTRA_EPOCHS=50 bash scripts/prior_study/build_matched_study.sh
+
+
+# -----------------------------------------------------------------------------
+# 7. READ, IN THIS ORDER
+# -----------------------------------------------------------------------------
+#   prior_study_results_matched/confound/fine_tuning_confound.md
+#       The extra epochs on their own: same checkpoint, +0 vs +N at lambda=0.
+#       This is the number a reviewer is asking for. If it is ~flat, the
+#       published deltas were the prior all along and the study just got
+#       stronger. If it moves, subtract it before claiming anything.
+#
+#   prior_study_results_matched/sweep/sweep.md
+#       The sweep with every row on one budget. This becomes the headline table.
+#
+#   prior_study_results/sweep/sweep.md
+#       The published version, kept for contrast.
+#
+# For the write-up, report BOTH references as rows — "reference (+0 ep)" and
+# "reference (+N ep, lambda=0)" — rather than quietly replacing one with the
+# other. The pair is the evidence; a single swapped row is just a different
+# unexplained number.
+
+
+# -----------------------------------------------------------------------------
+# 8. QUALITATIVE RENDERS (optional, minutes on 1 GPU)
+# -----------------------------------------------------------------------------
+# The render sbatch still maps tasks 0-4 to the old reference + four lambdas. To
+# put the continued reference in the comparison grid, point it at the new npz:
+#   prior_study_results_matched/sv_reference/clip_sv_reference.npz
+# and stack it as an extra panel with the SAME segments.json the study used —
+# re-picking segments would break frame-for-frame comparability with the
+# published figures.
