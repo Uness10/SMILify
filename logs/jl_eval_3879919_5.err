@@ -1,0 +1,3 @@
+ERROR: no checkpoint for arm 'mv_reference'.
+       This arm needs downloaded multi-view checkpoint (set MV_REF=<path>).
+       Re-submit with --export=ALL,SV_REF (and MV_REF for tasks 5-9).

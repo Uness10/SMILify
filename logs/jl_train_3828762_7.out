@@ -1,0 +1,3134 @@
+==================================================================
+Job 3828762 task 7 on n23g0019.hpc.itc.rwth-aachen.de — Tue Sep  8 18:41:21 CEST 2026
+  arm    : CONSTRAINED / multiview / lambda=1e-1
+  cluster: RWTH CLAIX-2023 | partition c23g | account rwth2151
+  wall   : ends Wed Sep  9 06:40:46 CEST 2026
+  repo   : /rwthfs/rz/cluster/home/mkd34160/test/SMILify
+  env    : /hpcwork/mkd34160/conda/envs/pytorch3d
+  config : configs_runs/multiview_lam1e-1.json
+  gpus   : 4 per node x 2 node(s) = 8 rank(s)  [from SLURM_GPUS_ON_NODE]
+==================================================================
+  torch  : 2.3.1, CUDA 11.8, 4 GPU(s) visible
+  resume checkpoint : SMILySTICKS_ViT_model.pth (epoch 345)
+  start epoch       : 346
+  num_epochs (end)  : 371
+  -> will train 25 epoch(s)
+  SWEEP INVARIANT   : this arm trains 25 epochs — every other lambda MUST match.
+  joint_limit_regularization: 0.1  (array task expects 0.1)
+  smal_file         : 3D_model_prep/SMILy_STICK_limits_authored.pkl
+  authored limits   : 129/162 non-root axes constrained (80%), across 43 joints
+  NOTE: the penalty is a mean over ALL 162 non-root axes, so the effective
+        prior strength is w x 0.80. At w=0.1 that is an effective 0.07963.
+  peer weights      : keypoint_2d=0.1, keypoint_3d=0.25, joint_angle_regularization=0.001
+  -> effective limit weight is 0.319x the keypoint weight.
+     If the ratio is <<1 the hinge cannot move the pose; that is a RESULT for this
+     lambda, not a bug — it is what the sweep is measuring.
+  batch_size 4 per rank x 8 rank(s) -> effective 32 (batch_size is PER PROCESS under DDP)
+  SWEEP INVARIANT   : effective batch 32 — every other lambda MUST match.
+  save_checkpoint_every: 2 (a wall-clock timeout costs at most this many epochs)
+  checkpoints -> /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints
+  generate_visualizations_every: 10  plot_history_every: 10  samples: 5
+  free space on /hpcwork/mkd34160/smilify_runs: 510 GB (advisory — statvfs shows the FILESYSTEM, not your quota)
+  lr source         : config optimizer.lr_schedule
+  lr                : constant 1e-05 across [346, 371)
+
+=== /rwthfs/rz/cluster/home/mkd34160/test/SMILify/configs_runs/multiview_lam1e-1.json ===
+  mode: multiview
+  resume checkpoint: SMILySTICKS_ViT_model.pth (epoch 345)
+  inferred from tensors: {'max_views': 5, 'hidden_dim': 1024}
+  note: config declares hidden_dim=512 but backbone 'vit_large_patch16_224' forces 1024 via get_adjusted_hidden_dim() — the declared value is unused
+  architecture: consistent with the checkpoint
+
+Pre-flight OK — safe to submit.
+  launch : srun x 2 node(s), rendezvous on n23g0019:29407
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+Detected torchrun/HPC launch environment:
+  Global rank: 0
+  Local rank (GPU): 0
+  World size: 8
+  MASTER_ADDR: n23g0019.hpc.itc.rwth-aachen.de
+  MASTER_PORT: 39189
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!
+  Attempting to resolve to IPv4...
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!
+  Attempting to resolve to IPv4...
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!
+  Attempting to resolve to IPv4...
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!
+  Attempting to resolve to IPv4...
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+Loaded config from: configs_runs/multiview_lam1e-1.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/config.json
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!  Attempting to resolve to IPv4...
+
+  Attempting to resolve to IPv4...WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!
+
+WARNING: MASTER_ADDR 'n23g0019.hpc.itc.rwth-aachen.de' is not an IPv4 address!  Attempting to resolve to IPv4...
+
+  Attempting to resolve to IPv4...
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+  Resolved to: 134.61.46.215
+CUDA devices available: 4
+CUDA_VISIBLE_DEVICES: 0,1,2,3
+[Rank 0] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=0, MASTER=134.61.46.215:39189
+[Rank 1] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=1, MASTER=134.61.46.215:39189
+[Rank 2] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=2, MASTER=134.61.46.215:39189
+[Rank 3] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=3, MASTER=134.61.46.215:39189
+[Rank 7] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=3, MASTER=134.61.46.215:39189
+[Rank 6] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=2, MASTER=134.61.46.215:39189
+[Rank 4] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=0, MASTER=134.61.46.215:39189
+[Rank 5] Initializing distributed: WORLD_SIZE=8, LOCAL_RANK/GPU=1, MASTER=134.61.46.215:39189
+[Rank 3] Successfully initialized NCCL process group
+[Rank 0] Successfully initialized NCCL process group
+[Rank 1] Successfully initialized NCCL process group
+[Rank 2] Successfully initialized NCCL process group
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[Rank 6] Successfully initialized NCCL process group
+[Rank 7] Successfully initialized NCCL process group
+[Rank 5] Successfully initialized NCCL process group
+[Rank 4] Successfully initialized NCCL process group
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+
+============================================================
+MULTI-VIEW SMIL IMAGE REGRESSOR TRAINING
+============================================================
+Device: cuda:0
+Distributed: True (world_size=8)
+Dataset: SMILySTICKS_centred_reprojected_FIXED.h5
+Backbone: vit_large_patch16_224
+Num views to use: None
+Cross-attention layers: 2
+============================================================
+
+Loading multi-view dataset...
+
+==================================================
+MULTI-VIEW SLEAP DATASET SUMMARY
+==================================================
+Dataset type: sleap_multiview
+Number of samples: 101250
+Maximum views per sample: 5
+Number of joints: 55
+Target resolution: 512x512
+Backbone: vit_large_patch16_224
+Crop mode: centred
+N_POSE: 54
+N_BETAS: 5
+Min views per sample: 2
+Canonical camera order: ['A', 'B', 'C', 'D', 'E']
+Num views to use: all
+==================================================
+Max views in dataset: 5
+Dataset canonical camera order: ['A', 'B', 'C', 'D', 'E']
+
+Resuming from checkpoint - inferring model architecture from checkpoint...
+Inferred max_views=5 from checkpoint view_embeddings.weight shape
+Model architecture: max_views=5, canonical_camera_order has 5 cameras
+
+Dataset split:
+  Train: 86062
+  Val: 5062
+  Test: 10126
+
+  Dataset fraction: 20.0%
+  Samples per epoch: 17212 (of 86062 total)
+  Note: Different random subset sampled each epoch for diversity
+  Augmentation: enabled (photometric)
+
+Creating multi-view model...
+Using input resolution: 224x224 (backbone: vit_large_patch16_224)
+Mesh scaling enabled with init=1.0
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+Total parameters: 357,661,555
+Trainable parameters: 357,660,235
+Backbone chunk size: 16 (reduces peak VRAM)
+Gradient accumulation: 2 steps (effective batch size: 8)
+Resuming from checkpoint: SMILySTICKS_ViT_model.pth
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Resuming training from epoch 346 (checkpoint was at epoch 345)
+
+Starting training for 371 epochs...
+Base loss weights: {'global_rot': 0.0, 'joint_rot': 0.001, 'betas': 0.0005, 'trans': 0.0005, 'fov': 0.001, 'cam_rot': 0.01, 'cam_trans': 0.01, 'log_beta_scales': 0.0005, 'betas_trans': 0.0005, 'keypoint_2d': 0.1, 'keypoint_3d': 0.25, 'silhouette': 0.0, 'joint_angle_regularization': 0.001, 'limb_scale_regularization': 0.1, 'limb_trans_regularization': 1, 'triangulation_consistency': 0.0, 'ief_intermediate': 0.1, 'joint_limit_regularization': 0.1}
+Using TrainingConfig loss curriculum: 8 stages
+Using TrainingConfig LR curriculum: 3 stages
+
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Adapted 5 SMALFitter default params to new batch size:
+  log_beta_scales: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  betas_trans: torch.Size([8, 55, 3]) -> torch.Size([4, 55, 3]) (batch dim adapted)
+  global_rotation: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  trans: torch.Size([8, 3]) -> torch.Size([4, 3]) (batch dim adapted)
+  joint_rotations: torch.Size([8, 54, 3]) -> torch.Size([4, 54, 3]) (batch dim adapted)
+Joint importance: 6/6 joints matched, multiplier=10.0Joint importance: 6/6 joints matched, multiplier=10.0
+
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0Joint importance: 6/6 joints matched, multiplier=10.0
+
+Joint importance: 6/6 joints matched, multiplier=10.0
+
+Epoch 346 Summary:
+  Train Loss: 0.0001
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.002548 / 0.000097
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000383 / 0.000392
+    ief_pose_delta_1    : 7.947610 / 7.900615
+    ief_pose_delta_2    : 12.801898 / 12.781866
+    joint_angle_regularization: 0.069667 / 0.069426
+    joint_limit_regularization: 0.000354 / 0.000009
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000170 / 0.000078
+    keypoint_3d         : 0.000003 / 0.000001
+    limb_scale_regularization: 0.010475 / 0.010879
+    limb_trans_regularization: 0.000005 / 0.000002
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 347 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000299 / 0.000051
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000382 / 0.000390
+    ief_pose_delta_1    : 7.908642 / 7.882918
+    ief_pose_delta_2    : 12.795457 / 12.775753
+    joint_angle_regularization: 0.070315 / 0.073338
+    joint_limit_regularization: 0.000007 / 0.000006
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000065 / 0.000052
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011468 / 0.011723
+    limb_trans_regularization: 0.000002 / 0.000002
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0347.pth
+
+Epoch 348 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000236 / 0.000048
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000382 / 0.000392
+    ief_pose_delta_1    : 7.876049 / 7.879089
+    ief_pose_delta_2    : 12.796606 / 12.781277
+    joint_angle_regularization: 0.072696 / 0.075624
+    joint_limit_regularization: 0.000007 / 0.000004
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000052 / 0.000044
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011770 / 0.012179
+    limb_trans_regularization: 0.000002 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 349 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000206 / 0.000039
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000384 / 0.000393
+    ief_pose_delta_1    : 7.855346 / 7.870220
+    ief_pose_delta_2    : 12.803907 / 12.794997
+    joint_angle_regularization: 0.074224 / 0.076363
+    joint_limit_regularization: 0.000006 / 0.000002
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000045 / 0.000039
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011970 / 0.012321
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0349.pth
+
+=== Joint Scales for Multiview Sample 0 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0038     1.0049     1.0051       1.0046
+b_a_1                    1.0574     1.0047     0.8894       0.9838
+b_a_2                    0.9607     1.0061     0.9878       0.9849
+b_a_3                    0.9785     0.9945     0.9916       0.9882
+b_a_4                    1.0091     1.0079     1.0002       1.0057
+b_a_5                    1.0045     1.0063     1.0063       1.0057
+l_1_co_r                 1.4382     1.1848     1.1274       1.2502
+l_1_tr_r                 1.0291     1.3749     1.0635       1.1558
+l_1_fe_r                 0.8870     1.0915     1.4644       1.1476
+l_1_ti_r                 0.8787     0.9792     0.8834       0.9138
+l_1_ta_r                 0.8835     0.9768     0.9039       0.9214
+l_1_pt_r                 1.0046     1.0059     1.0045       1.0050
+l_2_co_r                 1.2012     1.2891     1.1404       1.2102
+l_2_tr_r                 0.9691     1.2809     1.1559       1.1353
+l_2_fe_r                 1.0151     1.0054     1.2698       1.0968
+l_2_ti_r                 0.9995     0.9495     0.8956       0.9482
+l_2_ta_r                 1.0103     0.9500     0.9500       0.9701
+l_2_pt_r                 1.0052     1.0088     1.0090       1.0076
+l_3_co_r                 1.3390     0.8088     1.0813       1.0764
+l_3_tr_r                 1.1102     1.3708     1.2113       1.2307
+l_3_fe_r                 1.0517     1.0639     1.3278       1.1478
+l_3_ti_r                 0.9608     1.1017     0.8144       0.9590
+l_3_ta_r                 0.9703     0.9959     0.9768       0.9810
+l_3_pt_r                 1.0037     1.0049     1.0046       1.0044
+w_1_r                    1.0053     1.0056     1.0052       1.0054
+w_2_r                    1.0053     1.0045     1.0065       1.0055
+l_1_co_l                 1.1424     1.3172     1.1059       1.1885
+l_1_tr_l                 0.8830     1.2392     1.0327       1.0516
+l_1_fe_l                 1.0810     1.0248     1.3827       1.1628
+l_1_ti_l                 0.8487     0.9434     0.9147       0.9023
+l_1_ta_l                 0.9574     0.9514     0.9156       0.9415
+l_1_pt_l                 1.0066     1.0089     1.0031       1.0062
+l_2_co_l                 1.2493     1.2685     1.1678       1.2285
+l_2_tr_l                 0.9898     1.2540     1.0635       1.1024
+l_2_fe_l                 1.0391     0.9214     1.5511       1.1705
+l_2_ti_l                 1.0010     0.9809     0.8327       0.9382
+l_2_ta_l                 1.0105     0.9049     0.9048       0.9401
+l_2_pt_l                 1.0042     0.9996     1.0005       1.0015
+l_3_co_l                 1.1818     0.8372     1.0201       1.0130
+l_3_tr_l                 1.0205     1.0222     1.1727       1.0718
+l_3_fe_l                 1.0141     0.9390     1.3328       1.0953
+l_3_ti_l                 0.9091     0.9533     0.8940       0.9188
+l_3_ta_l                 0.9742     0.9990     0.9952       0.9894
+l_3_pt_l                 1.0067     1.0047     1.0038       1.0051
+w_1_l                    0.8557     1.0252     1.0211       0.9673
+w_2_l                    1.0075     1.0058     1.0027       1.0054
+b_h                      1.3098     1.3420     1.1221       1.2579
+ma_r                     1.0051     1.0078     1.0019       1.0049
+an_1_r                   1.2886     1.0486     0.9904       1.1092
+an_2_r                   1.2229     1.0198     0.9896       1.0775
+an_3_r                   1.0034     1.0075     1.0057       1.0055
+ma_l                     1.0055     1.0058     1.0043       1.0052
+an_1_l                   1.3215     1.0537     0.9856       1.1203
+an_2_l                   1.1381     1.0417     0.9855       1.0551
+an_3_l                   1.0063     1.0053     1.0066       1.0061
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0452
+  Std scale (all joints, all axes): 0.1336
+  Min scale: 0.8088
+  Max scale: 1.5511
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 13
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 1 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0030     1.0034     1.0050       1.0038
+b_a_1                    1.0934     1.0097     0.9001       1.0011
+b_a_2                    0.9922     1.0074     0.9794       0.9930
+b_a_3                    0.9943     0.9953     0.9930       0.9942
+b_a_4                    1.0103     1.0094     1.0012       1.0070
+b_a_5                    1.0047     1.0063     1.0052       1.0054
+l_1_co_r                 1.2661     1.1365     1.1888       1.1971
+l_1_tr_r                 0.9195     1.1651     1.2079       1.0975
+l_1_fe_r                 0.9067     1.1325     1.5294       1.1895
+l_1_ti_r                 0.8507     0.9971     0.8799       0.9092
+l_1_ta_r                 0.8758     0.9970     0.9185       0.9304
+l_1_pt_r                 1.0041     1.0067     1.0039       1.0049
+l_2_co_r                 1.2055     1.2771     1.2217       1.2347
+l_2_tr_r                 0.9609     1.2917     1.1304       1.1277
+l_2_fe_r                 1.0452     1.0166     1.2901       1.1173
+l_2_ti_r                 1.0055     0.9427     0.9018       0.9500
+l_2_ta_r                 1.0073     0.9614     0.9466       0.9718
+l_2_pt_r                 1.0055     1.0074     1.0087       1.0072
+l_3_co_r                 1.3083     0.8262     1.1034       1.0793
+l_3_tr_r                 1.1046     1.3313     1.2174       1.2178
+l_3_fe_r                 1.0692     1.0616     1.3911       1.1740
+l_3_ti_r                 0.9789     1.1074     0.8186       0.9683
+l_3_ta_r                 0.9613     0.9833     0.9814       0.9753
+l_3_pt_r                 1.0025     1.0049     1.0049       1.0041
+w_1_r                    1.0042     1.0045     1.0040       1.0042
+w_2_r                    1.0053     1.0048     1.0058       1.0053
+l_1_co_l                 1.1443     1.4373     1.0978       1.2265
+l_1_tr_l                 0.9204     1.3220     1.0028       1.0817
+l_1_fe_l                 1.0140     1.0390     1.3181       1.1237
+l_1_ti_l                 0.8621     0.9421     0.9154       0.9066
+l_1_ta_l                 0.9678     0.9463     0.9244       0.9462
+l_1_pt_l                 1.0043     1.0074     1.0035       1.0051
+l_2_co_l                 1.2699     1.3231     1.1603       1.2511
+l_2_tr_l                 1.0019     1.2871     1.0282       1.1057
+l_2_fe_l                 1.0252     0.9283     1.5186       1.1574
+l_2_ti_l                 0.9909     0.9806     0.8368       0.9361
+l_2_ta_l                 1.0036     0.8982     0.9099       0.9372
+l_2_pt_l                 1.0046     0.9984     1.0010       1.0013
+l_3_co_l                 1.2302     0.8259     1.0439       1.0334
+l_3_tr_l                 1.0882     1.0214     1.1644       1.0913
+l_3_fe_l                 1.0641     0.9682     1.3684       1.1336
+l_3_ti_l                 0.9140     0.9435     0.8996       0.9190
+l_3_ta_l                 0.9842     0.9966     0.9970       0.9926
+l_3_pt_l                 1.0055     1.0041     1.0043       1.0046
+w_1_l                    0.8386     1.0275     1.0181       0.9614
+w_2_l                    1.0070     1.0054     1.0030       1.0051
+b_h                      1.3910     1.3618     1.1248       1.2925
+ma_r                     1.0064     1.0068     1.0016       1.0049
+an_1_r                   1.3161     1.0785     0.9669       1.1205
+an_2_r                   1.1773     1.0338     0.9903       1.0671
+an_3_r                   1.0037     1.0060     1.0066       1.0054
+ma_l                     1.0051     1.0048     1.0043       1.0047
+an_1_l                   1.3471     1.0485     0.9787       1.1248
+an_2_l                   1.1535     1.0417     0.9822       1.0591
+an_3_l                   1.0053     1.0051     1.0062       1.0056
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0486
+  Std scale (all joints, all axes): 0.1363
+  Min scale: 0.8186
+  Max scale: 1.5294
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 10
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 2 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0040     1.0039     1.0057       1.0045
+b_a_1                    1.0679     1.0114     0.8966       0.9920
+b_a_2                    0.9756     1.0050     0.9766       0.9857
+b_a_3                    0.9787     0.9959     0.9978       0.9908
+b_a_4                    1.0087     1.0074     1.0024       1.0062
+b_a_5                    1.0055     1.0074     1.0055       1.0061
+l_1_co_r                 1.3829     1.1940     1.1209       1.2326
+l_1_tr_r                 1.0203     1.3113     1.0850       1.1389
+l_1_fe_r                 0.9131     1.1208     1.4540       1.1626
+l_1_ti_r                 0.8616     0.9823     0.8901       0.9113
+l_1_ta_r                 0.8558     0.9807     0.9114       0.9160
+l_1_pt_r                 1.0045     1.0065     1.0041       1.0050
+l_2_co_r                 1.1850     1.3355     1.0409       1.1871
+l_2_tr_r                 0.9664     1.3227     1.0862       1.1251
+l_2_fe_r                 1.0239     1.0361     1.2273       1.0958
+l_2_ti_r                 0.9987     0.9572     0.8952       0.9503
+l_2_ta_r                 1.0080     0.9650     0.9486       0.9739
+l_2_pt_r                 1.0046     1.0086     1.0085       1.0072
+l_3_co_r                 1.2648     0.7512     1.1289       1.0483
+l_3_tr_r                 1.0444     1.2014     1.2141       1.1533
+l_3_fe_r                 0.9873     0.9967     1.4669       1.1503
+l_3_ti_r                 0.8906     1.0986     0.8099       0.9330
+l_3_ta_r                 0.9165     0.9853     0.9800       0.9606
+l_3_pt_r                 1.0039     1.0049     1.0047       1.0045
+w_1_r                    1.0047     1.0061     1.0043       1.0051
+w_2_r                    1.0060     1.0055     1.0062       1.0059
+l_1_co_l                 1.1202     1.3584     1.0768       1.1851
+l_1_tr_l                 0.9239     1.3193     0.9961       1.0798
+l_1_fe_l                 1.0577     1.0571     1.3354       1.1500
+l_1_ti_l                 0.8745     0.9383     0.9383       0.9170
+l_1_ta_l                 0.9667     0.9428     0.9285       0.9460
+l_1_pt_l                 1.0064     1.0083     1.0051       1.0066
+l_2_co_l                 1.1998     1.2286     1.1805       1.2030
+l_2_tr_l                 0.9920     1.1938     1.0936       1.0931
+l_2_fe_l                 1.0314     0.9016     1.4947       1.1426
+l_2_ti_l                 0.9987     0.9698     0.8326       0.9337
+l_2_ta_l                 1.0074     0.8971     0.8996       0.9347
+l_2_pt_l                 1.0047     0.9992     1.0009       1.0016
+l_3_co_l                 1.3064     0.8648     1.0348       1.0687
+l_3_tr_l                 1.1797     1.0989     1.1744       1.1510
+l_3_fe_l                 1.1699     1.0294     1.2536       1.1510
+l_3_ti_l                 0.9869     0.9630     0.9269       0.9589
+l_3_ta_l                 1.0258     1.0210     0.9929       1.0132
+l_3_pt_l                 1.0072     1.0049     1.0047       1.0056
+w_1_l                    0.8589     1.0318     1.0156       0.9688
+w_2_l                    1.0077     1.0061     1.0034       1.0057
+b_h                      1.3192     1.3955     1.0951       1.2699
+ma_r                     1.0054     1.0070     1.0025       1.0050
+an_1_r                   1.2812     1.0660     0.9716       1.1062
+an_2_r                   1.1823     1.0287     0.9909       1.0673
+an_3_r                   1.0045     1.0073     1.0068       1.0062
+ma_l                     1.0048     1.0052     1.0050       1.0050
+an_1_l                   1.3048     1.0506     0.9897       1.1150
+an_2_l                   1.1370     1.0372     0.9870       1.0537
+an_3_l                   1.0058     1.0052     1.0073       1.0061
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0455
+  Std scale (all joints, all axes): 0.1307
+  Min scale: 0.7512
+  Max scale: 1.4947
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 11
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 3 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0050     1.0065     1.0063       1.0059
+b_a_1                    1.0711     1.0028     0.8852       0.9864
+b_a_2                    0.9693     1.0070     0.9893       0.9885
+b_a_3                    0.9823     0.9976     1.0008       0.9936
+b_a_4                    1.0109     1.0092     1.0040       1.0080
+b_a_5                    1.0055     1.0076     1.0077       1.0069
+l_1_co_r                 1.3144     1.2101     1.1115       1.2120
+l_1_tr_r                 0.9895     1.2301     1.1115       1.1104
+l_1_fe_r                 0.9139     1.1427     1.4805       1.1790
+l_1_ti_r                 0.8298     0.9863     0.9047       0.9069
+l_1_ta_r                 0.8473     1.0041     0.9209       0.9241
+l_1_pt_r                 1.0044     1.0078     1.0067       1.0063
+l_2_co_r                 1.2522     1.2491     1.1037       1.2017
+l_2_tr_r                 0.9770     1.2662     1.0876       1.1102
+l_2_fe_r                 1.0486     0.9878     1.2782       1.1049
+l_2_ti_r                 1.0077     0.9423     0.8870       0.9457
+l_2_ta_r                 1.0091     0.9634     0.9344       0.9690
+l_2_pt_r                 1.0062     1.0104     1.0103       1.0090
+l_3_co_r                 1.2577     0.8008     1.1372       1.0652
+l_3_tr_r                 1.0554     1.2641     1.1988       1.1728
+l_3_fe_r                 1.0216     1.0481     1.4987       1.1894
+l_3_ti_r                 0.9331     1.1196     0.8186       0.9571
+l_3_ta_r                 0.9412     0.9913     0.9823       0.9716
+l_3_pt_r                 1.0045     1.0076     1.0071       1.0064
+w_1_r                    1.0056     1.0071     1.0059       1.0062
+w_2_r                    1.0060     1.0064     1.0092       1.0072
+l_1_co_l                 1.1340     1.3769     1.1161       1.2090
+l_1_tr_l                 0.8972     1.3184     0.9788       1.0648
+l_1_fe_l                 1.0628     1.0523     1.3216       1.1456
+l_1_ti_l                 0.8614     0.9591     0.9123       0.9110
+l_1_ta_l                 0.9723     0.9596     0.9152       0.9490
+l_1_pt_l                 1.0053     1.0100     1.0054       1.0069
+l_2_co_l                 1.2316     1.3008     1.1555       1.2293
+l_2_tr_l                 1.0106     1.2498     1.0438       1.1014
+l_2_fe_l                 1.0354     0.9082     1.4879       1.1438
+l_2_ti_l                 0.9895     0.9701     0.8319       0.9305
+l_2_ta_l                 1.0077     0.9064     0.9015       0.9385
+l_2_pt_l                 1.0056     1.0006     1.0015       1.0026
+l_3_co_l                 1.3249     0.8109     1.0449       1.0602
+l_3_tr_l                 1.1808     1.0869     1.1432       1.1370
+l_3_fe_l                 1.1788     1.0348     1.3632       1.1923
+l_3_ti_l                 0.9554     0.9695     0.9126       0.9458
+l_3_ta_l                 1.0142     1.0136     0.9888       1.0055
+l_3_pt_l                 1.0091     1.0063     1.0060       1.0071
+w_1_l                    0.8823     1.0329     1.0197       0.9783
+w_2_l                    1.0088     1.0064     1.0050       1.0067
+b_h                      1.3190     1.3204     1.1083       1.2492
+ma_r                     1.0072     1.0073     1.0042       1.0062
+an_1_r                   1.3069     1.0754     0.9713       1.1179
+an_2_r                   1.1954     1.0336     0.9782       1.0691
+an_3_r                   1.0044     1.0071     1.0067       1.0061
+ma_l                     1.0066     1.0057     1.0061       1.0061
+an_1_l                   1.3131     1.0374     0.9817       1.1108
+an_2_l                   1.1373     1.0428     0.9853       1.0551
+an_3_l                   1.0063     1.0070     1.0075       1.0069
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0479
+  Std scale (all joints, all axes): 0.1323
+  Min scale: 0.8008
+  Max scale: 1.4987
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 11
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 4 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0037     1.0012     1.0025       1.0025
+b_a_1                    1.2548     1.0079     0.9452       1.0693
+b_a_2                    1.1123     1.0005     0.9936       1.0354
+b_a_3                    1.0402     1.0035     1.0096       1.0178
+b_a_4                    1.0044     1.0028     1.0051       1.0041
+b_a_5                    1.0022     1.0016     1.0013       1.0017
+l_1_co_r                 1.2559     1.0672     0.9989       1.1073
+l_1_tr_r                 0.9554     1.2187     1.2282       1.1341
+l_1_fe_r                 0.8941     0.9523     1.4625       1.1030
+l_1_ti_r                 0.8139     0.9571     0.7868       0.8526
+l_1_ta_r                 0.8322     0.9284     0.8848       0.8818
+l_1_pt_r                 1.0015     1.0005     1.0002       1.0007
+l_2_co_r                 1.1536     1.0342     1.0139       1.0672
+l_2_tr_r                 0.9735     1.4087     1.1079       1.1633
+l_2_fe_r                 1.0004     0.8705     1.3015       1.0575
+l_2_ti_r                 1.0039     0.8653     0.7277       0.8656
+l_2_ta_r                 1.0098     0.8405     0.9185       0.9229
+l_2_pt_r                 1.0019     1.0000     1.0011       1.0010
+l_3_co_r                 1.2622     0.8662     1.3782       1.1688
+l_3_tr_r                 0.9978     1.3140     1.2315       1.1811
+l_3_fe_r                 0.8619     0.9673     1.2517       1.0270
+l_3_ti_r                 0.8294     0.9546     0.7204       0.8348
+l_3_ta_r                 0.8998     0.9108     1.0067       0.9391
+l_3_pt_r                 1.0031     1.0033     1.0011       1.0025
+w_1_r                    1.0010     1.0027     0.9993       1.0010
+w_2_r                    1.0018     1.0016     1.0016       1.0017
+l_1_co_l                 1.1200     1.2657     1.0964       1.1607
+l_1_tr_l                 0.9077     1.3219     1.0678       1.0991
+l_1_fe_l                 1.0086     0.8879     1.2875       1.0613
+l_1_ti_l                 0.8854     0.8527     0.8052       0.8477
+l_1_ta_l                 0.9204     0.8924     0.8911       0.9013
+l_1_pt_l                 1.0002     0.9985     1.0039       1.0009
+l_2_co_l                 1.2078     1.1384     1.1564       1.1675
+l_2_tr_l                 1.0071     1.3178     1.0539       1.1262
+l_2_fe_l                 0.9971     0.8331     1.4976       1.1092
+l_2_ti_l                 0.9960     0.8748     0.6790       0.8499
+l_2_ta_l                 0.9934     0.8262     0.8773       0.8989
+l_2_pt_l                 1.0024     0.9982     1.0011       1.0006
+l_3_co_l                 1.3647     0.8723     1.1398       1.1256
+l_3_tr_l                 1.1895     1.2519     1.2214       1.2209
+l_3_fe_l                 0.9510     0.9314     1.2070       1.0298
+l_3_ti_l                 0.8201     0.8803     0.8147       0.8384
+l_3_ta_l                 0.9504     0.9547     1.0010       0.9687
+l_3_pt_l                 1.0039     1.0016     1.0026       1.0027
+w_1_l                    0.9108     1.0216     1.0206       0.9843
+w_2_l                    1.0027     1.0019     1.0034       1.0027
+b_h                      1.1327     1.3118     1.0500       1.1648
+ma_r                     1.0014     1.0023     1.0015       1.0017
+an_1_r                   1.2912     1.0588     0.9897       1.1132
+an_2_r                   1.1864     1.0282     0.9926       1.0691
+an_3_r                   1.0033     1.0034     1.0044       1.0037
+ma_l                     1.0000     1.0030     1.0024       1.0018
+an_1_l                   1.4892     1.0445     0.9497       1.1612
+an_2_l                   1.2281     1.0247     1.0017       1.0848
+an_3_l                   1.0019     1.0017     1.0027       1.0021
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0262
+  Std scale (all joints, all axes): 0.1470
+  Min scale: 0.6790
+  Max scale: 1.4976
+  Joints with scale > 1.1: 25
+  Joints with scale < 0.9: 18
+======================================================================
+
+Generated 5 multi-view visualizations for epoch 349 in /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/visualizations/epoch_349
+
+=== Joint Scales for Sample 0 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0038     1.0049     1.0051       1.0046
+b_a_1                    1.0574     1.0047     0.8894       0.9838
+b_a_2                    0.9607     1.0061     0.9878       0.9849
+b_a_3                    0.9785     0.9945     0.9916       0.9882
+b_a_4                    1.0091     1.0079     1.0002       1.0057
+b_a_5                    1.0045     1.0063     1.0063       1.0057
+l_1_co_r                 1.4382     1.1848     1.1274       1.2502
+l_1_tr_r                 1.0291     1.3749     1.0635       1.1558
+l_1_fe_r                 0.8870     1.0915     1.4644       1.1476
+l_1_ti_r                 0.8787     0.9792     0.8834       0.9138
+l_1_ta_r                 0.8835     0.9768     0.9039       0.9214
+l_1_pt_r                 1.0046     1.0059     1.0045       1.0050
+l_2_co_r                 1.2012     1.2891     1.1404       1.2102
+l_2_tr_r                 0.9691     1.2809     1.1559       1.1353
+l_2_fe_r                 1.0151     1.0054     1.2698       1.0968
+l_2_ti_r                 0.9995     0.9495     0.8956       0.9482
+l_2_ta_r                 1.0103     0.9500     0.9500       0.9701
+l_2_pt_r                 1.0052     1.0088     1.0090       1.0076
+l_3_co_r                 1.3390     0.8088     1.0813       1.0764
+l_3_tr_r                 1.1102     1.3708     1.2113       1.2307
+l_3_fe_r                 1.0517     1.0639     1.3278       1.1478
+l_3_ti_r                 0.9608     1.1017     0.8144       0.9590
+l_3_ta_r                 0.9703     0.9959     0.9768       0.9810
+l_3_pt_r                 1.0037     1.0049     1.0046       1.0044
+w_1_r                    1.0053     1.0056     1.0052       1.0054
+w_2_r                    1.0053     1.0045     1.0065       1.0055
+l_1_co_l                 1.1424     1.3172     1.1059       1.1885
+l_1_tr_l                 0.8830     1.2392     1.0327       1.0516
+l_1_fe_l                 1.0810     1.0248     1.3827       1.1628
+l_1_ti_l                 0.8487     0.9434     0.9147       0.9023
+l_1_ta_l                 0.9574     0.9514     0.9156       0.9415
+l_1_pt_l                 1.0066     1.0089     1.0031       1.0062
+l_2_co_l                 1.2493     1.2685     1.1678       1.2285
+l_2_tr_l                 0.9898     1.2540     1.0635       1.1024
+l_2_fe_l                 1.0391     0.9214     1.5511       1.1705
+l_2_ti_l                 1.0010     0.9809     0.8327       0.9382
+l_2_ta_l                 1.0105     0.9049     0.9048       0.9401
+l_2_pt_l                 1.0042     0.9996     1.0005       1.0015
+l_3_co_l                 1.1818     0.8372     1.0201       1.0130
+l_3_tr_l                 1.0205     1.0222     1.1727       1.0718
+l_3_fe_l                 1.0141     0.9390     1.3328       1.0953
+l_3_ti_l                 0.9091     0.9533     0.8940       0.9188
+l_3_ta_l                 0.9742     0.9990     0.9952       0.9894
+l_3_pt_l                 1.0067     1.0047     1.0038       1.0051
+w_1_l                    0.8557     1.0252     1.0211       0.9673
+w_2_l                    1.0075     1.0058     1.0027       1.0054
+b_h                      1.3098     1.3420     1.1221       1.2579
+ma_r                     1.0051     1.0078     1.0019       1.0049
+an_1_r                   1.2886     1.0486     0.9904       1.1092
+an_2_r                   1.2229     1.0198     0.9896       1.0775
+an_3_r                   1.0034     1.0075     1.0057       1.0055
+ma_l                     1.0055     1.0058     1.0043       1.0052
+an_1_l                   1.3215     1.0537     0.9856       1.1203
+an_2_l                   1.1381     1.0417     0.9855       1.0551
+an_3_l                   1.0063     1.0053     1.0066       1.0061
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0452
+  Std scale (all joints, all axes): 0.1336
+  Min scale: 0.8088
+  Max scale: 1.5511
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 13
+======================================================================
+
+
+[Visualization] Using model renderer image size: 224
+  Original image size: (512, 512, 3)
+  Model renderer size: 224
+  This ensures keypoint normalization matches training
+
+[Sample 0] Input fingerprint (img patch mean): 0.598290
+  trans: [0.0042, 0.0138, 0.3256]
+  global_rot[0:3]: [-0.1057, -0.6594, 0.1506]
+  fov_per_view[0]: 35.6991
+  mesh_scale: 0.0389
+
+[Camera Debug] View 0:
+  FOV: 35.70 degrees
+  cam_trans: [-0.01403251  0.23938291 -0.06722227]
+  cam_rot (first row): [-0.03394401  0.76294106  0.64530927]
+  Renderer image size: 224
+  Body trans: [0.00422301 0.01383318 0.32556212]
+  Betas (first 3): [3.6263983 0.6439614 0.8682831]
+  Camera R shape: torch.Size([1, 3, 3])
+  Camera T shape: torch.Size([1, 3])
+  Camera fov shape: torch.Size([1])
+
+[GT Cam+3D Sanity] view 0:
+  GT fov_y: 35.67 deg
+  ||GT cam_T||: 0.249  (should be O(0.1-10) after scaling, not O(100-1000))
+  max|GT kp3d|: 0.345 (same unit scale as SMAL verts/joints)
+  mean reproj err (GT 3D + GT cam -> 2D): 0.13 px @ 224px
+  Exported mesh to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_349/sample_000_view_00_epoch_349.obj
+  Mesh vertices: torch.Size([1, 3020, 3]), range: [-0.035, 0.345]
+  Mesh faces: torch.Size([6019, 3])
+  Mean pred 3D: [0.0035, 0.0132, 0.3308]
+  Mean GT 3D:  [0.0026, 0.0098, 0.2538]
+  Root rot magnitude: 169.65°
+  Generated 3D keypoint visualization: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_349/sample_000_epoch_349_3d_keypoints.png
+  Mean 3D error: 0.0019, Max error: 0.0048
+  Plotted joints: 42, Suppressed: 13
+
+=== Joint Scales for Sample 1 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0030     1.0034     1.0050       1.0038
+b_a_1                    1.0934     1.0097     0.9001       1.0011
+b_a_2                    0.9922     1.0074     0.9794       0.9930
+b_a_3                    0.9943     0.9953     0.9930       0.9942
+b_a_4                    1.0103     1.0094     1.0012       1.0070
+b_a_5                    1.0047     1.0063     1.0052       1.0054
+l_1_co_r                 1.2661     1.1365     1.1888       1.1971
+l_1_tr_r                 0.9195     1.1651     1.2079       1.0975
+l_1_fe_r                 0.9067     1.1325     1.5294       1.1895
+l_1_ti_r                 0.8507     0.9971     0.8799       0.9092
+l_1_ta_r                 0.8758     0.9970     0.9185       0.9304
+l_1_pt_r                 1.0041     1.0067     1.0039       1.0049
+l_2_co_r                 1.2055     1.2771     1.2217       1.2347
+l_2_tr_r                 0.9609     1.2917     1.1304       1.1277
+l_2_fe_r                 1.0452     1.0166     1.2901       1.1173
+l_2_ti_r                 1.0055     0.9427     0.9018       0.9500
+l_2_ta_r                 1.0073     0.9614     0.9466       0.9718
+l_2_pt_r                 1.0055     1.0074     1.0087       1.0072
+l_3_co_r                 1.3083     0.8262     1.1034       1.0793
+l_3_tr_r                 1.1046     1.3313     1.2174       1.2178
+l_3_fe_r                 1.0692     1.0616     1.3911       1.1740
+l_3_ti_r                 0.9789     1.1074     0.8186       0.9683
+l_3_ta_r                 0.9613     0.9833     0.9814       0.9753
+l_3_pt_r                 1.0025     1.0049     1.0049       1.0041
+w_1_r                    1.0042     1.0045     1.0040       1.0042
+w_2_r                    1.0053     1.0048     1.0058       1.0053
+l_1_co_l                 1.1443     1.4373     1.0978       1.2265
+l_1_tr_l                 0.9204     1.3220     1.0028       1.0817
+l_1_fe_l                 1.0140     1.0390     1.3181       1.1237
+l_1_ti_l                 0.8621     0.9421     0.9154       0.9066
+l_1_ta_l                 0.9678     0.9463     0.9244       0.9462
+l_1_pt_l                 1.0043     1.0074     1.0035       1.0051
+l_2_co_l                 1.2699     1.3231     1.1603       1.2511
+l_2_tr_l                 1.0019     1.2871     1.0282       1.1057
+l_2_fe_l                 1.0252     0.9283     1.5186       1.1574
+l_2_ti_l                 0.9909     0.9806     0.8368       0.9361
+l_2_ta_l                 1.0036     0.8982     0.9099       0.9372
+l_2_pt_l                 1.0046     0.9984     1.0010       1.0013
+l_3_co_l                 1.2302     0.8259     1.0439       1.0334
+l_3_tr_l                 1.0882     1.0214     1.1644       1.0913
+l_3_fe_l                 1.0641     0.9682     1.3684       1.1336
+l_3_ti_l                 0.9140     0.9435     0.8996       0.9190
+l_3_ta_l                 0.9842     0.9966     0.9970       0.9926
+l_3_pt_l                 1.0055     1.0041     1.0043       1.0046
+w_1_l                    0.8386     1.0275     1.0181       0.9614
+w_2_l                    1.0070     1.0054     1.0030       1.0051
+b_h                      1.3910     1.3618     1.1248       1.2925
+ma_r                     1.0064     1.0068     1.0016       1.0049
+an_1_r                   1.3161     1.0785     0.9669       1.1205
+an_2_r                   1.1773     1.0338     0.9903       1.0671
+an_3_r                   1.0037     1.0060     1.0066       1.0054
+ma_l                     1.0051     1.0048     1.0043       1.0047
+an_1_l                   1.3471     1.0485     0.9787       1.1248
+an_2_l                   1.1535     1.0417     0.9822       1.0591
+an_3_l                   1.0053     1.0051     1.0062       1.0056
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0486
+  Std scale (all joints, all axes): 0.1363
+  Min scale: 0.8186
+  Max scale: 1.5294
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 10
+======================================================================
+
+
+[Sample 1] Input fingerprint (img patch mean): 0.354034
+  trans: [0.0033, 0.0070, 0.3265]
+  global_rot[0:3]: [-0.6658, -0.0596, 0.1809]
+  fov_per_view[0]: 35.6988
+  mesh_scale: 0.0382
+  Mean pred 3D: [0.0031, 0.0060, 0.3321]
+  Mean GT 3D:  [0.0020, 0.0047, 0.2424]
+  Root rot magnitude: 165.08°
+
+=== Joint Scales for Sample 2 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0040     1.0039     1.0057       1.0045
+b_a_1                    1.0679     1.0114     0.8966       0.9920
+b_a_2                    0.9756     1.0050     0.9766       0.9857
+b_a_3                    0.9787     0.9959     0.9978       0.9908
+b_a_4                    1.0087     1.0074     1.0024       1.0062
+b_a_5                    1.0055     1.0074     1.0055       1.0061
+l_1_co_r                 1.3829     1.1940     1.1209       1.2326
+l_1_tr_r                 1.0203     1.3113     1.0850       1.1389
+l_1_fe_r                 0.9131     1.1208     1.4540       1.1626
+l_1_ti_r                 0.8616     0.9823     0.8901       0.9113
+l_1_ta_r                 0.8558     0.9807     0.9114       0.9160
+l_1_pt_r                 1.0045     1.0065     1.0041       1.0050
+l_2_co_r                 1.1850     1.3355     1.0409       1.1871
+l_2_tr_r                 0.9664     1.3227     1.0862       1.1251
+l_2_fe_r                 1.0239     1.0361     1.2273       1.0958
+l_2_ti_r                 0.9987     0.9572     0.8952       0.9503
+l_2_ta_r                 1.0080     0.9650     0.9486       0.9739
+l_2_pt_r                 1.0046     1.0086     1.0085       1.0072
+l_3_co_r                 1.2648     0.7512     1.1289       1.0483
+l_3_tr_r                 1.0444     1.2014     1.2141       1.1533
+l_3_fe_r                 0.9873     0.9967     1.4669       1.1503
+l_3_ti_r                 0.8906     1.0986     0.8099       0.9330
+l_3_ta_r                 0.9165     0.9853     0.9800       0.9606
+l_3_pt_r                 1.0039     1.0049     1.0047       1.0045
+w_1_r                    1.0047     1.0061     1.0043       1.0051
+w_2_r                    1.0060     1.0055     1.0062       1.0059
+l_1_co_l                 1.1202     1.3584     1.0768       1.1851
+l_1_tr_l                 0.9239     1.3193     0.9961       1.0798
+l_1_fe_l                 1.0577     1.0571     1.3354       1.1500
+l_1_ti_l                 0.8745     0.9383     0.9383       0.9170
+l_1_ta_l                 0.9667     0.9428     0.9285       0.9460
+l_1_pt_l                 1.0064     1.0083     1.0051       1.0066
+l_2_co_l                 1.1998     1.2286     1.1805       1.2030
+l_2_tr_l                 0.9920     1.1938     1.0936       1.0931
+l_2_fe_l                 1.0314     0.9016     1.4947       1.1426
+l_2_ti_l                 0.9987     0.9698     0.8326       0.9337
+l_2_ta_l                 1.0074     0.8971     0.8996       0.9347
+l_2_pt_l                 1.0047     0.9992     1.0009       1.0016
+l_3_co_l                 1.3064     0.8648     1.0348       1.0687
+l_3_tr_l                 1.1797     1.0989     1.1744       1.1510
+l_3_fe_l                 1.1699     1.0294     1.2536       1.1510
+l_3_ti_l                 0.9869     0.9630     0.9269       0.9589
+l_3_ta_l                 1.0258     1.0210     0.9929       1.0132
+l_3_pt_l                 1.0072     1.0049     1.0047       1.0056
+w_1_l                    0.8589     1.0318     1.0156       0.9688
+w_2_l                    1.0077     1.0061     1.0034       1.0057
+b_h                      1.3192     1.3955     1.0951       1.2699
+ma_r                     1.0054     1.0070     1.0025       1.0050
+an_1_r                   1.2812     1.0660     0.9716       1.1062
+an_2_r                   1.1823     1.0287     0.9909       1.0673
+an_3_r                   1.0045     1.0073     1.0068       1.0062
+ma_l                     1.0048     1.0052     1.0050       1.0050
+an_1_l                   1.3048     1.0506     0.9897       1.1150
+an_2_l                   1.1370     1.0372     0.9870       1.0537
+an_3_l                   1.0058     1.0052     1.0073       1.0061
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0455
+  Std scale (all joints, all axes): 0.1307
+  Min scale: 0.7512
+  Max scale: 1.4947
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 11
+======================================================================
+
+
+[Sample 2] Input fingerprint (img patch mean): 0.592601
+  trans: [0.0066, 0.0103, 0.3268]
+  global_rot[0:3]: [-0.6462, -0.0408, 0.1723]
+  fov_per_view[0]: 35.6992
+  mesh_scale: 0.0396
+  Mean pred 3D: [0.0054, 0.0094, 0.3317]
+  Mean GT 3D:  [0.0038, 0.0074, 0.2543]
+  Root rot magnitude: 165.27°
+
+=== Joint Scales for Sample 3 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0050     1.0065     1.0063       1.0059
+b_a_1                    1.0711     1.0028     0.8852       0.9864
+b_a_2                    0.9693     1.0070     0.9893       0.9885
+b_a_3                    0.9823     0.9976     1.0008       0.9936
+b_a_4                    1.0109     1.0092     1.0040       1.0080
+b_a_5                    1.0055     1.0076     1.0077       1.0069
+l_1_co_r                 1.3144     1.2101     1.1115       1.2120
+l_1_tr_r                 0.9895     1.2301     1.1115       1.1104
+l_1_fe_r                 0.9139     1.1427     1.4805       1.1790
+l_1_ti_r                 0.8298     0.9863     0.9047       0.9069
+l_1_ta_r                 0.8473     1.0041     0.9209       0.9241
+l_1_pt_r                 1.0044     1.0078     1.0067       1.0063
+l_2_co_r                 1.2522     1.2491     1.1037       1.2017
+l_2_tr_r                 0.9770     1.2662     1.0876       1.1102
+l_2_fe_r                 1.0486     0.9878     1.2782       1.1049
+l_2_ti_r                 1.0077     0.9423     0.8870       0.9457
+l_2_ta_r                 1.0091     0.9634     0.9344       0.9690
+l_2_pt_r                 1.0062     1.0104     1.0103       1.0090
+l_3_co_r                 1.2577     0.8008     1.1372       1.0652
+l_3_tr_r                 1.0554     1.2641     1.1988       1.1728
+l_3_fe_r                 1.0216     1.0481     1.4987       1.1894
+l_3_ti_r                 0.9331     1.1196     0.8186       0.9571
+l_3_ta_r                 0.9412     0.9913     0.9823       0.9716
+l_3_pt_r                 1.0045     1.0076     1.0071       1.0064
+w_1_r                    1.0056     1.0071     1.0059       1.0062
+w_2_r                    1.0060     1.0064     1.0092       1.0072
+l_1_co_l                 1.1340     1.3769     1.1161       1.2090
+l_1_tr_l                 0.8972     1.3184     0.9788       1.0648
+l_1_fe_l                 1.0628     1.0523     1.3216       1.1456
+l_1_ti_l                 0.8614     0.9591     0.9123       0.9110
+l_1_ta_l                 0.9723     0.9596     0.9152       0.9490
+l_1_pt_l                 1.0053     1.0100     1.0054       1.0069
+l_2_co_l                 1.2316     1.3008     1.1555       1.2293
+l_2_tr_l                 1.0106     1.2498     1.0438       1.1014
+l_2_fe_l                 1.0354     0.9082     1.4879       1.1438
+l_2_ti_l                 0.9895     0.9701     0.8319       0.9305
+l_2_ta_l                 1.0077     0.9064     0.9015       0.9385
+l_2_pt_l                 1.0056     1.0006     1.0015       1.0026
+l_3_co_l                 1.3249     0.8109     1.0449       1.0602
+l_3_tr_l                 1.1808     1.0869     1.1432       1.1370
+l_3_fe_l                 1.1788     1.0348     1.3632       1.1923
+l_3_ti_l                 0.9554     0.9695     0.9126       0.9458
+l_3_ta_l                 1.0142     1.0136     0.9888       1.0055
+l_3_pt_l                 1.0091     1.0063     1.0060       1.0071
+w_1_l                    0.8823     1.0329     1.0197       0.9783
+w_2_l                    1.0088     1.0064     1.0050       1.0067
+b_h                      1.3190     1.3204     1.1083       1.2492
+ma_r                     1.0072     1.0073     1.0042       1.0062
+an_1_r                   1.3069     1.0754     0.9713       1.1179
+an_2_r                   1.1954     1.0336     0.9782       1.0691
+an_3_r                   1.0044     1.0071     1.0067       1.0061
+ma_l                     1.0066     1.0057     1.0061       1.0061
+an_1_l                   1.3131     1.0374     0.9817       1.1108
+an_2_l                   1.1373     1.0428     0.9853       1.0551
+an_3_l                   1.0063     1.0070     1.0075       1.0069
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0479
+  Std scale (all joints, all axes): 0.1323
+  Min scale: 0.8008
+  Max scale: 1.4987
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 11
+======================================================================
+
+
+[Sample 3] Input fingerprint (img patch mean): 0.594096
+  trans: [0.0058, 0.0093, 0.3283]
+  global_rot[0:3]: [0.6890, 0.1598, 0.1120]
+  fov_per_view[0]: 35.6990
+  mesh_scale: 0.0381
+  Mean pred 3D: [0.0039, 0.0115, 0.3326]
+  Mean GT 3D:  [0.0029, 0.0077, 0.2369]
+  Root rot magnitude: 176.78°
+
+=== Joint Scales for Sample 4 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0037     1.0012     1.0025       1.0025
+b_a_1                    1.2548     1.0079     0.9452       1.0693
+b_a_2                    1.1123     1.0005     0.9936       1.0354
+b_a_3                    1.0402     1.0035     1.0096       1.0178
+b_a_4                    1.0044     1.0028     1.0051       1.0041
+b_a_5                    1.0022     1.0016     1.0013       1.0017
+l_1_co_r                 1.2559     1.0672     0.9989       1.1073
+l_1_tr_r                 0.9554     1.2187     1.2282       1.1341
+l_1_fe_r                 0.8941     0.9523     1.4625       1.1030
+l_1_ti_r                 0.8139     0.9571     0.7868       0.8526
+l_1_ta_r                 0.8322     0.9284     0.8848       0.8818
+l_1_pt_r                 1.0015     1.0005     1.0002       1.0007
+l_2_co_r                 1.1536     1.0342     1.0139       1.0672
+l_2_tr_r                 0.9735     1.4087     1.1079       1.1633
+l_2_fe_r                 1.0004     0.8705     1.3015       1.0575
+l_2_ti_r                 1.0039     0.8653     0.7277       0.8656
+l_2_ta_r                 1.0098     0.8405     0.9185       0.9229
+l_2_pt_r                 1.0019     1.0000     1.0011       1.0010
+l_3_co_r                 1.2622     0.8662     1.3782       1.1688
+l_3_tr_r                 0.9978     1.3140     1.2315       1.1811
+l_3_fe_r                 0.8619     0.9673     1.2517       1.0270
+l_3_ti_r                 0.8294     0.9546     0.7204       0.8348
+l_3_ta_r                 0.8998     0.9108     1.0067       0.9391
+l_3_pt_r                 1.0031     1.0033     1.0011       1.0025
+w_1_r                    1.0010     1.0027     0.9993       1.0010
+w_2_r                    1.0018     1.0016     1.0016       1.0017
+l_1_co_l                 1.1200     1.2657     1.0964       1.1607
+l_1_tr_l                 0.9077     1.3219     1.0678       1.0991
+l_1_fe_l                 1.0086     0.8879     1.2875       1.0613
+l_1_ti_l                 0.8854     0.8527     0.8052       0.8477
+l_1_ta_l                 0.9204     0.8924     0.8911       0.9013
+l_1_pt_l                 1.0002     0.9985     1.0039       1.0009
+l_2_co_l                 1.2078     1.1384     1.1564       1.1675
+l_2_tr_l                 1.0071     1.3178     1.0539       1.1262
+l_2_fe_l                 0.9971     0.8331     1.4976       1.1092
+l_2_ti_l                 0.9960     0.8748     0.6790       0.8499
+l_2_ta_l                 0.9934     0.8262     0.8773       0.8989
+l_2_pt_l                 1.0024     0.9982     1.0011       1.0006
+l_3_co_l                 1.3647     0.8723     1.1398       1.1256
+l_3_tr_l                 1.1895     1.2519     1.2214       1.2209
+l_3_fe_l                 0.9510     0.9314     1.2070       1.0298
+l_3_ti_l                 0.8201     0.8803     0.8147       0.8384
+l_3_ta_l                 0.9504     0.9547     1.0010       0.9687
+l_3_pt_l                 1.0039     1.0016     1.0026       1.0027
+w_1_l                    0.9108     1.0216     1.0206       0.9843
+w_2_l                    1.0027     1.0019     1.0034       1.0027
+b_h                      1.1327     1.3118     1.0500       1.1648
+ma_r                     1.0014     1.0023     1.0015       1.0017
+an_1_r                   1.2912     1.0588     0.9897       1.1132
+an_2_r                   1.1864     1.0282     0.9926       1.0691
+an_3_r                   1.0033     1.0034     1.0044       1.0037
+ma_l                     1.0000     1.0030     1.0024       1.0018
+an_1_l                   1.4892     1.0445     0.9497       1.1612
+an_2_l                   1.2281     1.0247     1.0017       1.0848
+an_3_l                   1.0019     1.0017     1.0027       1.0021
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0262
+  Std scale (all joints, all axes): 0.1470
+  Min scale: 0.6790
+  Max scale: 1.4976
+  Joints with scale > 1.1: 25
+  Joints with scale < 0.9: 18
+======================================================================
+
+
+[Sample 4] Input fingerprint (img patch mean): 0.564680
+  trans: [-0.0029, -0.0051, 0.3172]
+  global_rot[0:3]: [-0.6690, -0.6830, 0.2207]
+  fov_per_view[0]: 35.4998
+  mesh_scale: 0.0552
+  Mean pred 3D: [-0.0022, -0.0072, 0.3229]
+  Mean GT 3D:  [-0.0026, -0.0059, 0.2474]
+  Root rot magnitude: 170.07°
+Generated single-view renders for 5 samples (epoch 349) in /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_349
+
+Epoch 350 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000202 / 0.000036
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000381 / 0.000392
+    ief_pose_delta_1    : 7.855214 / 7.849063
+    ief_pose_delta_2    : 12.813433 / 12.800850
+    joint_angle_regularization: 0.073724 / 0.078032
+    joint_limit_regularization: 0.000004 / 0.000002
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000040 / 0.000037
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.012166 / 0.012253
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 351 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000182 / 0.000030
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000381 / 0.000392
+    ief_pose_delta_1    : 7.840373 / 7.842904
+    ief_pose_delta_2    : 12.785638 / 12.803527
+    joint_angle_regularization: 0.077154 / 0.079897
+    joint_limit_regularization: 0.000003 / 0.000002
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000039 / 0.000033
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011774 / 0.012054
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0351.pth
+
+Epoch 352 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000161 / 0.000034
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000380 / 0.000390
+    ief_pose_delta_1    : 7.833818 / 7.829324
+    ief_pose_delta_2    : 12.819796 / 12.801082
+    joint_angle_regularization: 0.079449 / 0.080456
+    joint_limit_regularization: 0.000003 / 0.000002
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000036 / 0.000032
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.012008 / 0.011912
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 353 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000138 / 0.000031
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000382 / 0.000390
+    ief_pose_delta_1    : 7.827255 / 7.819711
+    ief_pose_delta_2    : 12.811402 / 12.804466
+    joint_angle_regularization: 0.081614 / 0.082168
+    joint_limit_regularization: 0.000003 / 0.000002
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000035 / 0.000031
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011772 / 0.011800
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0353.pth
+
+Epoch 354 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000142 / 0.000027
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000380 / 0.000389
+    ief_pose_delta_1    : 7.839312 / 7.801289
+    ief_pose_delta_2    : 12.820589 / 12.805349
+    joint_angle_regularization: 0.080359 / 0.083595
+    joint_limit_regularization: 0.000002 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000034 / 0.000029
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011821 / 0.011639
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 355 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000131 / 0.000023
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000378 / 0.000388
+    ief_pose_delta_1    : 7.827336 / 7.810295
+    ief_pose_delta_2    : 12.811107 / 12.809606
+    joint_angle_regularization: 0.082027 / 0.084370
+    joint_limit_regularization: 0.000002 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000032 / 0.000029
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011399 / 0.011445
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0355.pth
+
+Epoch 356 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000125 / 0.000027
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000379 / 0.000386
+    ief_pose_delta_1    : 7.818180 / 7.808413
+    ief_pose_delta_2    : 12.808402 / 12.818158
+    joint_angle_regularization: 0.083078 / 0.084226
+    joint_limit_regularization: 0.000002 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000032 / 0.000029
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.010911 / 0.011148
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 357 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000122 / 0.000029
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000376 / 0.000386
+    ief_pose_delta_1    : 7.787124 / 7.780988
+    ief_pose_delta_2    : 12.835349 / 12.819127
+    joint_angle_regularization: 0.084207 / 0.085906
+    joint_limit_regularization: 0.000003 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000032 / 0.000029
+    keypoint_3d         : 0.000001 / 0.000001
+    limb_scale_regularization: 0.011345 / 0.011071
+    limb_trans_regularization: 0.000001 / 0.000001
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0357.pth
+
+Epoch 358 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000136 / 0.000025
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000374 / 0.000386
+    ief_pose_delta_1    : 7.805266 / 7.793690
+    ief_pose_delta_2    : 12.861858 / 12.820937
+    joint_angle_regularization: 0.081141 / 0.086088
+    joint_limit_regularization: 0.000002 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000032 / 0.000028
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.011196 / 0.010921
+    limb_trans_regularization: 0.000001 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 359 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000120 / 0.000021
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000376 / 0.000384
+    ief_pose_delta_1    : 7.779160 / 7.782573
+    ief_pose_delta_2    : 12.817390 / 12.818055
+    joint_angle_regularization: 0.082632 / 0.086952
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000030 / 0.000028
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.010851 / 0.010632
+    limb_trans_regularization: 0.000001 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0359.pth
+
+=== Joint Scales for Multiview Sample 0 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0022     1.0022     1.0035       1.0026
+b_a_1                    1.0411     1.0012     0.8949       0.9791
+b_a_2                    0.9562     1.0012     0.9950       0.9841
+b_a_3                    0.9788     0.9986     0.9953       0.9909
+b_a_4                    1.0070     1.0051     1.0005       1.0042
+b_a_5                    1.0033     1.0045     1.0037       1.0038
+l_1_co_r                 1.3431     1.2374     1.0966       1.2257
+l_1_tr_r                 1.0336     1.4019     1.0774       1.1710
+l_1_fe_r                 0.9504     1.0271     1.4422       1.1399
+l_1_ti_r                 0.8799     0.9822     0.8343       0.8988
+l_1_ta_r                 0.9048     0.9686     0.9548       0.9427
+l_1_pt_r                 1.0029     1.0038     1.0019       1.0029
+l_2_co_r                 1.0913     1.2140     1.0602       1.1218
+l_2_tr_r                 0.9771     1.3087     1.1018       1.1292
+l_2_fe_r                 1.0220     0.9650     1.3891       1.1254
+l_2_ti_r                 1.0183     0.9001     0.9036       0.9406
+l_2_ta_r                 1.0124     0.9627     0.9643       0.9798
+l_2_pt_r                 1.0026     1.0054     1.0049       1.0043
+l_3_co_r                 1.2852     0.8424     1.1597       1.0958
+l_3_tr_r                 1.1587     1.3478     1.2924       1.2663
+l_3_fe_r                 1.0081     1.0573     1.2195       1.0950
+l_3_ti_r                 0.9279     0.9910     0.8751       0.9313
+l_3_ta_r                 0.9821     0.9927     0.9891       0.9879
+l_3_pt_r                 1.0021     1.0020     1.0030       1.0023
+w_1_r                    1.0028     1.0032     1.0036       1.0032
+w_2_r                    1.0035     1.0026     1.0033       1.0031
+l_1_co_l                 1.0889     1.2694     1.0528       1.1370
+l_1_tr_l                 0.9388     1.2030     1.0861       1.0759
+l_1_fe_l                 1.0095     1.0179     1.3470       1.1248
+l_1_ti_l                 0.8859     0.9583     0.8968       0.9137
+l_1_ta_l                 0.9737     0.9563     0.9340       0.9546
+l_1_pt_l                 1.0057     1.0056     1.0018       1.0043
+l_2_co_l                 1.1096     1.1962     1.1899       1.1652
+l_2_tr_l                 0.9820     1.2615     1.0980       1.1138
+l_2_fe_l                 1.0408     0.9190     1.5384       1.1661
+l_2_ti_l                 1.0181     0.8943     0.8090       0.9071
+l_2_ta_l                 1.0073     0.8729     0.9420       0.9407
+l_2_pt_l                 1.0030     0.9954     0.9996       0.9993
+l_3_co_l                 1.1220     0.8166     1.0833       1.0073
+l_3_tr_l                 0.9897     0.9985     1.2542       1.0808
+l_3_fe_l                 0.8818     0.8994     1.2509       1.0107
+l_3_ti_l                 0.9275     0.9391     0.9200       0.9289
+l_3_ta_l                 1.0355     0.9967     0.9941       1.0088
+l_3_pt_l                 1.0053     1.0036     1.0009       1.0032
+w_1_l                    0.9075     1.0139     1.0127       0.9781
+w_2_l                    1.0043     1.0044     1.0013       1.0033
+b_h                      1.3537     1.3241     1.1358       1.2712
+ma_r                     1.0024     1.0059     1.0000       1.0028
+an_1_r                   1.2594     1.0013     0.9952       1.0853
+an_2_r                   1.1651     0.9946     1.0098       1.0565
+an_3_r                   1.0020     1.0042     1.0035       1.0032
+ma_l                     1.0035     1.0036     1.0026       1.0032
+an_1_l                   1.2353     1.0790     1.0109       1.1084
+an_2_l                   1.1077     1.0459     0.9917       1.0484
+an_3_l                   1.0044     1.0032     1.0042       1.0039
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0389
+  Std scale (all joints, all axes): 0.1260
+  Min scale: 0.8090
+  Max scale: 1.5384
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 9
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 1 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0018     1.0016     1.0036       1.0024
+b_a_1                    1.0574     1.0106     0.8989       0.9890
+b_a_2                    0.9769     1.0049     0.9782       0.9867
+b_a_3                    0.9874     0.9968     0.9956       0.9933
+b_a_4                    1.0075     1.0062     1.0007       1.0048
+b_a_5                    1.0033     1.0044     1.0022       1.0033
+l_1_co_r                 1.1608     1.0886     1.1740       1.1411
+l_1_tr_r                 0.9327     1.1196     1.2592       1.1038
+l_1_fe_r                 0.9300     1.0199     1.4881       1.1460
+l_1_ti_r                 0.8786     0.9661     0.8344       0.8930
+l_1_ta_r                 0.9206     0.9574     0.9658       0.9479
+l_1_pt_r                 1.0027     1.0043     1.0015       1.0028
+l_2_co_r                 1.1045     1.2145     1.1166       1.1452
+l_2_tr_r                 0.9646     1.3106     1.0708       1.1153
+l_2_fe_r                 1.0548     0.9827     1.3987       1.1454
+l_2_ti_r                 1.0255     0.8971     0.9165       0.9464
+l_2_ta_r                 1.0120     0.9848     0.9607       0.9858
+l_2_pt_r                 1.0034     1.0043     1.0044       1.0040
+l_3_co_r                 1.2370     0.8627     1.1872       1.0956
+l_3_tr_r                 1.1399     1.3194     1.3086       1.2560
+l_3_fe_r                 1.0021     1.0515     1.2875       1.1137
+l_3_ti_r                 0.9624     0.9975     0.8982       0.9527
+l_3_ta_r                 0.9919     0.9969     0.9948       0.9945
+l_3_pt_r                 1.0015     1.0021     1.0034       1.0023
+w_1_r                    1.0014     1.0028     1.0023       1.0022
+w_2_r                    1.0027     1.0034     1.0022       1.0028
+l_1_co_l                 1.1186     1.4220     1.0300       1.1902
+l_1_tr_l                 0.9621     1.2977     1.0340       1.0979
+l_1_fe_l                 0.9600     1.0410     1.2531       1.0847
+l_1_ti_l                 0.8877     0.9640     0.8867       0.9128
+l_1_ta_l                 0.9838     0.9579     0.9409       0.9609
+l_1_pt_l                 1.0021     1.0038     1.0026       1.0028
+l_2_co_l                 1.1271     1.2821     1.1555       1.1882
+l_2_tr_l                 0.9810     1.2994     1.0416       1.1073
+l_2_fe_l                 1.0312     0.9452     1.4591       1.1452
+l_2_ti_l                 1.0048     0.9098     0.8183       0.9109
+l_2_ta_l                 1.0041     0.8817     0.9440       0.9433
+l_2_pt_l                 1.0033     0.9951     1.0002       0.9995
+l_3_co_l                 1.1746     0.7923     1.0878       1.0182
+l_3_tr_l                 1.0731     1.0018     1.2164       1.0971
+l_3_fe_l                 0.9518     0.9278     1.2897       1.0564
+l_3_ti_l                 0.9402     0.9254     0.9287       0.9315
+l_3_ta_l                 1.0528     0.9926     0.9945       1.0133
+l_3_pt_l                 1.0046     1.0027     1.0014       1.0029
+w_1_l                    0.8750     1.0151     1.0100       0.9667
+w_2_l                    1.0039     1.0039     1.0013       1.0030
+b_h                      1.4686     1.3266     1.1220       1.3057
+ma_r                     1.0037     1.0045     0.9993       1.0025
+an_1_r                   1.2689     1.0526     0.9645       1.0953
+an_2_r                   1.1127     1.0228     1.0082       1.0479
+an_3_r                   1.0022     1.0027     1.0045       1.0031
+ma_l                     1.0034     1.0025     1.0024       1.0028
+an_1_l                   1.2518     1.0498     1.0015       1.1010
+an_2_l                   1.1189     1.0236     0.9875       1.0433
+an_3_l                   1.0032     1.0027     1.0036       1.0032
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0403
+  Std scale (all joints, all axes): 0.1258
+  Min scale: 0.7923
+  Max scale: 1.4881
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 10
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 2 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0034     1.0029     1.0055       1.0039
+b_a_1                    1.0286     1.0111     0.9015       0.9804
+b_a_2                    0.9604     1.0023     0.9805       0.9811
+b_a_3                    0.9723     0.9991     1.0027       0.9914
+b_a_4                    1.0062     1.0057     1.0042       1.0054
+b_a_5                    1.0051     1.0063     1.0037       1.0051
+l_1_co_r                 1.2806     1.2246     1.0784       1.1946
+l_1_tr_r                 1.0435     1.3212     1.1103       1.1583
+l_1_fe_r                 0.9632     1.0494     1.4122       1.1416
+l_1_ti_r                 0.8706     0.9849     0.8436       0.8997
+l_1_ta_r                 0.9002     0.9721     0.9655       0.9460
+l_1_pt_r                 1.0039     1.0058     1.0031       1.0043
+l_2_co_r                 1.0936     1.2665     0.9530       1.1044
+l_2_tr_r                 0.9768     1.3568     1.0135       1.1157
+l_2_fe_r                 1.0489     0.9990     1.2999       1.1159
+l_2_ti_r                 1.0312     0.9153     0.8904       0.9456
+l_2_ta_r                 1.0162     0.9905     0.9600       0.9889
+l_2_pt_r                 1.0030     1.0062     1.0055       1.0049
+l_3_co_r                 1.1612     0.7585     1.2215       1.0471
+l_3_tr_r                 1.0440     1.1562     1.2924       1.1642
+l_3_fe_r                 0.9015     0.9655     1.3774       1.0815
+l_3_ti_r                 0.8716     0.9761     0.8871       0.9116
+l_3_ta_r                 0.9439     0.9780     0.9921       0.9713
+l_3_pt_r                 1.0040     1.0033     1.0041       1.0038
+w_1_r                    1.0033     1.0053     1.0037       1.0041
+w_2_r                    1.0046     1.0049     1.0041       1.0045
+l_1_co_l                 1.0834     1.3432     1.0022       1.1429
+l_1_tr_l                 0.9786     1.3004     1.0227       1.1006
+l_1_fe_l                 1.0007     1.0548     1.2826       1.1127
+l_1_ti_l                 0.8999     0.9553     0.9137       0.9230
+l_1_ta_l                 0.9797     0.9523     0.9452       0.9591
+l_1_pt_l                 1.0053     1.0052     1.0050       1.0052
+l_2_co_l                 1.0717     1.1465     1.2034       1.1405
+l_2_tr_l                 0.9815     1.1799     1.1270       1.0961
+l_2_fe_l                 1.0368     0.9024     1.4686       1.1359
+l_2_ti_l                 1.0140     0.8913     0.8147       0.9067
+l_2_ta_l                 1.0071     0.8728     0.9381       0.9393
+l_2_pt_l                 1.0046     0.9969     1.0014       1.0010
+l_3_co_l                 1.2842     0.8840     1.0346       1.0676
+l_3_tr_l                 1.1974     1.1335     1.2196       1.1835
+l_3_fe_l                 1.0557     1.0219     1.1699       1.0825
+l_3_ti_l                 1.0158     0.9666     0.9388       0.9737
+l_3_ta_l                 1.0893     1.0317     0.9946       1.0385
+l_3_pt_l                 1.0076     1.0054     1.0029       1.0053
+w_1_l                    0.8947     1.0358     1.0066       0.9791
+w_2_l                    1.0052     1.0054     1.0031       1.0046
+b_h                      1.3651     1.3472     1.0959       1.2694
+ma_r                     1.0039     1.0058     1.0021       1.0039
+an_1_r                   1.2253     1.0295     0.9710       1.0753
+an_2_r                   1.1177     1.0080     1.0089       1.0449
+an_3_r                   1.0041     1.0050     1.0058       1.0050
+ma_l                     1.0038     1.0041     1.0045       1.0041
+an_1_l                   1.2113     1.0638     1.0149       1.0966
+an_2_l                   1.1015     1.0291     0.9961       1.0422
+an_3_l                   1.0047     1.0036     1.0057       1.0047
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0385
+  Std scale (all joints, all axes): 0.1204
+  Min scale: 0.7585
+  Max scale: 1.4686
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 9
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 3 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0035     1.0049     1.0053       1.0046
+b_a_1                    1.0405     0.9957     0.8842       0.9735
+b_a_2                    0.9517     0.9996     0.9896       0.9803
+b_a_3                    0.9720     1.0008     1.0036       0.9921
+b_a_4                    1.0085     1.0072     1.0038       1.0065
+b_a_5                    1.0050     1.0064     1.0053       1.0056
+l_1_co_r                 1.2205     1.2280     1.0917       1.1801
+l_1_tr_r                 1.0013     1.2188     1.1588       1.1263
+l_1_fe_r                 0.9532     1.0679     1.4649       1.1620
+l_1_ti_r                 0.8405     0.9865     0.8619       0.8963
+l_1_ta_r                 0.8953     0.9934     0.9847       0.9578
+l_1_pt_r                 1.0031     1.0069     1.0043       1.0048
+l_2_co_r                 1.1650     1.1546     1.0298       1.1164
+l_2_tr_r                 0.9939     1.2713     1.0256       1.0969
+l_2_fe_r                 1.0616     0.9288     1.3853       1.1252
+l_2_ti_r                 1.0325     0.8718     0.8889       0.9311
+l_2_ta_r                 1.0118     0.9728     0.9417       0.9754
+l_2_pt_r                 1.0045     1.0075     1.0068       1.0063
+l_3_co_r                 1.1515     0.8218     1.2191       1.0641
+l_3_tr_r                 1.0564     1.2377     1.2706       1.1882
+l_3_fe_r                 0.9291     1.0296     1.4128       1.1238
+l_3_ti_r                 0.9202     1.0092     0.9005       0.9433
+l_3_ta_r                 0.9741     0.9951     0.9885       0.9859
+l_3_pt_r                 1.0035     1.0052     1.0054       1.0047
+w_1_r                    1.0037     1.0054     1.0052       1.0047
+w_2_r                    1.0043     1.0055     1.0067       1.0055
+l_1_co_l                 1.0992     1.3778     1.0315       1.1695
+l_1_tr_l                 0.9523     1.3018     1.0214       1.0918
+l_1_fe_l                 1.0009     1.0574     1.2679       1.1087
+l_1_ti_l                 0.8744     0.9802     0.8869       0.9138
+l_1_ta_l                 0.9796     0.9663     0.9335       0.9598
+l_1_pt_l                 1.0036     1.0072     1.0040       1.0049
+l_2_co_l                 1.1019     1.2265     1.1815       1.1700
+l_2_tr_l                 0.9988     1.2487     1.0840       1.1105
+l_2_fe_l                 1.0346     0.9222     1.4665       1.1411
+l_2_ti_l                 0.9991     0.8988     0.8189       0.9056
+l_2_ta_l                 1.0096     0.8843     0.9440       0.9460
+l_2_pt_l                 1.0048     0.9979     1.0016       1.0014
+l_3_co_l                 1.3049     0.8219     1.0328       1.0532
+l_3_tr_l                 1.2070     1.1035     1.1765       1.1623
+l_3_fe_l                 1.0748     1.0161     1.3015       1.1308
+l_3_ti_l                 0.9791     0.9642     0.9216       0.9550
+l_3_ta_l                 1.0743     1.0181     0.9890       1.0271
+l_3_pt_l                 1.0080     1.0059     1.0039       1.0060
+w_1_l                    0.9100     1.0355     1.0166       0.9874
+w_2_l                    1.0066     1.0048     1.0040       1.0051
+b_h                      1.3961     1.3003     1.0974       1.2646
+ma_r                     1.0054     1.0060     1.0023       1.0046
+an_1_r                   1.2636     1.0499     0.9792       1.0976
+an_2_r                   1.1402     1.0204     1.0002       1.0536
+an_3_r                   1.0030     1.0045     1.0057       1.0044
+ma_l                     1.0056     1.0041     1.0046       1.0048
+an_1_l                   1.2638     1.0368     1.0066       1.1024
+an_2_l                   1.1346     1.0197     0.9912       1.0485
+an_3_l                   1.0047     1.0046     1.0056       1.0050
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0418
+  Std scale (all joints, all axes): 0.1234
+  Min scale: 0.8189
+  Max scale: 1.4665
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 9
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 4 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0017     0.9995     1.0007       1.0006
+b_a_1                    1.2272     1.0045     0.9563       1.0627
+b_a_2                    1.1102     0.9964     0.9959       1.0342
+b_a_3                    1.0476     1.0032     1.0127       1.0212
+b_a_4                    1.0020     0.9996     1.0037       1.0018
+b_a_5                    1.0003     0.9995     0.9983       0.9994
+l_1_co_r                 1.1866     1.0835     0.9345       1.0682
+l_1_tr_r                 0.9704     1.2054     1.2412       1.1390
+l_1_fe_r                 0.9336     0.8974     1.4052       1.0787
+l_1_ti_r                 0.8084     0.9570     0.7480       0.8378
+l_1_ta_r                 0.8589     0.9186     0.9354       0.9043
+l_1_pt_r                 0.9991     0.9988     0.9977       0.9985
+l_2_co_r                 1.0704     0.9832     0.9248       0.9928
+l_2_tr_r                 0.9914     1.4158     1.0352       1.1474
+l_2_fe_r                 1.0037     0.8518     1.3618       1.0724
+l_2_ti_r                 1.0049     0.8132     0.7339       0.8507
+l_2_ta_r                 1.0038     0.8451     0.9236       0.9242
+l_2_pt_r                 0.9999     0.9977     0.9970       0.9982
+l_3_co_r                 1.1800     0.9121     1.4724       1.1881
+l_3_tr_r                 1.0315     1.2892     1.2793       1.2000
+l_3_fe_r                 0.8322     0.9541     1.1513       0.9792
+l_3_ti_r                 0.8277     0.8454     0.7739       0.8157
+l_3_ta_r                 0.9291     0.8893     1.0133       0.9439
+l_3_pt_r                 1.0014     0.9999     0.9990       1.0001
+w_1_r                    0.9975     1.0001     0.9980       0.9985
+w_2_r                    0.9988     1.0003     0.9974       0.9988
+l_1_co_l                 1.1035     1.2885     0.9986       1.1302
+l_1_tr_l                 0.9596     1.3291     1.0843       1.1243
+l_1_fe_l                 0.9583     0.8914     1.2203       1.0233
+l_1_ti_l                 0.8856     0.8649     0.7829       0.8445
+l_1_ta_l                 0.9190     0.9016     0.9050       0.9085
+l_1_pt_l                 0.9979     0.9954     1.0024       0.9986
+l_2_co_l                 1.0613     1.0823     1.1637       1.1024
+l_2_tr_l                 0.9956     1.3035     1.0451       1.1147
+l_2_fe_l                 0.9918     0.8574     1.4368       1.0953
+l_2_ti_l                 0.9998     0.8178     0.6692       0.8290
+l_2_ta_l                 0.9926     0.8071     0.9053       0.9017
+l_2_pt_l                 1.0001     0.9945     0.9993       0.9980
+l_3_co_l                 1.3520     0.9036     1.1005       1.1187
+l_3_tr_l                 1.2317     1.2902     1.2214       1.2478
+l_3_fe_l                 0.8749     0.9529     1.1305       0.9861
+l_3_ti_l                 0.8282     0.8853     0.8227       0.8454
+l_3_ta_l                 1.0032     0.9596     0.9966       0.9865
+l_3_pt_l                 1.0020     1.0008     0.9994       1.0008
+w_1_l                    0.9558     1.0123     1.0092       0.9924
+w_2_l                    0.9991     0.9990     1.0010       0.9997
+b_h                      1.1948     1.2591     1.0393       1.1644
+ma_r                     0.9989     1.0005     0.9988       0.9994
+an_1_r                   1.2380     1.0299     0.9970       1.0883
+an_2_r                   1.1313     1.0196     1.0051       1.0520
+an_3_r                   1.0013     0.9999     1.0021       1.0011
+ma_l                     0.9981     1.0004     1.0002       0.9996
+an_1_l                   1.4242     1.0420     0.9592       1.1418
+an_2_l                   1.2039     1.0037     1.0145       1.0740
+an_3_l                   0.9993     0.9988     0.9990       0.9990
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0186
+  Std scale (all joints, all axes): 0.1415
+  Min scale: 0.6692
+  Max scale: 1.4724
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 16
+======================================================================
+
+Generated 5 multi-view visualizations for epoch 359 in /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/visualizations/epoch_359
+
+=== Joint Scales for Sample 0 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0022     1.0022     1.0035       1.0026
+b_a_1                    1.0411     1.0012     0.8949       0.9791
+b_a_2                    0.9562     1.0012     0.9950       0.9841
+b_a_3                    0.9788     0.9986     0.9953       0.9909
+b_a_4                    1.0070     1.0051     1.0005       1.0042
+b_a_5                    1.0033     1.0045     1.0037       1.0038
+l_1_co_r                 1.3431     1.2374     1.0966       1.2257
+l_1_tr_r                 1.0336     1.4019     1.0774       1.1710
+l_1_fe_r                 0.9504     1.0271     1.4422       1.1399
+l_1_ti_r                 0.8799     0.9822     0.8343       0.8988
+l_1_ta_r                 0.9048     0.9686     0.9548       0.9427
+l_1_pt_r                 1.0029     1.0038     1.0019       1.0029
+l_2_co_r                 1.0913     1.2140     1.0602       1.1218
+l_2_tr_r                 0.9771     1.3087     1.1018       1.1292
+l_2_fe_r                 1.0220     0.9650     1.3891       1.1254
+l_2_ti_r                 1.0183     0.9001     0.9036       0.9406
+l_2_ta_r                 1.0124     0.9627     0.9643       0.9798
+l_2_pt_r                 1.0026     1.0054     1.0049       1.0043
+l_3_co_r                 1.2852     0.8424     1.1597       1.0958
+l_3_tr_r                 1.1587     1.3478     1.2924       1.2663
+l_3_fe_r                 1.0081     1.0573     1.2195       1.0950
+l_3_ti_r                 0.9279     0.9910     0.8751       0.9313
+l_3_ta_r                 0.9821     0.9927     0.9891       0.9879
+l_3_pt_r                 1.0021     1.0020     1.0030       1.0023
+w_1_r                    1.0028     1.0032     1.0036       1.0032
+w_2_r                    1.0035     1.0026     1.0033       1.0031
+l_1_co_l                 1.0889     1.2694     1.0528       1.1370
+l_1_tr_l                 0.9388     1.2030     1.0861       1.0759
+l_1_fe_l                 1.0095     1.0179     1.3470       1.1248
+l_1_ti_l                 0.8859     0.9583     0.8968       0.9137
+l_1_ta_l                 0.9737     0.9563     0.9340       0.9546
+l_1_pt_l                 1.0057     1.0056     1.0018       1.0043
+l_2_co_l                 1.1096     1.1962     1.1899       1.1652
+l_2_tr_l                 0.9820     1.2615     1.0980       1.1138
+l_2_fe_l                 1.0408     0.9190     1.5384       1.1661
+l_2_ti_l                 1.0181     0.8943     0.8090       0.9071
+l_2_ta_l                 1.0073     0.8729     0.9420       0.9407
+l_2_pt_l                 1.0030     0.9954     0.9996       0.9993
+l_3_co_l                 1.1220     0.8166     1.0833       1.0073
+l_3_tr_l                 0.9897     0.9985     1.2542       1.0808
+l_3_fe_l                 0.8818     0.8994     1.2509       1.0107
+l_3_ti_l                 0.9275     0.9391     0.9200       0.9289
+l_3_ta_l                 1.0355     0.9967     0.9941       1.0088
+l_3_pt_l                 1.0053     1.0036     1.0009       1.0032
+w_1_l                    0.9075     1.0139     1.0127       0.9781
+w_2_l                    1.0043     1.0044     1.0013       1.0033
+b_h                      1.3537     1.3241     1.1358       1.2712
+ma_r                     1.0024     1.0059     1.0000       1.0028
+an_1_r                   1.2594     1.0013     0.9952       1.0853
+an_2_r                   1.1651     0.9946     1.0098       1.0565
+an_3_r                   1.0020     1.0042     1.0035       1.0032
+ma_l                     1.0035     1.0036     1.0026       1.0032
+an_1_l                   1.2353     1.0790     1.0109       1.1084
+an_2_l                   1.1077     1.0459     0.9917       1.0484
+an_3_l                   1.0044     1.0032     1.0042       1.0039
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0389
+  Std scale (all joints, all axes): 0.1260
+  Min scale: 0.8090
+  Max scale: 1.5384
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 9
+======================================================================
+
+
+[Visualization] Using model renderer image size: 224
+  Original image size: (512, 512, 3)
+  Model renderer size: 224
+  This ensures keypoint normalization matches training
+
+[Sample 0] Input fingerprint (img patch mean): 0.598290
+  trans: [0.0043, 0.0142, 0.3251]
+  global_rot[0:3]: [-0.1009, -0.6481, 0.1610]
+  fov_per_view[0]: 35.6996
+  mesh_scale: 0.0401
+
+[Camera Debug] View 0:
+  FOV: 35.70 degrees
+  cam_trans: [-0.01403449  0.23938423 -0.06721189]
+  cam_rot (first row): [-0.03390164  0.7629434   0.64530873]
+  Renderer image size: 224
+  Body trans: [0.00426459 0.01415828 0.3250798 ]
+  Betas (first 3): [3.657304   0.64530474 0.8715055 ]
+  Camera R shape: torch.Size([1, 3, 3])
+  Camera T shape: torch.Size([1, 3])
+  Camera fov shape: torch.Size([1])
+
+[GT Cam+3D Sanity] view 0:
+  GT fov_y: 35.67 deg
+  ||GT cam_T||: 0.249  (should be O(0.1-10) after scaling, not O(100-1000))
+  max|GT kp3d|: 0.345 (same unit scale as SMAL verts/joints)
+  mean reproj err (GT 3D + GT cam -> 2D): 0.13 px @ 224px
+  Exported mesh to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_359/sample_000_view_00_epoch_359.obj
+  Mesh vertices: torch.Size([1, 3020, 3]), range: [-0.035, 0.345]
+  Mesh faces: torch.Size([6019, 3])
+  Mean pred 3D: [0.0036, 0.0132, 0.3304]
+  Mean GT 3D:  [0.0026, 0.0098, 0.2538]
+  Root rot magnitude: 168.51°
+  Generated 3D keypoint visualization: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_359/sample_000_epoch_359_3d_keypoints.png
+  Mean 3D error: 0.0016, Max error: 0.0040
+  Plotted joints: 42, Suppressed: 13
+
+=== Joint Scales for Sample 1 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0018     1.0016     1.0036       1.0024
+b_a_1                    1.0574     1.0106     0.8989       0.9890
+b_a_2                    0.9769     1.0049     0.9782       0.9867
+b_a_3                    0.9874     0.9968     0.9956       0.9933
+b_a_4                    1.0075     1.0062     1.0007       1.0048
+b_a_5                    1.0033     1.0044     1.0022       1.0033
+l_1_co_r                 1.1608     1.0886     1.1740       1.1411
+l_1_tr_r                 0.9327     1.1196     1.2592       1.1038
+l_1_fe_r                 0.9300     1.0199     1.4881       1.1460
+l_1_ti_r                 0.8786     0.9661     0.8344       0.8930
+l_1_ta_r                 0.9206     0.9574     0.9658       0.9479
+l_1_pt_r                 1.0027     1.0043     1.0015       1.0028
+l_2_co_r                 1.1045     1.2145     1.1166       1.1452
+l_2_tr_r                 0.9646     1.3106     1.0708       1.1153
+l_2_fe_r                 1.0548     0.9827     1.3987       1.1454
+l_2_ti_r                 1.0255     0.8971     0.9165       0.9464
+l_2_ta_r                 1.0120     0.9848     0.9607       0.9858
+l_2_pt_r                 1.0034     1.0043     1.0044       1.0040
+l_3_co_r                 1.2370     0.8627     1.1872       1.0956
+l_3_tr_r                 1.1399     1.3194     1.3086       1.2560
+l_3_fe_r                 1.0021     1.0515     1.2875       1.1137
+l_3_ti_r                 0.9624     0.9975     0.8982       0.9527
+l_3_ta_r                 0.9919     0.9969     0.9948       0.9945
+l_3_pt_r                 1.0015     1.0021     1.0034       1.0023
+w_1_r                    1.0014     1.0028     1.0023       1.0022
+w_2_r                    1.0027     1.0034     1.0022       1.0028
+l_1_co_l                 1.1186     1.4220     1.0300       1.1902
+l_1_tr_l                 0.9621     1.2977     1.0340       1.0979
+l_1_fe_l                 0.9600     1.0410     1.2531       1.0847
+l_1_ti_l                 0.8877     0.9640     0.8867       0.9128
+l_1_ta_l                 0.9838     0.9579     0.9409       0.9609
+l_1_pt_l                 1.0021     1.0038     1.0026       1.0028
+l_2_co_l                 1.1271     1.2821     1.1555       1.1882
+l_2_tr_l                 0.9810     1.2994     1.0416       1.1073
+l_2_fe_l                 1.0312     0.9452     1.4591       1.1452
+l_2_ti_l                 1.0048     0.9098     0.8183       0.9109
+l_2_ta_l                 1.0041     0.8817     0.9440       0.9433
+l_2_pt_l                 1.0033     0.9951     1.0002       0.9995
+l_3_co_l                 1.1746     0.7923     1.0878       1.0182
+l_3_tr_l                 1.0731     1.0018     1.2164       1.0971
+l_3_fe_l                 0.9518     0.9278     1.2897       1.0564
+l_3_ti_l                 0.9402     0.9254     0.9287       0.9315
+l_3_ta_l                 1.0528     0.9926     0.9945       1.0133
+l_3_pt_l                 1.0046     1.0027     1.0014       1.0029
+w_1_l                    0.8750     1.0151     1.0100       0.9667
+w_2_l                    1.0039     1.0039     1.0013       1.0030
+b_h                      1.4686     1.3266     1.1220       1.3057
+ma_r                     1.0037     1.0045     0.9993       1.0025
+an_1_r                   1.2689     1.0526     0.9645       1.0953
+an_2_r                   1.1127     1.0228     1.0082       1.0479
+an_3_r                   1.0022     1.0027     1.0045       1.0031
+ma_l                     1.0034     1.0025     1.0024       1.0028
+an_1_l                   1.2518     1.0498     1.0015       1.1010
+an_2_l                   1.1189     1.0236     0.9875       1.0433
+an_3_l                   1.0032     1.0027     1.0036       1.0032
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0403
+  Std scale (all joints, all axes): 0.1258
+  Min scale: 0.7923
+  Max scale: 1.4881
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 10
+======================================================================
+
+
+[Sample 1] Input fingerprint (img patch mean): 0.354034
+  trans: [0.0037, 0.0075, 0.3262]
+  global_rot[0:3]: [-0.6594, -0.0620, 0.1787]
+  fov_per_view[0]: 35.6993
+  mesh_scale: 0.0398
+  Mean pred 3D: [0.0034, 0.0065, 0.3318]
+  Mean GT 3D:  [0.0020, 0.0047, 0.2424]
+  Root rot magnitude: 165.19°
+
+=== Joint Scales for Sample 2 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0034     1.0029     1.0055       1.0039
+b_a_1                    1.0286     1.0111     0.9015       0.9804
+b_a_2                    0.9604     1.0023     0.9805       0.9811
+b_a_3                    0.9723     0.9991     1.0027       0.9914
+b_a_4                    1.0062     1.0057     1.0042       1.0054
+b_a_5                    1.0051     1.0063     1.0037       1.0051
+l_1_co_r                 1.2806     1.2246     1.0784       1.1946
+l_1_tr_r                 1.0435     1.3212     1.1103       1.1583
+l_1_fe_r                 0.9632     1.0494     1.4122       1.1416
+l_1_ti_r                 0.8706     0.9849     0.8436       0.8997
+l_1_ta_r                 0.9002     0.9721     0.9655       0.9460
+l_1_pt_r                 1.0039     1.0058     1.0031       1.0043
+l_2_co_r                 1.0936     1.2665     0.9530       1.1044
+l_2_tr_r                 0.9768     1.3568     1.0135       1.1157
+l_2_fe_r                 1.0489     0.9990     1.2999       1.1159
+l_2_ti_r                 1.0312     0.9153     0.8904       0.9456
+l_2_ta_r                 1.0162     0.9905     0.9600       0.9889
+l_2_pt_r                 1.0030     1.0062     1.0055       1.0049
+l_3_co_r                 1.1612     0.7585     1.2215       1.0471
+l_3_tr_r                 1.0440     1.1562     1.2924       1.1642
+l_3_fe_r                 0.9015     0.9655     1.3774       1.0815
+l_3_ti_r                 0.8716     0.9761     0.8871       0.9116
+l_3_ta_r                 0.9439     0.9780     0.9921       0.9713
+l_3_pt_r                 1.0040     1.0033     1.0041       1.0038
+w_1_r                    1.0033     1.0053     1.0037       1.0041
+w_2_r                    1.0046     1.0049     1.0041       1.0045
+l_1_co_l                 1.0834     1.3432     1.0022       1.1429
+l_1_tr_l                 0.9786     1.3004     1.0227       1.1006
+l_1_fe_l                 1.0007     1.0548     1.2826       1.1127
+l_1_ti_l                 0.8999     0.9553     0.9137       0.9230
+l_1_ta_l                 0.9797     0.9523     0.9452       0.9591
+l_1_pt_l                 1.0053     1.0052     1.0050       1.0052
+l_2_co_l                 1.0717     1.1465     1.2034       1.1405
+l_2_tr_l                 0.9815     1.1799     1.1270       1.0961
+l_2_fe_l                 1.0368     0.9024     1.4686       1.1359
+l_2_ti_l                 1.0140     0.8913     0.8147       0.9067
+l_2_ta_l                 1.0071     0.8728     0.9381       0.9393
+l_2_pt_l                 1.0046     0.9969     1.0014       1.0010
+l_3_co_l                 1.2842     0.8840     1.0346       1.0676
+l_3_tr_l                 1.1974     1.1335     1.2196       1.1835
+l_3_fe_l                 1.0557     1.0219     1.1699       1.0825
+l_3_ti_l                 1.0158     0.9666     0.9388       0.9737
+l_3_ta_l                 1.0893     1.0317     0.9946       1.0385
+l_3_pt_l                 1.0076     1.0054     1.0029       1.0053
+w_1_l                    0.8947     1.0358     1.0066       0.9791
+w_2_l                    1.0052     1.0054     1.0031       1.0046
+b_h                      1.3651     1.3472     1.0959       1.2694
+ma_r                     1.0039     1.0058     1.0021       1.0039
+an_1_r                   1.2253     1.0295     0.9710       1.0753
+an_2_r                   1.1177     1.0080     1.0089       1.0449
+an_3_r                   1.0041     1.0050     1.0058       1.0050
+ma_l                     1.0038     1.0041     1.0045       1.0041
+an_1_l                   1.2113     1.0638     1.0149       1.0966
+an_2_l                   1.1015     1.0291     0.9961       1.0422
+an_3_l                   1.0047     1.0036     1.0057       1.0047
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0385
+  Std scale (all joints, all axes): 0.1204
+  Min scale: 0.7585
+  Max scale: 1.4686
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 9
+======================================================================
+
+
+[Sample 2] Input fingerprint (img patch mean): 0.592601
+  trans: [0.0067, 0.0108, 0.3265]
+  global_rot[0:3]: [-0.6393, -0.0484, 0.1721]
+  fov_per_view[0]: 35.6996
+  mesh_scale: 0.0411
+  Mean pred 3D: [0.0053, 0.0098, 0.3315]
+  Mean GT 3D:  [0.0038, 0.0074, 0.2543]
+  Root rot magnitude: 165.22°
+
+=== Joint Scales for Sample 3 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0035     1.0049     1.0053       1.0046
+b_a_1                    1.0405     0.9957     0.8842       0.9735
+b_a_2                    0.9517     0.9996     0.9896       0.9803
+b_a_3                    0.9720     1.0008     1.0036       0.9921
+b_a_4                    1.0085     1.0072     1.0038       1.0065
+b_a_5                    1.0050     1.0064     1.0053       1.0056
+l_1_co_r                 1.2205     1.2280     1.0917       1.1801
+l_1_tr_r                 1.0013     1.2188     1.1588       1.1263
+l_1_fe_r                 0.9532     1.0679     1.4649       1.1620
+l_1_ti_r                 0.8405     0.9865     0.8619       0.8963
+l_1_ta_r                 0.8953     0.9934     0.9847       0.9578
+l_1_pt_r                 1.0031     1.0069     1.0043       1.0048
+l_2_co_r                 1.1650     1.1546     1.0298       1.1164
+l_2_tr_r                 0.9939     1.2713     1.0256       1.0969
+l_2_fe_r                 1.0616     0.9288     1.3853       1.1252
+l_2_ti_r                 1.0325     0.8718     0.8889       0.9311
+l_2_ta_r                 1.0118     0.9728     0.9417       0.9754
+l_2_pt_r                 1.0045     1.0075     1.0068       1.0063
+l_3_co_r                 1.1515     0.8218     1.2191       1.0641
+l_3_tr_r                 1.0564     1.2377     1.2706       1.1882
+l_3_fe_r                 0.9291     1.0296     1.4128       1.1238
+l_3_ti_r                 0.9202     1.0092     0.9005       0.9433
+l_3_ta_r                 0.9741     0.9951     0.9885       0.9859
+l_3_pt_r                 1.0035     1.0052     1.0054       1.0047
+w_1_r                    1.0037     1.0054     1.0052       1.0047
+w_2_r                    1.0043     1.0055     1.0067       1.0055
+l_1_co_l                 1.0992     1.3778     1.0315       1.1695
+l_1_tr_l                 0.9523     1.3018     1.0214       1.0918
+l_1_fe_l                 1.0009     1.0574     1.2679       1.1087
+l_1_ti_l                 0.8744     0.9802     0.8869       0.9138
+l_1_ta_l                 0.9796     0.9663     0.9335       0.9598
+l_1_pt_l                 1.0036     1.0072     1.0040       1.0049
+l_2_co_l                 1.1019     1.2265     1.1815       1.1700
+l_2_tr_l                 0.9988     1.2487     1.0840       1.1105
+l_2_fe_l                 1.0346     0.9222     1.4665       1.1411
+l_2_ti_l                 0.9991     0.8988     0.8189       0.9056
+l_2_ta_l                 1.0096     0.8843     0.9440       0.9460
+l_2_pt_l                 1.0048     0.9979     1.0016       1.0014
+l_3_co_l                 1.3049     0.8219     1.0328       1.0532
+l_3_tr_l                 1.2070     1.1035     1.1765       1.1623
+l_3_fe_l                 1.0748     1.0161     1.3015       1.1308
+l_3_ti_l                 0.9791     0.9642     0.9216       0.9550
+l_3_ta_l                 1.0743     1.0181     0.9890       1.0271
+l_3_pt_l                 1.0080     1.0059     1.0039       1.0060
+w_1_l                    0.9100     1.0355     1.0166       0.9874
+w_2_l                    1.0066     1.0048     1.0040       1.0051
+b_h                      1.3961     1.3003     1.0974       1.2646
+ma_r                     1.0054     1.0060     1.0023       1.0046
+an_1_r                   1.2636     1.0499     0.9792       1.0976
+an_2_r                   1.1402     1.0204     1.0002       1.0536
+an_3_r                   1.0030     1.0045     1.0057       1.0044
+ma_l                     1.0056     1.0041     1.0046       1.0048
+an_1_l                   1.2638     1.0368     1.0066       1.1024
+an_2_l                   1.1346     1.0197     0.9912       1.0485
+an_3_l                   1.0047     1.0046     1.0056       1.0050
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0418
+  Std scale (all joints, all axes): 0.1234
+  Min scale: 0.8189
+  Max scale: 1.4665
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 9
+======================================================================
+
+
+[Sample 3] Input fingerprint (img patch mean): 0.594096
+  trans: [0.0060, 0.0095, 0.3277]
+  global_rot[0:3]: [0.6822, 0.1729, 0.1078]
+  fov_per_view[0]: 35.6995
+  mesh_scale: 0.0391
+  Mean pred 3D: [0.0043, 0.0116, 0.3324]
+  Mean GT 3D:  [0.0029, 0.0077, 0.2369]
+  Root rot magnitude: 177.87°
+
+=== Joint Scales for Sample 4 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0017     0.9995     1.0007       1.0006
+b_a_1                    1.2272     1.0045     0.9563       1.0627
+b_a_2                    1.1102     0.9964     0.9959       1.0342
+b_a_3                    1.0476     1.0032     1.0127       1.0212
+b_a_4                    1.0020     0.9996     1.0037       1.0018
+b_a_5                    1.0003     0.9995     0.9983       0.9994
+l_1_co_r                 1.1866     1.0835     0.9345       1.0682
+l_1_tr_r                 0.9704     1.2054     1.2412       1.1390
+l_1_fe_r                 0.9336     0.8974     1.4052       1.0787
+l_1_ti_r                 0.8084     0.9570     0.7480       0.8378
+l_1_ta_r                 0.8589     0.9186     0.9354       0.9043
+l_1_pt_r                 0.9991     0.9988     0.9977       0.9985
+l_2_co_r                 1.0704     0.9832     0.9248       0.9928
+l_2_tr_r                 0.9914     1.4158     1.0352       1.1474
+l_2_fe_r                 1.0037     0.8518     1.3618       1.0724
+l_2_ti_r                 1.0049     0.8132     0.7339       0.8507
+l_2_ta_r                 1.0038     0.8451     0.9236       0.9242
+l_2_pt_r                 0.9999     0.9977     0.9970       0.9982
+l_3_co_r                 1.1800     0.9121     1.4724       1.1881
+l_3_tr_r                 1.0315     1.2892     1.2793       1.2000
+l_3_fe_r                 0.8322     0.9541     1.1513       0.9792
+l_3_ti_r                 0.8277     0.8454     0.7739       0.8157
+l_3_ta_r                 0.9291     0.8893     1.0133       0.9439
+l_3_pt_r                 1.0014     0.9999     0.9990       1.0001
+w_1_r                    0.9975     1.0001     0.9980       0.9985
+w_2_r                    0.9988     1.0003     0.9974       0.9988
+l_1_co_l                 1.1035     1.2885     0.9986       1.1302
+l_1_tr_l                 0.9596     1.3291     1.0843       1.1243
+l_1_fe_l                 0.9583     0.8914     1.2203       1.0233
+l_1_ti_l                 0.8856     0.8649     0.7829       0.8445
+l_1_ta_l                 0.9190     0.9016     0.9050       0.9085
+l_1_pt_l                 0.9979     0.9954     1.0024       0.9986
+l_2_co_l                 1.0613     1.0823     1.1637       1.1024
+l_2_tr_l                 0.9956     1.3035     1.0451       1.1147
+l_2_fe_l                 0.9918     0.8574     1.4368       1.0953
+l_2_ti_l                 0.9998     0.8178     0.6692       0.8290
+l_2_ta_l                 0.9926     0.8071     0.9053       0.9017
+l_2_pt_l                 1.0001     0.9945     0.9993       0.9980
+l_3_co_l                 1.3520     0.9036     1.1005       1.1187
+l_3_tr_l                 1.2317     1.2902     1.2214       1.2478
+l_3_fe_l                 0.8749     0.9529     1.1305       0.9861
+l_3_ti_l                 0.8282     0.8853     0.8227       0.8454
+l_3_ta_l                 1.0032     0.9596     0.9966       0.9865
+l_3_pt_l                 1.0020     1.0008     0.9994       1.0008
+w_1_l                    0.9558     1.0123     1.0092       0.9924
+w_2_l                    0.9991     0.9990     1.0010       0.9997
+b_h                      1.1948     1.2591     1.0393       1.1644
+ma_r                     0.9989     1.0005     0.9988       0.9994
+an_1_r                   1.2380     1.0299     0.9970       1.0883
+an_2_r                   1.1313     1.0196     1.0051       1.0520
+an_3_r                   1.0013     0.9999     1.0021       1.0011
+ma_l                     0.9981     1.0004     1.0002       0.9996
+an_1_l                   1.4242     1.0420     0.9592       1.1418
+an_2_l                   1.2039     1.0037     1.0145       1.0740
+an_3_l                   0.9993     0.9988     0.9990       0.9990
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0186
+  Std scale (all joints, all axes): 0.1415
+  Min scale: 0.6692
+  Max scale: 1.4724
+  Joints with scale > 1.1: 24
+  Joints with scale < 0.9: 16
+======================================================================
+
+
+[Sample 4] Input fingerprint (img patch mean): 0.564680
+  trans: [-0.0028, -0.0050, 0.3166]
+  global_rot[0:3]: [-0.6610, -0.6960, 0.2268]
+  fov_per_view[0]: 35.4988
+  mesh_scale: 0.0559
+  Mean pred 3D: [-0.0023, -0.0072, 0.3226]
+  Mean GT 3D:  [-0.0026, -0.0059, 0.2474]
+  Root rot magnitude: 169.89°
+Generated single-view renders for 5 samples (epoch 359) in /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_359
+
+Epoch 360 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000116 / 0.000023
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000371 / 0.000383
+    ief_pose_delta_1    : 7.787049 / 7.782709
+    ief_pose_delta_2    : 12.850742 / 12.821387
+    joint_angle_regularization: 0.085813 / 0.088072
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000031 / 0.000027
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.010630 / 0.010540
+    limb_trans_regularization: 0.000001 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 361 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000110 / 0.000022
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000371 / 0.000383
+    ief_pose_delta_1    : 7.789018 / 7.772462
+    ief_pose_delta_2    : 12.852410 / 12.834648
+    joint_angle_regularization: 0.086921 / 0.089437
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000029 / 0.000027
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.010497 / 0.010444
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0361.pth
+
+Epoch 362 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000114 / 0.000022
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000369 / 0.000383
+    ief_pose_delta_1    : 7.797207 / 7.775996
+    ief_pose_delta_2    : 12.845801 / 12.838271
+    joint_angle_regularization: 0.087065 / 0.089022
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000030 / 0.000027
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.010214 / 0.010436
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 363 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000110 / 0.000025
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000373 / 0.000383
+    ief_pose_delta_1    : 7.778974 / 7.761716
+    ief_pose_delta_2    : 12.834865 / 12.840873
+    joint_angle_regularization: 0.088844 / 0.090588
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000029 / 0.000027
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.009983 / 0.010256
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0363.pth
+
+Epoch 364 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000115 / 0.000022
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000370 / 0.000382
+    ief_pose_delta_1    : 7.766575 / 7.764437
+    ief_pose_delta_2    : 12.845352 / 12.830433
+    joint_angle_regularization: 0.089943 / 0.089171
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000029 / 0.000027
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.010260 / 0.010211
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 365 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000111 / 0.000021
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000369 / 0.000381
+    ief_pose_delta_1    : 7.755937 / 7.773358
+    ief_pose_delta_2    : 12.855492 / 12.833520
+    joint_angle_regularization: 0.091405 / 0.089745
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000028 / 0.000027
+    keypoint_3d         : 0.000000 / 0.000000
+    limb_scale_regularization: 0.009799 / 0.009979
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0365.pth
+
+Epoch 366 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000102 / 0.000021
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000372 / 0.000380
+    ief_pose_delta_1    : 7.754692 / 7.776217
+    ief_pose_delta_2    : 12.867661 / 12.851790
+    joint_angle_regularization: 0.092491 / 0.089576
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000029 / 0.000027
+    keypoint_3d         : 0.000001 / 0.000000
+    limb_scale_regularization: 0.010106 / 0.010100
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 367 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000112 / 0.000021
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000370 / 0.000379
+    ief_pose_delta_1    : 7.755703 / 7.781318
+    ief_pose_delta_2    : 12.845321 / 12.859169
+    joint_angle_regularization: 0.090871 / 0.090200
+    joint_limit_regularization: 0.000001 / 0.000000
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000028 / 0.000025
+    keypoint_3d         : 0.000000 / 0.000000
+    limb_scale_regularization: 0.009842 / 0.010058
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0367.pth
+
+Epoch 368 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000116 / 0.000022
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000369 / 0.000378
+    ief_pose_delta_1    : 7.789193 / 7.750586
+    ief_pose_delta_2    : 12.842348 / 12.842457
+    joint_angle_regularization: 0.087763 / 0.090949
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000027 / 0.000026
+    keypoint_3d         : 0.000000 / 0.000000
+    limb_scale_regularization: 0.010155 / 0.009900
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+
+Epoch 369 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000099 / 0.000021
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000367 / 0.000378
+    ief_pose_delta_1    : 7.759373 / 7.750109
+    ief_pose_delta_2    : 12.828896 / 12.851945
+    joint_angle_regularization: 0.091290 / 0.092056
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000027 / 0.000026
+    keypoint_3d         : 0.000000 / 0.000000
+    limb_scale_regularization: 0.009695 / 0.009776
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0369.pth
+
+=== Joint Scales for Multiview Sample 0 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0020     0.9999     1.0013       1.0010
+b_a_1                    1.0285     0.9998     0.8982       0.9755
+b_a_2                    0.9519     1.0033     0.9959       0.9837
+b_a_3                    0.9790     1.0007     0.9947       0.9915
+b_a_4                    1.0039     1.0028     1.0008       1.0025
+b_a_5                    1.0006     1.0017     1.0022       1.0015
+l_1_co_r                 1.2490     1.2644     1.1270       1.2135
+l_1_tr_r                 1.0205     1.3574     1.0872       1.1550
+l_1_fe_r                 0.9780     1.0273     1.3848       1.1300
+l_1_ti_r                 0.8972     0.9659     0.8398       0.9010
+l_1_ta_r                 0.9141     0.9594     0.9502       0.9412
+l_1_pt_r                 1.0009     1.0018     1.0006       1.0011
+l_2_co_r                 1.0895     1.2377     1.0655       1.1309
+l_2_tr_r                 0.9847     1.3295     1.0841       1.1328
+l_2_fe_r                 1.0499     0.9795     1.3557       1.1283
+l_2_ti_r                 1.0380     0.9160     0.9111       0.9550
+l_2_ta_r                 1.0191     0.9751     0.9772       0.9905
+l_2_pt_r                 1.0003     1.0029     1.0029       1.0020
+l_3_co_r                 1.2415     0.8687     1.1605       1.0902
+l_3_tr_r                 1.1846     1.3261     1.2885       1.2664
+l_3_fe_r                 1.0112     1.0270     1.1595       1.0659
+l_3_ti_r                 0.9283     0.9620     0.8829       0.9244
+l_3_ta_r                 0.9800     0.9837     0.9912       0.9850
+l_3_pt_r                 1.0015     1.0012     1.0023       1.0017
+w_1_r                    1.0028     1.0010     1.0015       1.0017
+w_2_r                    1.0018     1.0005     1.0020       1.0014
+l_1_co_l                 1.0911     1.2686     1.0984       1.1527
+l_1_tr_l                 0.9875     1.1787     1.1446       1.1036
+l_1_fe_l                 0.9949     1.0222     1.3376       1.1182
+l_1_ti_l                 0.9223     0.9509     0.9532       0.9421
+l_1_ta_l                 0.9835     0.9507     0.9787       0.9709
+l_1_pt_l                 1.0036     1.0018     1.0013       1.0023
+l_2_co_l                 1.0939     1.1979     1.1910       1.1609
+l_2_tr_l                 0.9978     1.2383     1.1052       1.1138
+l_2_fe_l                 1.0514     0.9212     1.4092       1.1272
+l_2_ti_l                 1.0274     0.8616     0.8090       0.8993
+l_2_ta_l                 1.0088     0.8728     0.9299       0.9372
+l_2_pt_l                 1.0011     0.9941     0.9990       0.9981
+l_3_co_l                 1.0604     0.8137     1.1141       0.9961
+l_3_tr_l                 0.9757     0.9708     1.3020       1.0828
+l_3_fe_l                 0.8885     0.8864     1.1997       0.9915
+l_3_ti_l                 0.9684     0.9372     0.9452       0.9502
+l_3_ta_l                 1.0670     1.0002     0.9966       1.0213
+l_3_pt_l                 1.0044     1.0020     0.9999       1.0021
+w_1_l                    0.9656     1.0164     1.0179       1.0000
+w_2_l                    1.0019     1.0022     1.0004       1.0015
+b_h                      1.3539     1.2918     1.1344       1.2600
+ma_r                     1.0011     1.0028     0.9998       1.0012
+an_1_r                   1.2468     1.0110     0.9914       1.0831
+an_2_r                   1.1345     0.9980     1.0120       1.0481
+an_3_r                   1.0007     1.0021     1.0015       1.0014
+ma_l                     1.0013     1.0022     1.0013       1.0016
+an_1_l                   1.2252     1.0633     1.0081       1.0989
+an_2_l                   1.1222     1.0348     0.9787       1.0452
+an_3_l                   1.0023     1.0011     1.0021       1.0018
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0379
+  Std scale (all joints, all axes): 0.1166
+  Min scale: 0.8090
+  Max scale: 1.4092
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 8
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 1 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0005     0.9986     0.9997       0.9996
+b_a_1                    1.0416     1.0104     0.9038       0.9853
+b_a_2                    0.9705     1.0053     0.9795       0.9851
+b_a_3                    0.9852     0.9961     0.9958       0.9924
+b_a_4                    1.0027     1.0021     0.9996       1.0015
+b_a_5                    0.9995     1.0005     0.9993       0.9998
+l_1_co_r                 1.0541     1.0794     1.2174       1.1170
+l_1_tr_r                 0.9158     1.0662     1.2892       1.0904
+l_1_fe_r                 0.9333     0.9901     1.4262       1.1165
+l_1_ti_r                 0.9103     0.9440     0.8284       0.8942
+l_1_ta_r                 0.9427     0.9447     0.9520       0.9464
+l_1_pt_r                 1.0000     1.0008     0.9989       0.9999
+l_2_co_r                 1.1007     1.2368     1.1227       1.1534
+l_2_tr_r                 0.9678     1.3411     1.0664       1.1251
+l_2_fe_r                 1.0739     1.0111     1.3736       1.1528
+l_2_ti_r                 1.0440     0.9192     0.9301       0.9644
+l_2_ta_r                 1.0206     1.0066     0.9769       1.0014
+l_2_pt_r                 1.0001     1.0006     1.0010       1.0006
+l_3_co_r                 1.1681     0.8809     1.2134       1.0875
+l_3_tr_r                 1.1552     1.2970     1.3160       1.2561
+l_3_fe_r                 0.9805     1.0302     1.2190       1.0765
+l_3_ti_r                 0.9664     0.9878     0.9092       0.9545
+l_3_ta_r                 0.9920     1.0161     0.9959       1.0013
+l_3_pt_r                 1.0002     0.9994     1.0011       1.0002
+w_1_r                    0.9999     0.9999     0.9988       0.9995
+w_2_r                    0.9992     0.9998     0.9996       0.9995
+l_1_co_l                 1.1259     1.4240     1.0652       1.2051
+l_1_tr_l                 1.0090     1.2713     1.0877       1.1227
+l_1_fe_l                 0.9579     1.0408     1.2346       1.0777
+l_1_ti_l                 0.9234     0.9530     0.9315       0.9360
+l_1_ta_l                 0.9939     0.9458     0.9822       0.9740
+l_1_pt_l                 0.9995     0.9994     1.0008       0.9999
+l_2_co_l                 1.1145     1.2934     1.1338       1.1806
+l_2_tr_l                 0.9907     1.2972     1.0170       1.1016
+l_2_fe_l                 1.0418     0.9568     1.3200       1.1062
+l_2_ti_l                 1.0133     0.8944     0.8060       0.9046
+l_2_ta_l                 1.0005     0.8911     0.9311       0.9409
+l_2_pt_l                 0.9998     0.9929     0.9982       0.9970
+l_3_co_l                 1.1304     0.7947     1.1067       1.0106
+l_3_tr_l                 1.0658     0.9838     1.2668       1.1055
+l_3_fe_l                 0.9642     0.9104     1.2369       1.0372
+l_3_ti_l                 0.9829     0.9154     0.9495       0.9492
+l_3_ta_l                 1.0888     0.9923     0.9943       1.0251
+l_3_pt_l                 1.0027     0.9996     0.9991       1.0005
+w_1_l                    0.9197     1.0141     1.0108       0.9815
+w_2_l                    1.0007     1.0006     0.9989       1.0001
+b_h                      1.4787     1.2842     1.1056       1.2895
+ma_r                     1.0005     1.0005     0.9979       0.9996
+an_1_r                   1.2636     1.0737     0.9691       1.1022
+an_2_r                   1.0978     1.0356     1.0073       1.0469
+an_3_r                   0.9997     0.9994     1.0006       0.9999
+ma_l                     1.0007     0.9999     1.0002       1.0003
+an_1_l                   1.2243     1.0229     0.9941       1.0804
+an_2_l                   1.1231     0.9999     0.9842       1.0357
+an_3_l                   0.9996     0.9993     1.0004       0.9998
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0384
+  Std scale (all joints, all axes): 0.1186
+  Min scale: 0.7947
+  Max scale: 1.4787
+  Joints with scale > 1.1: 22
+  Joints with scale < 0.9: 5
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 2 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0021     1.0000     1.0022       1.0014
+b_a_1                    1.0169     1.0078     0.9079       0.9775
+b_a_2                    0.9558     1.0021     0.9830       0.9803
+b_a_3                    0.9732     0.9989     1.0019       0.9913
+b_a_4                    1.0021     1.0021     1.0033       1.0025
+b_a_5                    1.0017     1.0022     1.0014       1.0018
+l_1_co_r                 1.1964     1.2543     1.1171       1.1893
+l_1_tr_r                 1.0431     1.2911     1.1268       1.1536
+l_1_fe_r                 0.9858     1.0503     1.3554       1.1305
+l_1_ti_r                 0.9030     0.9698     0.8435       0.9054
+l_1_ta_r                 0.9325     0.9649     0.9610       0.9528
+l_1_pt_r                 1.0016     1.0023     1.0010       1.0016
+l_2_co_r                 1.1000     1.2881     0.9634       1.1171
+l_2_tr_r                 0.9881     1.3787     1.0103       1.1257
+l_2_fe_r                 1.0758     1.0235     1.2662       1.1218
+l_2_ti_r                 1.0556     0.9306     0.8988       0.9617
+l_2_ta_r                 1.0261     1.0082     0.9747       1.0030
+l_2_pt_r                 0.9998     1.0026     1.0023       1.0015
+l_3_co_r                 1.0974     0.7675     1.2621       1.0423
+l_3_tr_r                 1.0402     1.1358     1.3045       1.1602
+l_3_fe_r                 0.8899     0.9419     1.3233       1.0517
+l_3_ti_r                 0.8993     0.9662     0.9101       0.9252
+l_3_ta_r                 0.9715     0.9920     0.9923       0.9853
+l_3_pt_r                 1.0023     1.0011     1.0022       1.0019
+w_1_r                    1.0022     1.0024     1.0003       1.0016
+w_2_r                    1.0014     1.0016     1.0013       1.0014
+l_1_co_l                 1.0869     1.3622     1.0388       1.1626
+l_1_tr_l                 1.0180     1.2861     1.0664       1.1235
+l_1_fe_l                 1.0005     1.0570     1.2705       1.1093
+l_1_ti_l                 0.9285     0.9408     0.9624       0.9439
+l_1_ta_l                 0.9850     0.9389     0.9878       0.9706
+l_1_pt_l                 1.0025     1.0005     1.0035       1.0022
+l_2_co_l                 1.0565     1.1400     1.1892       1.1286
+l_2_tr_l                 0.9925     1.1602     1.1268       1.0932
+l_2_fe_l                 1.0463     0.9115     1.3470       1.1016
+l_2_ti_l                 1.0226     0.8742     0.8136       0.9034
+l_2_ta_l                 1.0043     0.8804     0.9305       0.9384
+l_2_pt_l                 1.0018     0.9948     0.9999       0.9988
+l_3_co_l                 1.2506     0.9053     1.0169       1.0576
+l_3_tr_l                 1.2004     1.1265     1.2399       1.1889
+l_3_fe_l                 1.0674     1.0140     1.1171       1.0661
+l_3_ti_l                 1.0324     0.9651     0.9408       0.9794
+l_3_ta_l                 1.0936     1.0346     0.9953       1.0412
+l_3_pt_l                 1.0048     1.0032     1.0005       1.0029
+w_1_l                    0.9222     1.0399     1.0030       0.9884
+w_2_l                    1.0022     1.0018     1.0013       1.0018
+b_h                      1.3604     1.3027     1.0832       1.2488
+ma_r                     1.0010     1.0018     1.0004       1.0011
+an_1_r                   1.2245     1.0386     0.9739       1.0790
+an_2_r                   1.1033     1.0128     1.0097       1.0419
+an_3_r                   1.0016     1.0020     1.0025       1.0020
+ma_l                     1.0013     1.0019     1.0019       1.0017
+an_1_l                   1.2079     1.0396     1.0065       1.0846
+an_2_l                   1.1145     1.0137     0.9912       1.0398
+an_3_l                   1.0014     1.0006     1.0021       1.0013
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0380
+  Std scale (all joints, all axes): 0.1123
+  Min scale: 0.7675
+  Max scale: 1.3787
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 7
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 3 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0033     1.0029     1.0041       1.0034
+b_a_1                    1.0305     0.9921     0.8840       0.9688
+b_a_2                    0.9443     0.9986     0.9889       0.9773
+b_a_3                    0.9701     1.0018     1.0015       0.9911
+b_a_4                    1.0056     1.0054     1.0034       1.0048
+b_a_5                    1.0035     1.0045     1.0040       1.0040
+l_1_co_r                 1.1341     1.2464     1.1423       1.1743
+l_1_tr_r                 1.0000     1.1801     1.1856       1.1219
+l_1_fe_r                 0.9672     1.0611     1.4144       1.1476
+l_1_ti_r                 0.8808     0.9752     0.8665       0.9075
+l_1_ta_r                 0.9262     0.9849     0.9797       0.9636
+l_1_pt_r                 1.0023     1.0050     1.0033       1.0035
+l_2_co_r                 1.1712     1.1585     1.0502       1.1266
+l_2_tr_r                 0.9976     1.2784     1.0287       1.1016
+l_2_fe_r                 1.0793     0.9413     1.3724       1.1310
+l_2_ti_r                 1.0538     0.8757     0.9036       0.9443
+l_2_ta_r                 1.0190     0.9805     0.9570       0.9855
+l_2_pt_r                 1.0024     1.0050     1.0053       1.0042
+l_3_co_r                 1.0767     0.8329     1.2715       1.0604
+l_3_tr_r                 1.0527     1.2019     1.2785       1.1777
+l_3_fe_r                 0.9072     1.0071     1.3508       1.0884
+l_3_ti_r                 0.9322     1.0019     0.9162       0.9501
+l_3_ta_r                 0.9849     1.0084     0.9862       0.9932
+l_3_pt_r                 1.0032     1.0038     1.0045       1.0038
+w_1_r                    1.0038     1.0041     1.0030       1.0036
+w_2_r                    1.0028     1.0036     1.0055       1.0040
+l_1_co_l                 1.1092     1.3965     1.0576       1.1878
+l_1_tr_l                 0.9849     1.2840     1.0575       1.1088
+l_1_fe_l                 0.9966     1.0607     1.2430       1.1001
+l_1_ti_l                 0.8910     0.9695     0.9266       0.9290
+l_1_ta_l                 0.9762     0.9536     0.9711       0.9670
+l_1_pt_l                 1.0015     1.0042     1.0036       1.0031
+l_2_co_l                 1.0924     1.2238     1.1742       1.1635
+l_2_tr_l                 1.0085     1.2290     1.0768       1.1048
+l_2_fe_l                 1.0412     0.9371     1.3386       1.1056
+l_2_ti_l                 1.0064     0.8847     0.8170       0.9027
+l_2_ta_l                 1.0086     0.8945     0.9355       0.9462
+l_2_pt_l                 1.0032     0.9972     1.0010       1.0004
+l_3_co_l                 1.2804     0.8512     1.0169       1.0495
+l_3_tr_l                 1.2107     1.1099     1.2052       1.1753
+l_3_fe_l                 1.0883     1.0180     1.2414       1.1159
+l_3_ti_l                 1.0004     0.9730     0.9208       0.9647
+l_3_ta_l                 1.0777     1.0243     0.9922       1.0314
+l_3_pt_l                 1.0063     1.0046     1.0033       1.0047
+w_1_l                    0.9420     1.0441     1.0127       0.9996
+w_2_l                    1.0051     1.0027     1.0034       1.0037
+b_h                      1.4129     1.2669     1.0884       1.2561
+ma_r                     1.0041     1.0037     1.0021       1.0033
+an_1_r                   1.2787     1.0725     0.9837       1.1116
+an_2_r                   1.1297     1.0330     1.0106       1.0577
+an_3_r                   1.0021     1.0032     1.0043       1.0032
+ma_l                     1.0041     1.0032     1.0035       1.0036
+an_1_l                   1.2591     1.0048     1.0022       1.0887
+an_2_l                   1.1483     0.9932     0.9844       1.0419
+an_3_l                   1.0028     1.0028     1.0038       1.0031
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0414
+  Std scale (all joints, all axes): 0.1155
+  Min scale: 0.8170
+  Max scale: 1.4144
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 8
+======================================================================
+
+
+=== Joint Scales for Multiview Sample 4 ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0004     0.9974     0.9985       0.9988
+b_a_1                    1.2378     1.0040     0.9667       1.0695
+b_a_2                    1.1241     0.9986     0.9945       1.0391
+b_a_3                    1.0589     1.0006     1.0084       1.0226
+b_a_4                    1.0001     0.9972     1.0015       0.9996
+b_a_5                    0.9976     0.9975     0.9971       0.9974
+l_1_co_r                 1.1281     1.1206     0.9475       1.0654
+l_1_tr_r                 0.9712     1.1738     1.2520       1.1323
+l_1_fe_r                 0.9565     0.9032     1.3539       1.0712
+l_1_ti_r                 0.8232     0.9421     0.7490       0.8381
+l_1_ta_r                 0.8737     0.9112     0.9355       0.9068
+l_1_pt_r                 0.9976     0.9965     0.9960       0.9967
+l_2_co_r                 1.0815     0.9869     0.9337       1.0007
+l_2_tr_r                 0.9924     1.4275     1.0143       1.1447
+l_2_fe_r                 1.0198     0.8679     1.3147       1.0675
+l_2_ti_r                 1.0102     0.8058     0.7420       0.8526
+l_2_ta_r                 1.0015     0.8456     0.9291       0.9254
+l_2_pt_r                 0.9976     0.9959     0.9958       0.9964
+l_3_co_r                 1.1196     0.9618     1.4831       1.1882
+l_3_tr_r                 1.0480     1.3070     1.2771       1.2107
+l_3_fe_r                 0.8454     0.9448     1.1012       0.9638
+l_3_ti_r                 0.8590     0.8182     0.7839       0.8204
+l_3_ta_r                 0.9429     0.8775     1.0092       0.9432
+l_3_pt_r                 0.9998     0.9980     0.9975       0.9984
+w_1_r                    0.9973     0.9984     0.9962       0.9973
+w_2_r                    0.9967     0.9984     0.9957       0.9969
+l_1_co_l                 1.1139     1.3263     1.0302       1.1568
+l_1_tr_l                 0.9989     1.3313     1.1130       1.1477
+l_1_fe_l                 0.9548     0.8952     1.2064       1.0188
+l_1_ti_l                 0.8873     0.8530     0.8199       0.8534
+l_1_ta_l                 0.9078     0.8892     0.9455       0.9142
+l_1_pt_l                 0.9957     0.9929     1.0011       0.9966
+l_2_co_l                 1.0359     1.0849     1.1548       1.0918
+l_2_tr_l                 1.0003     1.3004     1.0204       1.1070
+l_2_fe_l                 0.9937     0.8835     1.3166       1.0646
+l_2_ti_l                 0.9956     0.7984     0.6749       0.8230
+l_2_ta_l                 0.9913     0.8066     0.8939       0.8972
+l_2_pt_l                 0.9979     0.9935     0.9973       0.9962
+l_3_co_l                 1.3313     0.9341     1.0679       1.1111
+l_3_tr_l                 1.2520     1.2970     1.2196       1.2562
+l_3_fe_l                 0.9016     0.9525     1.0947       0.9829
+l_3_ti_l                 0.8443     0.8714     0.8134       0.8430
+l_3_ta_l                 1.0119     0.9469     0.9935       0.9841
+l_3_pt_l                 0.9992     0.9992     0.9978       0.9987
+w_1_l                    0.9922     1.0106     1.0032       1.0020
+w_2_l                    0.9976     0.9965     0.9990       0.9977
+b_h                      1.1810     1.2397     1.0046       1.1418
+ma_r                     0.9972     0.9976     0.9971       0.9973
+an_1_r                   1.2622     1.0480     1.0054       1.1052
+an_2_r                   1.1406     1.0311     1.0029       1.0582
+an_3_r                   0.9991     0.9977     0.9994       0.9987
+ma_l                     0.9969     0.9984     0.9985       0.9980
+an_1_l                   1.4601     1.0141     0.9533       1.1425
+an_2_l                   1.2290     0.9871     1.0135       1.0766
+an_3_l                   0.9968     0.9964     0.9971       0.9968
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0182
+  Std scale (all joints, all axes): 0.1376
+  Min scale: 0.6749
+  Max scale: 1.4831
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 15
+======================================================================
+
+Generated 5 multi-view visualizations for epoch 369 in /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/visualizations/epoch_369
+
+=== Joint Scales for Sample 0 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0020     0.9999     1.0013       1.0010
+b_a_1                    1.0285     0.9998     0.8982       0.9755
+b_a_2                    0.9519     1.0033     0.9959       0.9837
+b_a_3                    0.9790     1.0007     0.9947       0.9915
+b_a_4                    1.0039     1.0028     1.0008       1.0025
+b_a_5                    1.0006     1.0017     1.0022       1.0015
+l_1_co_r                 1.2490     1.2644     1.1270       1.2135
+l_1_tr_r                 1.0205     1.3574     1.0872       1.1550
+l_1_fe_r                 0.9780     1.0273     1.3848       1.1300
+l_1_ti_r                 0.8972     0.9659     0.8398       0.9010
+l_1_ta_r                 0.9141     0.9594     0.9502       0.9412
+l_1_pt_r                 1.0009     1.0018     1.0006       1.0011
+l_2_co_r                 1.0895     1.2377     1.0655       1.1309
+l_2_tr_r                 0.9847     1.3295     1.0841       1.1328
+l_2_fe_r                 1.0499     0.9795     1.3557       1.1283
+l_2_ti_r                 1.0380     0.9160     0.9111       0.9550
+l_2_ta_r                 1.0191     0.9751     0.9772       0.9905
+l_2_pt_r                 1.0003     1.0029     1.0029       1.0020
+l_3_co_r                 1.2415     0.8687     1.1605       1.0902
+l_3_tr_r                 1.1846     1.3261     1.2885       1.2664
+l_3_fe_r                 1.0112     1.0270     1.1595       1.0659
+l_3_ti_r                 0.9283     0.9620     0.8829       0.9244
+l_3_ta_r                 0.9800     0.9837     0.9912       0.9850
+l_3_pt_r                 1.0015     1.0012     1.0023       1.0017
+w_1_r                    1.0028     1.0010     1.0015       1.0017
+w_2_r                    1.0018     1.0005     1.0020       1.0014
+l_1_co_l                 1.0911     1.2686     1.0984       1.1527
+l_1_tr_l                 0.9875     1.1787     1.1446       1.1036
+l_1_fe_l                 0.9949     1.0222     1.3376       1.1182
+l_1_ti_l                 0.9223     0.9509     0.9532       0.9421
+l_1_ta_l                 0.9835     0.9507     0.9787       0.9709
+l_1_pt_l                 1.0036     1.0018     1.0013       1.0023
+l_2_co_l                 1.0939     1.1979     1.1910       1.1609
+l_2_tr_l                 0.9978     1.2383     1.1052       1.1138
+l_2_fe_l                 1.0514     0.9212     1.4092       1.1272
+l_2_ti_l                 1.0274     0.8616     0.8090       0.8993
+l_2_ta_l                 1.0088     0.8728     0.9299       0.9372
+l_2_pt_l                 1.0011     0.9941     0.9990       0.9981
+l_3_co_l                 1.0604     0.8137     1.1141       0.9961
+l_3_tr_l                 0.9757     0.9708     1.3020       1.0828
+l_3_fe_l                 0.8885     0.8864     1.1997       0.9915
+l_3_ti_l                 0.9684     0.9372     0.9452       0.9502
+l_3_ta_l                 1.0670     1.0002     0.9966       1.0213
+l_3_pt_l                 1.0044     1.0020     0.9999       1.0021
+w_1_l                    0.9656     1.0164     1.0179       1.0000
+w_2_l                    1.0019     1.0022     1.0004       1.0015
+b_h                      1.3539     1.2918     1.1344       1.2600
+ma_r                     1.0011     1.0028     0.9998       1.0012
+an_1_r                   1.2468     1.0110     0.9914       1.0831
+an_2_r                   1.1345     0.9980     1.0120       1.0481
+an_3_r                   1.0007     1.0021     1.0015       1.0014
+ma_l                     1.0013     1.0022     1.0013       1.0016
+an_1_l                   1.2252     1.0633     1.0081       1.0989
+an_2_l                   1.1222     1.0348     0.9787       1.0452
+an_3_l                   1.0023     1.0011     1.0021       1.0018
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0379
+  Std scale (all joints, all axes): 0.1166
+  Min scale: 0.8090
+  Max scale: 1.4092
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 8
+======================================================================
+
+
+[Visualization] Using model renderer image size: 224
+  Original image size: (512, 512, 3)
+  Model renderer size: 224
+  This ensures keypoint normalization matches training
+
+[Sample 0] Input fingerprint (img patch mean): 0.598290
+  trans: [0.0044, 0.0138, 0.3250]
+  global_rot[0:3]: [-0.1015, -0.6342, 0.1708]
+  fov_per_view[0]: 35.6996
+  mesh_scale: 0.0406
+
+[Camera Debug] View 0:
+  FOV: 35.70 degrees
+  cam_trans: [-0.01402796  0.23937616 -0.06720336]
+  cam_rot (first row): [-0.03390652  0.76294315  0.6453088 ]
+  Renderer image size: 224
+  Body trans: [0.00443138 0.01375612 0.32499996]
+  Betas (first 3): [3.6452222 0.6445455 0.8693521]
+  Camera R shape: torch.Size([1, 3, 3])
+  Camera T shape: torch.Size([1, 3])
+  Camera fov shape: torch.Size([1])
+
+[GT Cam+3D Sanity] view 0:
+  GT fov_y: 35.67 deg
+  ||GT cam_T||: 0.249  (should be O(0.1-10) after scaling, not O(100-1000))
+  max|GT kp3d|: 0.345 (same unit scale as SMAL verts/joints)
+  mean reproj err (GT 3D + GT cam -> 2D): 0.13 px @ 224px
+  Exported mesh to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_369/sample_000_view_00_epoch_369.obj
+  Mesh vertices: torch.Size([1, 3020, 3]), range: [-0.035, 0.346]
+  Mesh faces: torch.Size([6019, 3])
+  Mean pred 3D: [0.0037, 0.0128, 0.3305]
+  Mean GT 3D:  [0.0026, 0.0098, 0.2538]
+  Root rot magnitude: 167.92°
+  Generated 3D keypoint visualization: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_369/sample_000_epoch_369_3d_keypoints.png
+  Mean 3D error: 0.0015, Max error: 0.0042
+  Plotted joints: 42, Suppressed: 13
+
+=== Joint Scales for Sample 1 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0005     0.9986     0.9997       0.9996
+b_a_1                    1.0416     1.0104     0.9038       0.9853
+b_a_2                    0.9705     1.0053     0.9795       0.9851
+b_a_3                    0.9852     0.9961     0.9958       0.9924
+b_a_4                    1.0027     1.0021     0.9996       1.0015
+b_a_5                    0.9995     1.0005     0.9993       0.9998
+l_1_co_r                 1.0541     1.0794     1.2174       1.1170
+l_1_tr_r                 0.9158     1.0662     1.2892       1.0904
+l_1_fe_r                 0.9333     0.9901     1.4262       1.1165
+l_1_ti_r                 0.9103     0.9440     0.8284       0.8942
+l_1_ta_r                 0.9427     0.9447     0.9520       0.9464
+l_1_pt_r                 1.0000     1.0008     0.9989       0.9999
+l_2_co_r                 1.1007     1.2368     1.1227       1.1534
+l_2_tr_r                 0.9678     1.3411     1.0664       1.1251
+l_2_fe_r                 1.0739     1.0111     1.3736       1.1528
+l_2_ti_r                 1.0440     0.9192     0.9301       0.9644
+l_2_ta_r                 1.0206     1.0066     0.9769       1.0014
+l_2_pt_r                 1.0001     1.0006     1.0010       1.0006
+l_3_co_r                 1.1681     0.8809     1.2134       1.0875
+l_3_tr_r                 1.1552     1.2970     1.3160       1.2561
+l_3_fe_r                 0.9805     1.0302     1.2190       1.0765
+l_3_ti_r                 0.9664     0.9878     0.9092       0.9545
+l_3_ta_r                 0.9920     1.0161     0.9959       1.0013
+l_3_pt_r                 1.0002     0.9994     1.0011       1.0002
+w_1_r                    0.9999     0.9999     0.9988       0.9995
+w_2_r                    0.9992     0.9998     0.9996       0.9995
+l_1_co_l                 1.1259     1.4240     1.0652       1.2051
+l_1_tr_l                 1.0090     1.2713     1.0877       1.1227
+l_1_fe_l                 0.9579     1.0408     1.2346       1.0777
+l_1_ti_l                 0.9234     0.9530     0.9315       0.9360
+l_1_ta_l                 0.9939     0.9458     0.9822       0.9740
+l_1_pt_l                 0.9995     0.9994     1.0008       0.9999
+l_2_co_l                 1.1145     1.2934     1.1338       1.1806
+l_2_tr_l                 0.9907     1.2972     1.0170       1.1016
+l_2_fe_l                 1.0418     0.9568     1.3200       1.1062
+l_2_ti_l                 1.0133     0.8944     0.8060       0.9046
+l_2_ta_l                 1.0005     0.8911     0.9311       0.9409
+l_2_pt_l                 0.9998     0.9929     0.9982       0.9970
+l_3_co_l                 1.1304     0.7947     1.1067       1.0106
+l_3_tr_l                 1.0658     0.9838     1.2668       1.1055
+l_3_fe_l                 0.9642     0.9104     1.2369       1.0372
+l_3_ti_l                 0.9829     0.9154     0.9495       0.9492
+l_3_ta_l                 1.0888     0.9923     0.9943       1.0251
+l_3_pt_l                 1.0027     0.9996     0.9991       1.0005
+w_1_l                    0.9197     1.0141     1.0108       0.9815
+w_2_l                    1.0007     1.0006     0.9989       1.0001
+b_h                      1.4787     1.2842     1.1056       1.2895
+ma_r                     1.0005     1.0005     0.9979       0.9996
+an_1_r                   1.2636     1.0737     0.9691       1.1022
+an_2_r                   1.0978     1.0356     1.0073       1.0469
+an_3_r                   0.9997     0.9994     1.0006       0.9999
+ma_l                     1.0007     0.9999     1.0002       1.0003
+an_1_l                   1.2243     1.0229     0.9941       1.0804
+an_2_l                   1.1231     0.9999     0.9842       1.0357
+an_3_l                   0.9996     0.9993     1.0004       0.9998
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0384
+  Std scale (all joints, all axes): 0.1186
+  Min scale: 0.7947
+  Max scale: 1.4787
+  Joints with scale > 1.1: 22
+  Joints with scale < 0.9: 5
+======================================================================
+
+
+[Sample 1] Input fingerprint (img patch mean): 0.354034
+  trans: [0.0038, 0.0070, 0.3264]
+  global_rot[0:3]: [-0.6698, -0.0668, 0.1800]
+  fov_per_view[0]: 35.6993
+  mesh_scale: 0.0403
+  Mean pred 3D: [0.0034, 0.0061, 0.3321]
+  Mean GT 3D:  [0.0020, 0.0047, 0.2424]
+  Root rot magnitude: 165.37°
+
+=== Joint Scales for Sample 2 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0021     1.0000     1.0022       1.0014
+b_a_1                    1.0169     1.0078     0.9079       0.9775
+b_a_2                    0.9558     1.0021     0.9830       0.9803
+b_a_3                    0.9732     0.9989     1.0019       0.9913
+b_a_4                    1.0021     1.0021     1.0033       1.0025
+b_a_5                    1.0017     1.0022     1.0014       1.0018
+l_1_co_r                 1.1964     1.2543     1.1171       1.1893
+l_1_tr_r                 1.0431     1.2911     1.1268       1.1536
+l_1_fe_r                 0.9858     1.0503     1.3554       1.1305
+l_1_ti_r                 0.9030     0.9698     0.8435       0.9054
+l_1_ta_r                 0.9325     0.9649     0.9610       0.9528
+l_1_pt_r                 1.0016     1.0023     1.0010       1.0016
+l_2_co_r                 1.1000     1.2881     0.9634       1.1171
+l_2_tr_r                 0.9881     1.3787     1.0103       1.1257
+l_2_fe_r                 1.0758     1.0235     1.2662       1.1218
+l_2_ti_r                 1.0556     0.9306     0.8988       0.9617
+l_2_ta_r                 1.0261     1.0082     0.9747       1.0030
+l_2_pt_r                 0.9998     1.0026     1.0023       1.0015
+l_3_co_r                 1.0974     0.7675     1.2621       1.0423
+l_3_tr_r                 1.0402     1.1358     1.3045       1.1602
+l_3_fe_r                 0.8899     0.9419     1.3233       1.0517
+l_3_ti_r                 0.8993     0.9662     0.9101       0.9252
+l_3_ta_r                 0.9715     0.9920     0.9923       0.9853
+l_3_pt_r                 1.0023     1.0011     1.0022       1.0019
+w_1_r                    1.0022     1.0024     1.0003       1.0016
+w_2_r                    1.0014     1.0016     1.0013       1.0014
+l_1_co_l                 1.0869     1.3622     1.0388       1.1626
+l_1_tr_l                 1.0180     1.2861     1.0664       1.1235
+l_1_fe_l                 1.0005     1.0570     1.2705       1.1093
+l_1_ti_l                 0.9285     0.9408     0.9624       0.9439
+l_1_ta_l                 0.9850     0.9389     0.9878       0.9706
+l_1_pt_l                 1.0025     1.0005     1.0035       1.0022
+l_2_co_l                 1.0565     1.1400     1.1892       1.1286
+l_2_tr_l                 0.9925     1.1602     1.1268       1.0932
+l_2_fe_l                 1.0463     0.9115     1.3470       1.1016
+l_2_ti_l                 1.0226     0.8742     0.8136       0.9034
+l_2_ta_l                 1.0043     0.8804     0.9305       0.9384
+l_2_pt_l                 1.0018     0.9948     0.9999       0.9988
+l_3_co_l                 1.2506     0.9053     1.0169       1.0576
+l_3_tr_l                 1.2004     1.1265     1.2399       1.1889
+l_3_fe_l                 1.0674     1.0140     1.1171       1.0661
+l_3_ti_l                 1.0324     0.9651     0.9408       0.9794
+l_3_ta_l                 1.0936     1.0346     0.9953       1.0412
+l_3_pt_l                 1.0048     1.0032     1.0005       1.0029
+w_1_l                    0.9222     1.0399     1.0030       0.9884
+w_2_l                    1.0022     1.0018     1.0013       1.0018
+b_h                      1.3604     1.3027     1.0832       1.2488
+ma_r                     1.0010     1.0018     1.0004       1.0011
+an_1_r                   1.2245     1.0386     0.9739       1.0790
+an_2_r                   1.1033     1.0128     1.0097       1.0419
+an_3_r                   1.0016     1.0020     1.0025       1.0020
+ma_l                     1.0013     1.0019     1.0019       1.0017
+an_1_l                   1.2079     1.0396     1.0065       1.0846
+an_2_l                   1.1145     1.0137     0.9912       1.0398
+an_3_l                   1.0014     1.0006     1.0021       1.0013
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0380
+  Std scale (all joints, all axes): 0.1123
+  Min scale: 0.7675
+  Max scale: 1.3787
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 7
+======================================================================
+
+
+[Sample 2] Input fingerprint (img patch mean): 0.592601
+  trans: [0.0072, 0.0103, 0.3266]
+  global_rot[0:3]: [-0.6489, -0.0461, 0.1746]
+  fov_per_view[0]: 35.6996
+  mesh_scale: 0.0413
+  Mean pred 3D: [0.0058, 0.0094, 0.3316]
+  Mean GT 3D:  [0.0038, 0.0074, 0.2543]
+  Root rot magnitude: 165.23°
+
+=== Joint Scales for Sample 3 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0033     1.0029     1.0041       1.0034
+b_a_1                    1.0305     0.9921     0.8840       0.9688
+b_a_2                    0.9443     0.9986     0.9889       0.9773
+b_a_3                    0.9701     1.0018     1.0015       0.9911
+b_a_4                    1.0056     1.0054     1.0034       1.0048
+b_a_5                    1.0035     1.0045     1.0040       1.0040
+l_1_co_r                 1.1341     1.2464     1.1423       1.1743
+l_1_tr_r                 1.0000     1.1801     1.1856       1.1219
+l_1_fe_r                 0.9672     1.0611     1.4144       1.1476
+l_1_ti_r                 0.8808     0.9752     0.8665       0.9075
+l_1_ta_r                 0.9262     0.9849     0.9797       0.9636
+l_1_pt_r                 1.0023     1.0050     1.0033       1.0035
+l_2_co_r                 1.1712     1.1585     1.0502       1.1266
+l_2_tr_r                 0.9976     1.2784     1.0287       1.1016
+l_2_fe_r                 1.0793     0.9413     1.3724       1.1310
+l_2_ti_r                 1.0538     0.8757     0.9036       0.9443
+l_2_ta_r                 1.0190     0.9805     0.9570       0.9855
+l_2_pt_r                 1.0024     1.0050     1.0053       1.0042
+l_3_co_r                 1.0767     0.8329     1.2715       1.0604
+l_3_tr_r                 1.0527     1.2019     1.2785       1.1777
+l_3_fe_r                 0.9072     1.0071     1.3508       1.0884
+l_3_ti_r                 0.9322     1.0019     0.9162       0.9501
+l_3_ta_r                 0.9849     1.0084     0.9862       0.9932
+l_3_pt_r                 1.0032     1.0038     1.0045       1.0038
+w_1_r                    1.0038     1.0041     1.0030       1.0036
+w_2_r                    1.0028     1.0036     1.0055       1.0040
+l_1_co_l                 1.1092     1.3965     1.0576       1.1878
+l_1_tr_l                 0.9849     1.2840     1.0575       1.1088
+l_1_fe_l                 0.9966     1.0607     1.2430       1.1001
+l_1_ti_l                 0.8910     0.9695     0.9266       0.9290
+l_1_ta_l                 0.9762     0.9536     0.9711       0.9670
+l_1_pt_l                 1.0015     1.0042     1.0036       1.0031
+l_2_co_l                 1.0924     1.2238     1.1742       1.1635
+l_2_tr_l                 1.0085     1.2290     1.0768       1.1048
+l_2_fe_l                 1.0412     0.9371     1.3386       1.1056
+l_2_ti_l                 1.0064     0.8847     0.8170       0.9027
+l_2_ta_l                 1.0086     0.8945     0.9355       0.9462
+l_2_pt_l                 1.0032     0.9972     1.0010       1.0004
+l_3_co_l                 1.2804     0.8512     1.0169       1.0495
+l_3_tr_l                 1.2107     1.1099     1.2052       1.1753
+l_3_fe_l                 1.0883     1.0180     1.2414       1.1159
+l_3_ti_l                 1.0004     0.9730     0.9208       0.9647
+l_3_ta_l                 1.0777     1.0243     0.9922       1.0314
+l_3_pt_l                 1.0063     1.0046     1.0033       1.0047
+w_1_l                    0.9420     1.0441     1.0127       0.9996
+w_2_l                    1.0051     1.0027     1.0034       1.0037
+b_h                      1.4129     1.2669     1.0884       1.2561
+ma_r                     1.0041     1.0037     1.0021       1.0033
+an_1_r                   1.2787     1.0725     0.9837       1.1116
+an_2_r                   1.1297     1.0330     1.0106       1.0577
+an_3_r                   1.0021     1.0032     1.0043       1.0032
+ma_l                     1.0041     1.0032     1.0035       1.0036
+an_1_l                   1.2591     1.0048     1.0022       1.0887
+an_2_l                   1.1483     0.9932     0.9844       1.0419
+an_3_l                   1.0028     1.0028     1.0038       1.0031
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0414
+  Std scale (all joints, all axes): 0.1155
+  Min scale: 0.8170
+  Max scale: 1.4144
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 8
+======================================================================
+
+
+[Sample 3] Input fingerprint (img patch mean): 0.594096
+  trans: [0.0057, 0.0089, 0.3277]
+  global_rot[0:3]: [0.6685, 0.1845, 0.1022]
+  fov_per_view[0]: 35.6995
+  mesh_scale: 0.0394
+  Mean pred 3D: [0.0040, 0.0110, 0.3325]
+  Mean GT 3D:  [0.0029, 0.0077, 0.2369]
+  Root rot magnitude: 178.33°
+
+=== Joint Scales for Sample 4 (Single-View Renders) ===
+Mode: separate
+Joint Name              Scale X    Scale Y    Scale Z   Mean Scale
+----------------------------------------------------------------------
+b_t                      1.0004     0.9974     0.9985       0.9988
+b_a_1                    1.2378     1.0040     0.9667       1.0695
+b_a_2                    1.1241     0.9986     0.9945       1.0391
+b_a_3                    1.0589     1.0006     1.0084       1.0226
+b_a_4                    1.0001     0.9972     1.0015       0.9996
+b_a_5                    0.9976     0.9975     0.9971       0.9974
+l_1_co_r                 1.1281     1.1206     0.9475       1.0654
+l_1_tr_r                 0.9712     1.1738     1.2520       1.1323
+l_1_fe_r                 0.9565     0.9032     1.3539       1.0712
+l_1_ti_r                 0.8232     0.9421     0.7490       0.8381
+l_1_ta_r                 0.8737     0.9112     0.9355       0.9068
+l_1_pt_r                 0.9976     0.9965     0.9960       0.9967
+l_2_co_r                 1.0815     0.9869     0.9337       1.0007
+l_2_tr_r                 0.9924     1.4275     1.0143       1.1447
+l_2_fe_r                 1.0198     0.8679     1.3147       1.0675
+l_2_ti_r                 1.0102     0.8058     0.7420       0.8526
+l_2_ta_r                 1.0015     0.8456     0.9291       0.9254
+l_2_pt_r                 0.9976     0.9959     0.9958       0.9964
+l_3_co_r                 1.1196     0.9618     1.4831       1.1882
+l_3_tr_r                 1.0480     1.3070     1.2771       1.2107
+l_3_fe_r                 0.8454     0.9448     1.1012       0.9638
+l_3_ti_r                 0.8590     0.8182     0.7839       0.8204
+l_3_ta_r                 0.9429     0.8775     1.0092       0.9432
+l_3_pt_r                 0.9998     0.9980     0.9975       0.9984
+w_1_r                    0.9973     0.9984     0.9962       0.9973
+w_2_r                    0.9967     0.9984     0.9957       0.9969
+l_1_co_l                 1.1139     1.3263     1.0302       1.1568
+l_1_tr_l                 0.9989     1.3313     1.1130       1.1477
+l_1_fe_l                 0.9548     0.8952     1.2064       1.0188
+l_1_ti_l                 0.8873     0.8530     0.8199       0.8534
+l_1_ta_l                 0.9078     0.8892     0.9455       0.9142
+l_1_pt_l                 0.9957     0.9929     1.0011       0.9966
+l_2_co_l                 1.0359     1.0849     1.1548       1.0918
+l_2_tr_l                 1.0003     1.3004     1.0204       1.1070
+l_2_fe_l                 0.9937     0.8835     1.3166       1.0646
+l_2_ti_l                 0.9956     0.7984     0.6749       0.8230
+l_2_ta_l                 0.9913     0.8066     0.8939       0.8972
+l_2_pt_l                 0.9979     0.9935     0.9973       0.9962
+l_3_co_l                 1.3313     0.9341     1.0679       1.1111
+l_3_tr_l                 1.2520     1.2970     1.2196       1.2562
+l_3_fe_l                 0.9016     0.9525     1.0947       0.9829
+l_3_ti_l                 0.8443     0.8714     0.8134       0.8430
+l_3_ta_l                 1.0119     0.9469     0.9935       0.9841
+l_3_pt_l                 0.9992     0.9992     0.9978       0.9987
+w_1_l                    0.9922     1.0106     1.0032       1.0020
+w_2_l                    0.9976     0.9965     0.9990       0.9977
+b_h                      1.1810     1.2397     1.0046       1.1418
+ma_r                     0.9972     0.9976     0.9971       0.9973
+an_1_r                   1.2622     1.0480     1.0054       1.1052
+an_2_r                   1.1406     1.0311     1.0029       1.0582
+an_3_r                   0.9991     0.9977     0.9994       0.9987
+ma_l                     0.9969     0.9984     0.9985       0.9980
+an_1_l                   1.4601     1.0141     0.9533       1.1425
+an_2_l                   1.2290     0.9871     1.0135       1.0766
+an_3_l                   0.9968     0.9964     0.9971       0.9968
+
+Summary Statistics:
+  Mean scale (all joints, all axes): 1.0182
+  Std scale (all joints, all axes): 0.1376
+  Min scale: 0.6749
+  Max scale: 1.4831
+  Joints with scale > 1.1: 23
+  Joints with scale < 0.9: 15
+======================================================================
+
+
+[Sample 4] Input fingerprint (img patch mean): 0.564680
+  trans: [-0.0029, -0.0055, 0.3164]
+  global_rot[0:3]: [-0.6684, -0.7053, 0.2290]
+  fov_per_view[0]: 35.4985
+  mesh_scale: 0.0552
+  Mean pred 3D: [-0.0023, -0.0077, 0.3225]
+  Mean GT 3D:  [-0.0026, -0.0059, 0.2474]
+  Root rot magnitude: 170.09°
+Generated single-view renders for 5 samples (epoch 369) in /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/singleview_renders/epoch_369
+
+Epoch 370 Summary:
+  Train Loss: 0.0000
+  Val Loss: 0.0000
+  Loss Components (Train / Val):
+    betas               : 0.000102 / 0.000019
+    cam_rot             : 0.000000 / 0.000000
+    cam_trans           : 0.000000 / 0.000000
+    fov                 : 0.000366 / 0.000377
+    ief_pose_delta_1    : 7.765338 / 7.746810
+    ief_pose_delta_2    : 12.831401 / 12.848226
+    joint_angle_regularization: 0.092771 / 0.092698
+    joint_limit_regularization: 0.000001 / 0.000001
+    joint_rot           : 0.000000 / 0.000000
+    keypoint_2d         : 0.000028 / 0.000026
+    keypoint_3d         : 0.000000 / 0.000000
+    limb_scale_regularization: 0.009718 / 0.009608
+    limb_trans_regularization: 0.000000 / 0.000000
+    trans               : 0.000000 / 0.000000
+  LR (curriculum): 1.00e-05
+  Key loss weights: kp2d=0.1000, joint_rot=0.0010, limb_scale_reg=0.000050, limb_trans_reg=0.500000
+Checkpoint saved: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/final_model.pth
+
+Training completed!
+Best validation loss: 0.0000
+Checkpoints saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints
+Training plots saved to: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/plots
+Done (multiview, lambda=1e-1, 8 rank(s)) — Tue Sep  8 20:38:33 CEST 2026

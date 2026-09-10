@@ -1,6 +1,6 @@
 # Joint-limit prior — single-view vs multi-view
 
-fine-tune: **+50 epochs**
+fine-tune: **+25 epochs**
 
 Each `*_constrained` arm is its `*_reference` checkpoint continued for the same number of epochs with the limit penalty enabled. **All four arms are scored against the same authored ranges**, so the reference rows are the honest "before" number.
 
@@ -28,23 +28,30 @@ Authored axes scored: **162**
 
 ## multiview
 
-_Only `mv_reference` present — no delta can be computed._
-
 Authored axes scored: **162**
 
 | metric | reference | constrained | delta |
 |---|---|---|---|
-| Violating axes (count) | 76 | — | — |
-| Mean violation rate (% frames) | 13.96 | — | — |
-| Mean overshoot, violating axes (deg) | 2.65 | — | — |
-| Max overshoot (deg) | 56.57 | — | — |
-| MPJPE (mm) | 0.96 | — | — |
-| Median MPJPE (mm) | 0.84 | — | — |
+| Violating axes (count) | 76 | 21 | -55 (better) |
+| Mean violation rate (% frames) | 13.96 | 0.01 | -13.95 (better) |
+| Mean overshoot, violating axes (deg) | 2.65 | 0.00 | -2.65 (better) |
+| Max overshoot (deg) | 56.57 | 3.96 | -52.61 (better) |
+| MPJPE (mm) | 0.96 | 1.21 | +0.25 (worse) |
+| Median MPJPE (mm) | 0.84 | 1.06 | +0.22 (worse) |
 | PCK@5px native | — | — | — |
 | PCK@5px input | — | — | — |
 
 - `mv_reference`: /hpcwork/mkd34160/SMILify/SMILySTICKS_ViT_model.pth (epoch 345)
+- `mv_constrained`: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-1/checkpoints/checkpoint_epoch_0369.pth (epoch 369)
 
 ## Single-view vs multi-view
 
-_Incomplete: missing `mv_constrained`._
+| metric | single-view delta | multi-view delta |
+|---|---|---|
+| Violating axes (count) | -55 (better) | -55 (better) |
+| Mean violation rate (% frames) | -14.76 (better) | -13.95 (better) |
+| Mean overshoot (deg) | -2.53 (better) | -2.65 (better) |
+| MPJPE (mm) | -0.04 (better) | +0.25 (worse) |
+| PCK@5px native | — | — |
+
+The hypothesis worth testing here: multi-view already resolves depth ambiguity from geometry, so it should have fewer violations to fix and less to gain from the prior. A single-view delta noticeably larger than the multi-view one supports that reading.

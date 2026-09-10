@@ -9,6 +9,10 @@ reference row as context.
 | mode | lambda | violating axes | mean viol. rate % | mean overshoot deg | MPJPE mm | PCK@5px (native) |
 |---|---|---|---|---|---|---|
 | multiview | 0 | 76/162 | 13.96 | 2.65 | 0.96 | — |
+| multiview | 0.0001 | 75/162 | 4.60 | 0.44 | 0.99 | — |
+| multiview | 0.001 | 73/162 | 0.54 | 0.01 | 1.07 | — |
+| multiview | 0.01 | 57/162 | 0.05 | 0.00 | 1.14 | — |
+| multiview | 0.1 | 21/162 | 0.01 | 0.00 | 1.21 | — |
 | singleview | 0 | 96/162 | 14.76 | 2.53 | 1.09 | — |
 | singleview | 0.0001 | 89/162 | 2.73 | 0.14 | 0.97 | — |
 | singleview | 0.001 | 85/162 | 0.26 | 0.00 | 1.01 | — |
