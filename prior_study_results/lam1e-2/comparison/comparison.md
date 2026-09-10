@@ -1,6 +1,6 @@
 # Joint-limit prior — single-view vs multi-view
 
-fine-tune: **+50 epochs**  |  `joint_limit_regularization` = **0.01**
+fine-tune: **+25 epochs**  |  `joint_limit_regularization` = **0.01**
 
 Each `*_constrained` arm is its `*_reference` checkpoint continued for the same number of epochs with the limit penalty enabled. **All four arms are scored against the same authored ranges**, so the reference rows are the honest "before" number.
 
@@ -28,8 +28,30 @@ Authored axes scored: **162**
 
 ## multiview
 
-_Neither `mv_reference` nor `mv_constrained` found._
+Authored axes scored: **162**
+
+| metric | reference | constrained | delta |
+|---|---|---|---|
+| Violating axes (count) | 76 | 57 | -19 (better) |
+| Mean violation rate (% frames) | 13.96 | 0.05 | -13.91 (better) |
+| Mean overshoot, violating axes (deg) | 2.65 | 0.00 | -2.65 (better) |
+| Max overshoot (deg) | 56.57 | 4.90 | -51.68 (better) |
+| MPJPE (mm) | 0.96 | 1.14 | +0.18 (worse) |
+| Median MPJPE (mm) | 0.84 | 1.02 | +0.18 (worse) |
+| PCK@5px native | — | — | — |
+| PCK@5px input | — | — | — |
+
+- `mv_reference`: /hpcwork/mkd34160/SMILify/SMILySTICKS_ViT_model.pth (epoch 345)
+- `mv_constrained`: /hpcwork/mkd34160/smilify_runs/multiview_lam1e-2/checkpoints/checkpoint_epoch_0369.pth (epoch 369)
 
 ## Single-view vs multi-view
 
-_Incomplete: missing `mv_reference`, `mv_constrained`._
+| metric | single-view delta | multi-view delta |
+|---|---|---|
+| Violating axes (count) | -23 (better) | -19 (better) |
+| Mean violation rate (% frames) | -14.74 (better) | -13.91 (better) |
+| Mean overshoot (deg) | -2.53 (better) | -2.65 (better) |
+| MPJPE (mm) | -0.07 (better) | +0.18 (worse) |
+| PCK@5px native | — | — |
+
+The hypothesis worth testing here: multi-view already resolves depth ambiguity from geometry, so it should have fewer violations to fix and less to gain from the prior. A single-view delta noticeably larger than the multi-view one supports that reading.

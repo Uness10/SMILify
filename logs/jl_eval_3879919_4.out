@@ -1,0 +1,8 @@
+==================================================================
+Job 3879919 task 4 on s25g0007.hpc.itc.rwth-aachen.de — Wed Sep  9 02:58:34 CEST 2026
+  arm        : sv_constrained @ lambda=1e-1 — single-view continuation at lambda=1e-1
+  checkpoint : runs/singleview_lam1e-1/checkpoints/best_model.pth
+  out dir    : prior_study_results/lam1e-1/sv_constrained
+  dataset    : SMILySTICKS_centred_reprojected_FIXED.h5
+  smal file  : 3D_model_prep/SMILy_STICK_limits_authored.pkl
+==================================================================
