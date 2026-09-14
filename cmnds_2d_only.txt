@@ -10,7 +10,8 @@
 # the articulation.
 #
 # Design:
-#   - 3 arms, SINGLE-VIEW, all trained FROM SCRATCH for the SAME schedule
+#   - 3 arms, SINGLE-VIEW, all trained FROM SCRATCH for the SAME schedule,
+#     each on 2 NODES x 4 H100 = 8 ranks (24 H100 busy across the study)
 #       lambda = 0      CONTROL — 2D-only, no prior
 #       lambda = 1e-4   low end of the earlier sweep
 #       lambda = 1e-1   high end
@@ -62,6 +63,41 @@ ls -l "$SV_BASE_CONFIG" "$SV_REF" \
 
 
 # -----------------------------------------------------------------------------
+# 0a. THE BATCH SIZE — get this before anything else
+# -----------------------------------------------------------------------------
+# batch_size in the config is PER PROCESS. The trainer hands each rank that many
+# samples via DistributedSampler (train_smil_regressor.py:449-461), with one
+# optimizer.step() per batch and no gradient accumulation on this path:
+#
+#     effective batch = batch_size x world_size
+#     steps per epoch = (N_train x dataset_fraction) / (world_size x batch_size)
+#
+# The two move in OPPOSITE directions when the allocation changes. Going from 4
+# ranks to 8 with batch_size untouched doubles the effective batch AND HALVES
+# the optimizer steps per epoch, so a fixed schedule gets half the gradient
+# updates. Nothing compensates: the LR is a pure function of the epoch index
+# (train_smil_regressor.py:2079) and is never scaled by world size.
+#
+# At 8 ranks, to keep sv_reference's regime:  batch_size = <its effective> / 8.
+# prepare_2d_only_sweep.sh does that division for you — it wants the EFFECTIVE
+# number, so that the answer stays right if the allocation ever changes.
+#
+# The checkpoint does NOT store world_size, so the training log is the only
+# source. A per-rank batch_size read out of the checkpoint's config block is NOT
+# the effective batch, and using it as one silently changes the regime:
+
+grep -m1 "Total effective batch size" <sv_ref training log>
+grep -m1 "Using distributed samplers for" <sv_ref training log>
+
+export REF_EFFECTIVE_BATCH=<the number from that log>
+export WORLD=8            # 2 nodes x 4 GPUs — must match what you submit
+
+# gradient_accumulation_steps is NOT a lever here: the field exists in
+# TrainingHyperparameters and the multi-view trainer implements it, but
+# train_smil_regressor.py never reads it. Setting it does nothing, silently.
+
+
+# -----------------------------------------------------------------------------
 # 0. ONE-TIME: the code change this study depends on
 # -----------------------------------------------------------------------------
 # TrainingConfig.get_loss_weights_for_epoch applies the scale/trans mode's loss
@@ -98,13 +134,17 @@ grep -n 'SCALE_TRANS_BETA_CONFIG.setdefault' smal_fitter/neuralSMIL/train_smil_r
 # same training setup" means. It is an ABSOLUTE end epoch and these arms start
 # at 0, so the value is the whole schedule.
 #
-# BATCH_SIZE: batch_size is PER PROCESS under DDP. On 4 ranks a config written
-# for one process runs at 4x the effective batch while inheriting that run's LR
-# curriculum. Pass BATCH_SIZE=<orig/4> to reproduce sv_reference's regime, or
-# accept 4x knowingly — but it is the same for all three arms either way.
 
 bash scripts/prior_study/prepare_2d_only_sweep.sh
 
+# It prints the arithmetic it used, per arm:
+#   batch       : 32 / 8 ranks = 4 per rank (matches sv_reference)
+#   [prepare] intended allocation: 8 rank(s) x batch_size 4 = effective batch 32
+#
+# That intended shape is recorded in each config's _study block, and the
+# training sbatch REFUSES an allocation that disagrees — so a forgotten
+# --nodes=2 fails loudly instead of quietly running at half the effective batch.
+#
 # Read what it prints for EVERY arm. The important block is the effective-weight
 # table, which is resolved through the REAL loader (curriculum + scale/trans
 # override), not read off the JSON:
@@ -160,6 +200,10 @@ bash hpc_files/rwth/dryrun_sbatch.sh hpc_files/rwth/run_2d_only_train.sbatch 0 1
 # Leave the hour of slack: the 24 h is wall clock and includes dataset
 # construction, the first backbone load and the first checkpoint write.
 
+# The sbatch header already asks for --nodes=2, so no flag is needed here; the
+# pre-flight cross-checks the allocation it actually got against the shape the
+# configs were built for.
+
 jid=$(sbatch --parsable --array=0-2 --account=$ACCT \
         --export=ALL,ENV_PREFIX,RUNS_ROOT \
         hpc_files/rwth/run_2d_only_train.sbatch)
@@ -169,7 +213,13 @@ echo "first link: $jid"
 grep -h "Epoch\|epoch" logs/jl2d_train_${jid}_*.out | grep -i "time\|elapsed\|completed" | tail -20
 
 # Confirm all three landed on 4 GPUs each and agree on the schedule:
-grep -h "gpus   :\|STUDY INVARIANT\|joint_limit_regularization:\|3D supervision" logs/jl2d_train_${jid}_*.out
+grep -h "gpus   :\|STUDY INVARIANT\|allocation \|joint_limit_regularization:\|3D supervision" logs/jl2d_train_${jid}_*.out
+
+# Expect, per arm:
+#   gpus   : 4 per node x 2 node(s) = 8 rank(s)
+#   batch_size 4 per rank x 8 rank(s) -> effective 32
+#   allocation        : matches the 8-rank shape this config was built for  OK
+#   2 sibling arm(s) agree on the allocation shape  OK
 
 
 # -----------------------------------------------------------------------------
@@ -188,9 +238,18 @@ CHAIN=8 bash hpc_files/rwth/chain_2d_only.sh
 # One arm only (0 = control, 1 = 1e-4, 2 = 1e-1):
 #   CHAIN=8 ARRAY=1 bash hpc_files/rwth/chain_2d_only.sh
 #
-# Two nodes per arm (halves the wall clock, DOUBLES the effective batch — use
-# the same value for every arm or they are different optimisation problems):
-#   CHAIN=4 SBATCH_EXTRA="--nodes=2" bash hpc_files/rwth/chain_2d_only.sh
+# Back to ONE node per arm (halves the GPUs in flight, and HALVES the effective
+# batch because batch_size is per rank). The configs were built for 8 ranks, so
+# this is refused by the pre-flight unless you also rebuild them:
+#   WORLD=4 REF_EFFECTIVE_BATCH=$REF_EFFECTIVE_BATCH \
+#     bash scripts/prior_study/prepare_2d_only_sweep.sh
+#   CHAIN=12 ARRAY=0-2 SBATCH_EXTRA="--nodes=1" bash hpc_files/rwth/chain_2d_only.sh
+#
+# Do NOT change the shape partway through: each arm records world_size,
+# batch_size and num_epochs into <run_dir>/allocation.json on its first job, and
+# every later link refuses to differ from it. Otherwise one arm would train its
+# first half at one effective batch and its second at another, at a boundary
+# nothing records.
 
 
 # -----------------------------------------------------------------------------
@@ -284,21 +343,64 @@ python scripts/prior_study/pick_segments.py \
 # chosen under a different objective than the control's. If a delta is small,
 # check it also holds at the last checkpoint of each arm, not only at best.
 #
-# CAVEAT 3 — scale/depth degeneracy. mesh_scaling.allow_mesh_scaling is left ON
-# because the study is specified as the reference setup MINUS 3D supervision, and
-# TrainingConfig.MESH_SCALING_CONFIG says in as many words that the global mesh
-# scale "is trained implicitly via 3D keypoint losses". With keypoint_3d and the
-# GT translation both at 0, a uniformly larger animal further from the camera
-# reprojects to the same pixels; only the limb_scale / limb_trans regularizers
-# and the limit prior hold it. Expect MPJPE (a metric scale) to be worse than
-# sv_reference's 1.09 mm across the board — that is the experiment, not a bug.
-# If the control's scale drifts far enough to make the numbers unreadable, the
-# fix is mesh_scaling.allow_mesh_scaling=false in $SV_BASE_CONFIG, re-run step 1,
-# and re-train ALL THREE arms.
+# CAVEAT 3 — scale/depth degeneracy, and WHICH ACCURACY NUMBER TO QUOTE.
+# mesh_scaling.allow_mesh_scaling is left ON because the study is specified as
+# the reference setup MINUS 3D supervision, and TrainingConfig.MESH_SCALING_CONFIG
+# says in as many words that the global mesh scale "is trained implicitly via 3D
+# keypoint losses". With keypoint_3d and the GT translation both at 0, a
+# uniformly larger animal further from the camera reprojects to exactly the same
+# pixels, so nothing anchors absolute size; only the limb_scale / limb_trans
+# regularizers and the limit prior hold it.
+#
+# RAW MPJPE IS THEREFORE NOT THE HEADLINE for these arms. It is in mm, so any
+# size drift inflates it even when the articulation is perfect. The benchmark now
+# reports three numbers instead of one:
+#
+#   MPJPE (mm)            raw. Includes the size drift. Quote it only alongside
+#                         the fitted scale, or not at all.
+#   Fitted global scale   predicted size / true size, one number per arm.
+#                         1.0 = no drift. THIS IS THE DIAGNOSTIC — read it first.
+#   N-MPJPE (mm)          one global scale fitted across the test set, then
+#                         measured. Removes a systematic size offset and leaves
+#                         every per-frame mistake visible. **This is the headline
+#                         accuracy number for this study.**
+#   PA-MPJPE (mm)         per-frame rotation+scale+translation alignment. Pure
+#                         pose quality, and an OPTIMISTIC bound — it also forgives
+#                         per-frame size and orientation error, not just the drift.
+#
+# How to read them together:
+#   scale ~1.0 and N-MPJPE ~ MPJPE     -> no drift; raw MPJPE was fine all along.
+#   scale far from 1.0, N-MPJPE << MPJPE -> the size knob drifted, the pose is
+#                                         better than raw MPJPE suggested. Report
+#                                         N-MPJPE and state the scale.
+#   N-MPJPE still large                -> the pose really is worse. A real result.
+#   PA-MPJPE << N-MPJPE                -> error is in global placement/orientation
+#                                         rather than articulation.
+#
+# Compare arms on N-MPJPE, never raw MPJPE: the three arms can drift to different
+# sizes, and raw MPJPE would rank them by size error rather than by pose. The
+# violation-rate columns are unaffected by any of this — joint limits are about
+# ANGLES, which do not change when the whole animal is scaled.
+#
+# sv_reference (3D-supervised) has no drift to correct, so its N-MPJPE and raw
+# MPJPE should agree closely. If they do not, suspect the metric, not the model.
+#
+# If you would rather remove the ambiguity than correct for it, the alternative
+# is mesh_scaling.allow_mesh_scaling=false in $SV_BASE_CONFIG, re-run step 1, and
+# re-train ALL THREE arms from epoch 0.
 #
 # CAVEAT 4 — comparing any of this to sv_reference measures "no 3D supervision"
 # and "the prior" at once. The control is what separates them, which is why it
 # is in the study.
+#
+# CAVEAT 5 — the arms ran at 8 ranks. If REF_EFFECTIVE_BATCH was set from the
+# sv_reference log, the effective batch matches that run and only the number of
+# ranks differs (which changes nothing about the optimisation, only the wall
+# clock). If it was NOT set, say so: the arms then ran at 8x the base config's
+# batch_size and 1/8 the optimizer steps per epoch, and any comparison to
+# sv_reference mixes the prior with a different optimisation regime. The three
+# arms remain comparable to each other either way — that is what
+# allocation.json enforces.
 
 
 # -----------------------------------------------------------------------------

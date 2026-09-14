@@ -220,6 +220,15 @@ def parse_benchmark_report(path: Optional[Path]) -> Dict[str, Optional[float]]:
         "median_mpjpe_mm": None,
         "pck_5px_native": None,
         "pck_5px_input": None,
+        # Scale-robust accuracy. Absent from older reports, hence Optional: a
+        # single camera cannot observe absolute size, so a model trained without
+        # 3D supervision has nothing fixing its global scale and raw MPJPE (in
+        # mm) charges that drift as pose error.
+        "n_mpjpe_mm": None,
+        "median_n_mpjpe_mm": None,
+        "pa_mpjpe_mm": None,
+        "median_pa_mpjpe_mm": None,
+        "fitted_global_scale": None,
     }
     if path is None or not Path(path).exists():
         return out
@@ -229,8 +238,19 @@ def parse_benchmark_report(path: Optional[Path]) -> Dict[str, Optional[float]]:
         m = re.search(pattern, text, re.IGNORECASE)
         return float(m.group(1)) if m else None
 
-    out["mpjpe_mm"] = grab(r"MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
-    out["median_mpjpe_mm"] = grab(r"Median\s*MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    # These four labels are substrings of one another: "MPJPE (mm)" occurs inside
+    # "Median MPJPE (mm)", "N-MPJPE (mm)" and "PA-MPJPE (mm)". A bare pattern
+    # would report a corrected number as the raw one — the exact confusion these
+    # metrics exist to prevent — so every pattern excludes the longer labels it
+    # sits inside. The lookbehinds are fixed-width, as Python requires.
+    NOT_PREFIXED = r"(?<![-\w])(?<!median )"  # IGNORECASE makes this cover "Median "
+    out["mpjpe_mm"] = grab(NOT_PREFIXED + r"MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    out["median_mpjpe_mm"] = grab(r"(?<![-\w])Median\s+MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    out["n_mpjpe_mm"] = grab(r"(?<!median )N-MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    out["median_n_mpjpe_mm"] = grab(r"Median\s+N-MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    out["pa_mpjpe_mm"] = grab(r"(?<!median )PA-MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    out["median_pa_mpjpe_mm"] = grab(r"Median\s+PA-MPJPE\s*\(mm\)\s*:?\s*([\d.]+)")
+    out["fitted_global_scale"] = grab(r"Fitted\s+global\s+scale\s*:?\s*([\d.]+)")
     # PCK lines vary; capture the first @5px native/input if present.
     out["pck_5px_native"] = grab(r"native.*?PCK@5(?:px)?\s*:?\s*([\d.]+)")
     out["pck_5px_input"] = grab(r"input.*?PCK@5(?:px)?\s*:?\s*([\d.]+)")

@@ -248,12 +248,45 @@ def _compute_pck_errors(
     return errors_native, errors_input
 
 
+def _procrustes_aligned_errors(pred: np.ndarray, gt: np.ndarray) -> Optional[np.ndarray]:
+    """Per-joint distances after a full similarity alignment of *pred* onto *gt*.
+
+    Solves for the rotation, uniform scale and translation that best map pred
+    onto gt (the classic Umeyama/Kabsch fit), then returns the residual per-joint
+    distances. This is PA-MPJPE: it answers "is the POSE right", independently of
+    where the model put the animal, how it oriented it, and how big it made it.
+
+    Returns None when the fit is not defined (fewer than 3 joints, or a
+    degenerate configuration).
+    """
+    if pred.shape[0] < 3 or pred.shape != gt.shape:
+        return None
+    pred_c = pred - pred.mean(axis=0, keepdims=True)
+    gt_c = gt - gt.mean(axis=0, keepdims=True)
+    var_pred = float((pred_c**2).sum())
+    if var_pred <= 1e-12:
+        return None
+    try:
+        u, s, vt = np.linalg.svd(gt_c.T @ pred_c)
+    except np.linalg.LinAlgError:
+        return None
+    # Reflections are not similarity transforms of a rigid body: forcing
+    # det(R) = +1 keeps a mirrored prediction from scoring as a perfect fit.
+    d = np.sign(np.linalg.det(u @ vt))
+    correction = np.diag([1.0, 1.0, d]).astype(pred.dtype)
+    rot = u @ correction @ vt
+    scale = float((s * np.array([1.0, 1.0, d])).sum() / var_pred)
+    aligned = scale * (pred_c @ rot.T)
+    return np.linalg.norm(aligned - gt_c, axis=1)
+
+
 def _accumulate_mpjpe_mm(
     pred_joints_np: np.ndarray,
     y_data_batch: List[Dict],
     world_scale: float,
     samples_3d_for_plot: Optional[List[Dict]] = None,
     max_plot_samples: int = 5,
+    align_acc: Optional[Dict[str, list]] = None,
 ) -> Tuple[List[float], int]:
     """Accumulate per-joint 3D errors (mm) for a batch of predicted joints.
 
@@ -298,6 +331,45 @@ def _accumulate_mpjpe_mm(
         errors_mm.extend(dist_mm.tolist())
         valid_samples += 1
 
+        # --- scale-aligned accuracy (see _report_mpjpe_mm) --------------------
+        # Raw MPJPE assumes the model got the animal's absolute SIZE right. With
+        # 3D supervision that is a fair assumption. Without it, it is not: under
+        # perspective projection a uniformly larger animal at proportionally
+        # greater depth produces identical pixels, so a purely 2D-supervised
+        # model has nothing to fix its global scale and raw MPJPE reports that
+        # drift as if it were pose error. These accumulators let the report add
+        # metrics that separate the two.
+        if align_acc is not None:
+            p = pred_slice[valid_joint_mask].astype(np.float64)
+            g = gt_slice[valid_joint_mask].astype(np.float64)
+            # Centre both: the global scale is fitted on SHAPE, so a translation
+            # offset must not leak into it.
+            p_c = p - p.mean(axis=0, keepdims=True)
+            g_c = g - g.mean(axis=0, keepdims=True)
+            # Per-joint inner products are all that a single global scale s
+            # needs afterwards, since
+            #     ||s*p - g||^2 = s^2*<p,p> - 2s*<p,g> + <g,g>
+            # holds per joint. Storing these three scalars instead of the two
+            # 3-vectors halves the memory and lets the exact per-joint aligned
+            # error be recovered once s is known, without a second forward pass.
+            # Pre-scaled to mm^2 (these are squared quantities, so scale^2), so
+            # the report needs no unit conversion of its own. The fitted scale is
+            # a RATIO of two of them and is unaffected by this.
+            sq_scale = scale * scale
+            align_acc["pp"].append((p_c * p_c).sum(axis=1) * sq_scale)
+            align_acc["pg"].append((p_c * g_c).sum(axis=1) * sq_scale)
+            align_acc["gg"].append((g_c * g_c).sum(axis=1) * sq_scale)
+
+            pa = _procrustes_aligned_errors(p, g)
+            if pa is not None:
+                align_acc["pa_mm"].append(pa * scale)
+            # The per-frame scale that best matches this prediction to its GT.
+            # Its distribution is the direct read on how far the size drifted:
+            # centred on 1.0 means the model got size right.
+            denom = float((p_c * p_c).sum())
+            if denom > 1e-12:
+                align_acc["frame_scale"].append(float((p_c * g_c).sum()) / denom)
+
         if samples_3d_for_plot is not None and len(samples_3d_for_plot) < max_plot_samples:
             samples_3d_for_plot.append(
                 {
@@ -317,10 +389,13 @@ def _compute_mpjpe_mm(
     world_scale: float,
     samples_3d_for_plot: Optional[List[Dict]] = None,
     max_plot_samples: int = 5,
+    align_acc: Optional[Dict[str, list]] = None,
 ) -> Tuple[List[float], int]:
     """Multi-view MPJPE: predict canonical 3D joints, then accumulate errors (mm)."""
     pred_joints_np = model._predict_canonical_joints_3d(predicted_params).detach().cpu().numpy()  # (B, J, 3)
-    return _accumulate_mpjpe_mm(pred_joints_np, y_data_batch, world_scale, samples_3d_for_plot, max_plot_samples)
+    return _accumulate_mpjpe_mm(
+        pred_joints_np, y_data_batch, world_scale, samples_3d_for_plot, max_plot_samples, align_acc
+    )
 
 
 def _compute_mpjpe_mm_singleview(
@@ -330,6 +405,7 @@ def _compute_mpjpe_mm_singleview(
     world_scale: float,
     samples_3d_for_plot: Optional[List[Dict]] = None,
     max_plot_samples: int = 5,
+    align_acc: Optional[Dict[str, list]] = None,
 ) -> Tuple[List[float], int]:
     """Single-view (camera-centric) MPJPE.
 
@@ -347,7 +423,9 @@ def _compute_mpjpe_mm_singleview(
     if joints_3d is None:
         return [], 0
     pred_joints_np = joints_3d.detach().cpu().numpy()  # (B, J, 3)
-    return _accumulate_mpjpe_mm(pred_joints_np, y_data_batch, world_scale, samples_3d_for_plot, max_plot_samples)
+    return _accumulate_mpjpe_mm(
+        pred_joints_np, y_data_batch, world_scale, samples_3d_for_plot, max_plot_samples, align_acc
+    )
 
 
 def _assign_percentile_bins(errors_mm: np.ndarray, thresholds: List[float]) -> np.ndarray:
@@ -439,10 +517,32 @@ def _report_mpjpe_mm(
     samples_with_3d: int,
     samples_3d_for_plot: List[Dict],
     output_dir: str,
+    align_acc: Optional[Dict[str, list]] = None,
 ):
     """Log MPJPE stats and save the 3D outputs (percentile scatter plots, error
     histogram, raw ``errors_3d_mm.npy``). Shared by the multi-view and single-view
     benchmarks so both produce identical 3D reporting.
+
+    When ``align_acc`` is supplied, two scale-robust accuracy metrics are
+    reported alongside raw MPJPE:
+
+    ``N-MPJPE``   Centre each prediction on its GT, then apply ONE global scale
+                  fitted across the whole test set, then measure. Corrects a
+                  systematic size error — the model consistently predicting an
+                  animal 1.2x too big — while leaving per-frame mistakes fully
+                  visible. This is the honest headline number for a model with
+                  no 3D supervision.
+    ``PA-MPJPE``  Per-frame similarity alignment (rotation, scale, translation).
+                  Pure pose quality, and an optimistic bound: it also forgives
+                  per-frame size and orientation errors, not just the systematic
+                  drift.
+
+    Why they are needed: a single camera cannot see absolute size. A larger
+    animal further away projects to exactly the same pixels, so a model trained
+    on 2D reprojection alone has nothing anchoring its global scale. Raw MPJPE
+    is measured in mm, so that drift inflates every joint error even when the
+    articulation is perfect. The fitted scale is reported too — it IS the drift,
+    and 1.0 means there is none.
     """
     errors_mm = np.array(all_3d_errors_mm, dtype=np.float32)
     if errors_mm.size > 0:
@@ -463,6 +563,68 @@ def _report_mpjpe_mm(
             log_fn(f"  P{p}: {v:.4f}")
     log_fn(f"3D samples with GT: {samples_with_3d}")
     log_fn(f"3D joint errors count: {errors_mm.size}")
+
+    # --- scale-robust accuracy -----------------------------------------------
+    if align_acc is not None and align_acc.get("pp"):
+        pp = np.concatenate(align_acc["pp"])
+        pg = np.concatenate(align_acc["pg"])
+        gg = np.concatenate(align_acc["gg"])
+
+        # One scale for the whole test set: s* = argmin sum ||s*p - g||^2.
+        denom = float(pp.sum())
+        global_scale = float(pg.sum() / denom) if denom > 1e-12 else 1.0
+
+        # ||s*p - g||^2 per joint, clipped at 0 against float round-off.
+        sq = global_scale**2 * pp - 2.0 * global_scale * pg + gg
+        n_errors_mm = np.sqrt(np.maximum(sq, 0.0))  # already mm (see sq_scale above)
+
+        # Report the SIZE RATIO (predicted / true), not the correction factor.
+        # global_scale is what the prediction must be MULTIPLIED by to match GT,
+        # so a model predicting an animal 1.4x too big gives global_scale=0.714.
+        # Printing that invites exactly the wrong reading, so invert it: 1.40
+        # reads directly as "the model's animal is 1.4x too big".
+        size_ratio = (1.0 / global_scale) if abs(global_scale) > 1e-12 else float("nan")
+
+        log_fn("")
+        log_fn("Scale-robust accuracy (a single view cannot observe absolute size;")
+        log_fn("without 3D supervision nothing fixes the model's global scale):")
+        log_fn(f"Fitted global scale: {size_ratio:.6f}   (predicted size / true size; 1.0 = no drift)")
+        log_fn(f"N-MPJPE (mm): {float(np.mean(n_errors_mm)):.4f}")
+        log_fn(f"Median N-MPJPE (mm): {float(np.median(n_errors_mm)):.4f}")
+        np.save(os.path.join(output_dir, "errors_3d_mm_nmpjpe.npy"), n_errors_mm.astype(np.float32))
+
+        if align_acc.get("pa_mm"):
+            pa_mm = np.concatenate(align_acc["pa_mm"])
+            log_fn(f"PA-MPJPE (mm): {float(np.mean(pa_mm)):.4f}")
+            log_fn(f"Median PA-MPJPE (mm): {float(np.median(pa_mm)):.4f}")
+            np.save(os.path.join(output_dir, "errors_3d_mm_pa.npy"), pa_mm.astype(np.float32))
+
+        if align_acc.get("frame_scale"):
+            # Same inversion as above so both numbers read in the same direction.
+            fs_raw = np.asarray(align_acc["frame_scale"], dtype=np.float64)
+            fs = np.where(np.abs(fs_raw) > 1e-12, 1.0 / np.where(fs_raw == 0, np.nan, fs_raw), np.nan)
+            fs = fs[np.isfinite(fs)]
+            if fs.size == 0:
+                fs = np.array([1.0])
+            p25, p50, p75 = np.percentile(fs, [25, 50, 75])
+            log_fn(f"Per-frame scale: median {p50:.4f}  IQR [{p25:.4f}, {p75:.4f}]")
+            np.save(os.path.join(output_dir, "frame_scales.npy"), fs.astype(np.float32))
+            # A tight distribution away from 1.0 is a constant size offset, which
+            # N-MPJPE removes. A wide one means the size wanders frame to frame,
+            # which it does not — so say which of the two this is.
+            spread = float(p75 - p25)
+            if abs(p50 - 1.0) > 0.05 and spread < 0.10:
+                log_fn(
+                    f"  -> consistent {p50:.2f}x size offset (spread {spread:.3f}); "
+                    f"N-MPJPE removes it, raw MPJPE does not."
+                )
+            elif spread >= 0.10:
+                log_fn(
+                    f"  -> size varies per frame (IQR width {spread:.3f}), so it is not a single "
+                    f"global offset; N-MPJPE only partly corrects it and PA-MPJPE is the bound."
+                )
+            else:
+                log_fn("  -> scale is close to 1.0 and stable; raw MPJPE is trustworthy here.")
 
     # 3D percentile scatter plots
     if errors_mm.size > 0 and samples_3d_for_plot:
@@ -854,6 +1016,11 @@ def _run_singleview_benchmark(
     all_errors_native: List[float] = []
     all_errors_input: List[float] = []
     all_3d_errors_mm: List[float] = []
+    # Scale-robust accuracy accumulators (N-MPJPE / PA-MPJPE / per-frame scale).
+    # See _report_mpjpe_mm: a single view cannot observe absolute size, so a
+    # model trained without 3D supervision has nothing fixing its global scale,
+    # and raw MPJPE charges that drift as pose error.
+    align_acc: Dict[str, list] = {"pp": [], "pg": [], "gg": [], "pa_mm": [], "frame_scale": []}
     samples_with_3d = 0
     samples_3d_for_plot: List[Dict] = []
     with torch.no_grad():
@@ -884,6 +1051,7 @@ def _run_singleview_benchmark(
                 y_data_batch=y_data_batch,
                 world_scale=dataset.world_scale,
                 samples_3d_for_plot=samples_3d_for_plot,
+                align_acc=align_acc,
             )
             all_3d_errors_mm.extend(batch_errors_mm)
             samples_with_3d += batch_samples_with_3d
@@ -899,7 +1067,7 @@ def _run_singleview_benchmark(
     # MPJPE stats + 3D outputs (percentile scatter plots, histogram, errors_3d_mm.npy).
     # Shared with the multi-view benchmark for identical 3D reporting.
     errors_mm, mpjpe_hist_path = _report_mpjpe_mm(
-        log_fn, all_3d_errors_mm, samples_with_3d, samples_3d_for_plot, output_dir
+        log_fn, all_3d_errors_mm, samples_with_3d, samples_3d_for_plot, output_dir, align_acc
     )
 
     # Separate plot per resolution (single curve each) + per-resolution histograms
@@ -1383,6 +1551,11 @@ def _run_multiview_eval_loop(
     all_errors_native = []
     all_errors_input = []
     all_3d_errors_mm = []
+    # Scale-robust accuracy accumulators — see _report_mpjpe_mm. Kept on the
+    # multi-view path too so both benchmarks report the same columns; multi-view
+    # resolves scale from geometry, so its fitted scale should sit at ~1.0 and
+    # that is a useful control on the single-view numbers.
+    align_acc: Dict[str, list] = {"pp": [], "pg": [], "gg": [], "pa_mm": [], "frame_scale": []}
     samples_with_3d = 0
     samples_3d_for_plot = []
 
@@ -1411,6 +1584,7 @@ def _run_multiview_eval_loop(
                 y_data_batch=y_data_batch,
                 world_scale=dataset.world_scale,
                 samples_3d_for_plot=samples_3d_for_plot,
+                align_acc=align_acc,
             )
             all_3d_errors_mm.extend(batch_errors_mm)
             samples_with_3d += batch_samples_with_3d
@@ -1425,7 +1599,7 @@ def _run_multiview_eval_loop(
 
     # MPJPE stats + 3D outputs (percentile scatter plots, histogram, errors_3d_mm.npy)
     errors_mm, mpjpe_hist_path = _report_mpjpe_mm(
-        log_fn, all_3d_errors_mm, samples_with_3d, samples_3d_for_plot, output_dir
+        log_fn, all_3d_errors_mm, samples_with_3d, samples_3d_for_plot, output_dir, align_acc
     )
 
     # Separate plot per resolution (single curve each) + per-resolution histograms

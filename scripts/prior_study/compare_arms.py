@@ -66,11 +66,31 @@ PAIRS = [
     ("multiview", "mv_reference", "mv_constrained"),
 ]
 
-ACC_KEYS = ["mpjpe_mm", "median_mpjpe_mm", "pck_5px_native", "pck_5px_input"]
+ACC_KEYS = [
+    "mpjpe_mm",
+    "median_mpjpe_mm",
+    # Scale-robust accuracy. A single camera cannot observe absolute size, so a
+    # model trained without 3D supervision has nothing fixing its global scale;
+    # raw MPJPE is in mm and charges that drift as pose error. N-MPJPE removes a
+    # single systematic size offset, PA-MPJPE aligns per frame. `fitted_global_scale`
+    # is the drift itself — 1.0 means there is none, and it is reported rather
+    # than scored.
+    "n_mpjpe_mm",
+    "median_n_mpjpe_mm",
+    "pa_mpjpe_mm",
+    "median_pa_mpjpe_mm",
+    "fitted_global_scale",
+    "pck_5px_native",
+    "pck_5px_input",
+]
 # For each metric: True when a DECREASE is an improvement.
 LOWER_IS_BETTER = {
     "mpjpe_mm": True,
     "median_mpjpe_mm": True,
+    "n_mpjpe_mm": True,
+    "median_n_mpjpe_mm": True,
+    "pa_mpjpe_mm": True,
+    "median_pa_mpjpe_mm": True,
     "pck_5px_native": False,
     "pck_5px_input": False,
     "violating_axes": True,
@@ -78,6 +98,13 @@ LOWER_IS_BETTER = {
     "mean_overshoot_deg": True,
     "max_overshoot_deg": True,
 }
+
+# Metrics with no "better" direction: the delta is reported, never judged.
+# fitted_global_scale is better the CLOSER it is to 1.0, from either side, so a
+# signed difference between two arms cannot be labelled better or worse — and
+# LOWER_IS_BETTER.get(key, True) would otherwise silently call a drop from 1.05
+# to 0.80 an improvement.
+NO_VERDICT = {"fitted_global_scale"}
 
 
 def read_violations(arm_dir: Path) -> dict:
@@ -188,6 +215,8 @@ def delta(constrained, reference, key: str, spec: str = ".2f") -> tuple[Optional
     d = a - b
     if abs(d) < 1e-9:
         return d, "0 (=)"
+    if key in NO_VERDICT:
+        return d, f"{d:+{spec}}"
     improved = (d < 0) if LOWER_IS_BETTER.get(key, True) else (d > 0)
     return d, f"{d:+{spec}} ({'better' if improved else 'worse'})"
 
@@ -336,6 +365,10 @@ def main() -> int:
             ("Max overshoot (deg)", "max_overshoot_deg", ".2f"),
             ("MPJPE (mm)", "mpjpe_mm", ".2f"),
             ("Median MPJPE (mm)", "median_mpjpe_mm", ".2f"),
+            ("N-MPJPE (mm), global scale fitted", "n_mpjpe_mm", ".2f"),
+            ("Median N-MPJPE (mm)", "median_n_mpjpe_mm", ".2f"),
+            ("PA-MPJPE (mm), per-frame aligned", "pa_mpjpe_mm", ".2f"),
+            ("Fitted global scale (1.0 = no drift)", "fitted_global_scale", ".3f"),
             ("PCK@5px native", "pck_5px_native", ".4f"),
             ("PCK@5px input", "pck_5px_input", ".4f"),
         ]
@@ -365,6 +398,7 @@ def main() -> int:
             ("Mean violation rate (% frames)", "mean_viol_rate", ".2f"),
             ("Mean overshoot (deg)", "mean_overshoot_deg", ".2f"),
             ("MPJPE (mm)", "mpjpe_mm", ".2f"),
+            ("N-MPJPE (mm)", "n_mpjpe_mm", ".2f"),
             ("PCK@5px native", "pck_5px_native", ".4f"),
         ]:
             _sd, sv_txt = delta(sv_con, sv_ref, key, spec)
