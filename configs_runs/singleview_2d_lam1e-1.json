@@ -1,0 +1,195 @@
+{
+  "mode": "singleview",
+  "smal_model": {
+    "smal_file": "3D_model_prep/SMILy_STICK_limits_authored.pkl",
+    "shape_family": -1
+  },
+  "dataset": {
+    "data_path": "SMILySTICKS_centred_reprojected_FIXED.h5",
+    "train_ratio": 0.85,
+    "val_ratio": 0.05,
+    "test_ratio": 0.1,
+    "dataset_fraction": 0.2,
+    "from_multiview": true,
+    "frame_convention": "camera_centric",
+    "expand_all_views": true,
+    "use_ue_scaling": false
+  },
+  "model": {
+    "backbone_name": "vit_large_patch16_224",
+    "freeze_backbone": false,
+    "backbone_unfreeze_epoch": null,
+    "backbone_lr_multiplier": 0.1,
+    "hidden_dim": 512,
+    "head_type": "transformer_decoder",
+    "use_unity_prior": false,
+    "rgb_only": false,
+    "transformer_depth": 6,
+    "transformer_heads": 8,
+    "transformer_dim_head": 64,
+    "transformer_mlp_dim": 1024,
+    "transformer_dropout": 0.1,
+    "transformer_ief_iters": 3,
+    "transformer_trans_scale_factor": 1
+  },
+  "optimizer": {
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "gradient_clip_norm": 1.0,
+    "optimizer_type": "adamw",
+    "lr_schedule": {
+      "0": 0.0001,
+      "120": 5e-05,
+      "200": 1e-05
+    }
+  },
+  "loss_curriculum": {
+    "base_weights": {
+      "global_rot": 0.0,
+      "joint_rot": 0.0,
+      "betas": 0.0,
+      "trans": 0.0,
+      "fov": 0.0,
+      "cam_rot": 0.0,
+      "cam_trans": 0.0,
+      "log_beta_scales": 0.0,
+      "betas_trans": 0.0,
+      "keypoint_2d": 0.1,
+      "keypoint_3d": 0.0,
+      "silhouette": 0.0,
+      "joint_angle_regularization": 0.001,
+      "limb_scale_regularization": 0.1,
+      "limb_trans_regularization": 1,
+      "joint_limit_regularization": 0.1
+    },
+    "curriculum_stages": {
+      "20": {
+        "joint_angle_regularization": 0.0001
+      },
+      "50": {
+        "joint_angle_regularization": 1e-05
+      },
+      "60": {
+        "joint_angle_regularization": 1e-06,
+        "limb_scale_regularization": 0.001,
+        "limb_trans_regularization": 0.5
+      },
+      "120": {
+        "joint_angle_regularization": 1e-06,
+        "limb_scale_regularization": 0.0005,
+        "limb_trans_regularization": 0.5
+      },
+      "200": {
+        "joint_angle_regularization": 1e-06,
+        "limb_scale_regularization": 0.0001,
+        "limb_trans_regularization": 0.5
+      },
+      "250": {
+        "joint_angle_regularization": 1e-06,
+        "limb_scale_regularization": 5e-05,
+        "limb_trans_regularization": 0.5
+      },
+      "300": {
+        "joint_angle_regularization": 5e-07,
+        "limb_scale_regularization": 5e-05,
+        "limb_trans_regularization": 0.5
+      },
+      "400": {
+        "joint_angle_regularization": 2e-07,
+        "limb_scale_regularization": 1e-05,
+        "limb_trans_regularization": 0.5
+      }
+    }
+  },
+  "scale_trans_beta": {
+    "mode": "separate",
+    "separate_loss_weights": {
+      "log_beta_scales": 0.0,
+      "betas_trans": 0.0
+    }
+  },
+  "mesh_scaling": {
+    "allow_mesh_scaling": true,
+    "init_mesh_scale": 1.0,
+    "use_log_scale": true
+  },
+  "augmentation": {
+    "enabled": true,
+    "geometric_enabled": false,
+    "color_jitter_brightness": 0.2,
+    "color_jitter_contrast": 0.2,
+    "color_jitter_saturation": 0.15,
+    "gaussian_noise_std": 0.015,
+    "gaussian_blur_prob": 0.3,
+    "gaussian_blur_kernel_range": [
+      3,
+      7
+    ],
+    "random_erasing_prob": 0.2,
+    "random_erasing_scale_range": [
+      0.02,
+      0.1
+    ],
+    "crop_jitter_fraction": 0.0,
+    "scale_jitter_range": [
+      0.9,
+      1.1
+    ]
+  },
+  "joint_importance": {
+    "enabled": true,
+    "important_joint_names": [
+      "l_1_pt_l",
+      "l_2_pt_l",
+      "l_3_pt_l",
+      "l_1_pt_r",
+      "l_2_pt_r",
+      "l_3_pt_r"
+    ],
+    "weight_multiplier": 10.0
+  },
+  "ignored_joint_locations": {
+    "enabled": true,
+    "ignored_joint_names": []
+  },
+  "output": {
+    "checkpoint_dir": "/hpcwork/mkd34160/smilify_runs/singleview_2d_lam1e-1/checkpoints",
+    "plots_dir": "/hpcwork/mkd34160/smilify_runs/singleview_2d_lam1e-1/plots",
+    "visualizations_dir": "/hpcwork/mkd34160/smilify_runs/singleview_2d_lam1e-1/visualizations",
+    "train_visualizations_dir": "/hpcwork/mkd34160/smilify_runs/singleview_2d_lam1e-1/visualizations_train",
+    "save_checkpoint_every": 2,
+    "generate_visualizations_every": 10,
+    "plot_history_every": 10,
+    "num_visualization_samples": 5
+  },
+  "training": {
+    "batch_size": 8,
+    "num_epochs": 1000,
+    "seed": 42,
+    "rotation_representation": "6d",
+    "num_workers": 8,
+    "pin_memory": true,
+    "prefetch_factor": 16,
+    "resume_checkpoint": null,
+    "use_gt_camera_init": false,
+    "use_mixed_precision": false,
+    "gradient_accumulation_steps": 1
+  },
+  "_study": {
+    "name": "2d_only_from_scratch",
+    "label": "2d_lam1e-1",
+    "base_config": "/home/mkd34160/test/SMILify/singleview_SMILySTICKS_3D_ViT_checkpoints/singleview_SMILySTICKS_3D_ViT.json",
+    "joint_limit_regularization": 0.1,
+    "dropped_3d_supervision": [
+      "keypoint_3d",
+      "global_rot",
+      "joint_rot",
+      "betas",
+      "trans",
+      "log_beta_scales",
+      "betas_trans"
+    ],
+    "kept_3d_supervision": [],
+    "keypoint_2d_scale": 1.0
+  }
+}

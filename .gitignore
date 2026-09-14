@@ -238,7 +238,7 @@ benchmark_singleview_*/
 # Prior-study run artefacts: derived continuation configs, training outputs,
 # study results and SLURM logs. All regenerable from the scripts in
 # scripts/prior_study/ plus the downloaded checkpoint.
-configs_runs/
+# configs_runs/
 runs/
 singleview_SMILySTICKS_3D_ViT_checkpoints/
 
