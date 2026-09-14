@@ -1,0 +1,14 @@
+==================================================================
+Job 3897324 task 1 on n23g0014.hpc.itc.rwth-aachen.de — Sun Sep 13 16:30:20 CEST 2026
+  study  : 2D-ONLY, FROM SCRATCH
+  arm    : singleview / lambda=1e-4
+  cluster: RWTH CLAIX-2023 | partition c23g | account rwth2151
+  wall   : ends Mon Sep 14 16:30:04 CEST 2026
+  repo   : /rwthfs/rz/cluster/home/mkd34160/2d/SMILify
+  env    : /hpcwork/mkd34160/conda_envs/pytorch3d
+  config : configs_runs/singleview_2d_lam1e-4.json
+  data   : /home/mkd34160/test/SMILify/SMILySTICKS_centred_reprojected_FIXED.h5
+  gpus   : 4 per node x 2 node(s) = 8 rank(s)  [from SLURM_GPUS_ON_NODE]
+==================================================================
+  torch  : 2.3.1, CUDA 11.8, 4 GPU(s) visible
+  resume : /hpcwork/mkd34160/smilify_runs/singleview_2d_lam1e-4/checkpoints/checkpoint_epoch_201.pth  (continuing this arm; chained job)

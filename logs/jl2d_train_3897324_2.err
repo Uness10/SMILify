@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "<stdin>", line 34, in <module>
+  File "/hpcwork/mkd34160/conda_envs/pytorch3d/lib/python3.10/site-packages/torch/serialization.py", line 1004, in load
+    with _open_zipfile_reader(opened_file) as opened_zipfile:
+  File "/hpcwork/mkd34160/conda_envs/pytorch3d/lib/python3.10/site-packages/torch/serialization.py", line 456, in __init__
+    super().__init__(torch._C.PyTorchFileReader(name_or_buffer))
+RuntimeError: PytorchStreamReader failed reading zip archive: failed finding central directory
