@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --partition=c23g
 #SBATCH --gres=gpu:4
 #SBATCH --ntasks-per-node=1
@@ -23,10 +23,13 @@
 # Override the lambda list with LAMBDAS="0 1e-4 1e-1" (same order as the array
 # indices) and the config path with CONFIG=<file> for a one-off.
 #
-# The dataset defaults to $DATA_ROOT/SMILySTICKS_centred_reprojected_FIXED.h5
-# with DATA_ROOT=$HPCWORK/SMILify. Override DATA_ROOT (directory) or DATA_PATH
-# (full file path) if the .h5 lives somewhere else, and remember to add it to
-# --export when submitting: --export=ALL,ENV_PREFIX,RUNS_ROOT,DATA_PATH
+# The header asks for 2 NODES x 4 GPUs = 8 ranks per arm, which is the shape the
+# configs are built for (prepare_2d_only_sweep.sh's WORLD, recorded in each
+# config's _study block). It is in the header rather than left to the submit
+# line on purpose: batch_size is PER PROCESS, so a forgotten --nodes=2 would run
+# an arm at half the effective batch and twice the steps per epoch, and the
+# result would look like a normal run. The pre-flight refuses that mismatch
+# rather than trusting the flag to be remembered.
 #
 # HOW THIS DIFFERS FROM run_prior_study_train.sbatch
 # --------------------------------------------------
@@ -87,23 +90,6 @@ TRAIN_MODULE="smal_fitter.neuralSMIL.train_smil_regressor"
 TAG="2d_lam${LAMBDA}"
 CONFIG="${CONFIG:-configs_runs/${MODE}_${TAG}.json}"
 
-# --- dataset path, resolved dynamically (not trusted from the JSON) --------
-# h5py.File() resolves whatever string it gets against the process CWD at the
-# moment train_smil_regressor.py opens it. A bare filename baked into the
-# config only works by accident if the job happens to `cd` into the one
-# directory that has it, and a stale/copied config can silently point at the
-# wrong file. Resolve an absolute path here and pass it with --data_path,
-# which overrides the config (CLI > JSON per configs/base_config.py's
-# precedence), so this arm's dataset never depends on the submit directory.
-DATA_ROOT="${DATA_ROOT:-$HPCWORK/SMILify}"
-DATA_PATH="${DATA_PATH:-$DATA_ROOT/SMILySTICKS_centred_reprojected_FIXED.h5}"
-if [[ ! -f "$DATA_PATH" ]]; then
-    echo "ERROR: dataset not found at $DATA_PATH" >&2
-    echo "       Set DATA_ROOT (directory) or DATA_PATH (full file path) explicitly, e.g.:" >&2
-    echo "         DATA_PATH=/path/to/file.h5 sbatch --export=ALL,ENV_PREFIX,RUNS_ROOT,DATA_PATH ... $0" >&2
-    exit 1
-fi
-
 # Backbone weights must already be cached (hpc_files/download_backbone_weights.py
 # on the login node); c23g compute nodes have no outbound network. This matters
 # MORE here than for the continuation study: these arms build a fresh
@@ -121,7 +107,16 @@ export TRANSFORMERS_OFFLINE=1
 # dry run print the shape you are about to submit rather than 1).
 _is_pos_int() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 0 )); }
 
-NNODES="${SLURM_JOB_NUM_NODES:-${SLURM_NNODES:-1}}"
+NNODES="${SLURM_JOB_NUM_NODES:-${SLURM_NNODES:-}}"
+if ! _is_pos_int "${NNODES:-}"; then
+    # Same reasoning as the GPU count below: on a login node the SLURM variables
+    # are absent, and defaulting to 1 would make a dry run compute a 4-rank world
+    # for a script whose header asks for 2 nodes — which then trips the
+    # allocation guard on a config built for 8. Read the header instead, so the
+    # dry run reports the shape actually being submitted.
+    NNODES="$(grep -m1 -oP '^#SBATCH\s+--nodes=\K[0-9]+' "$0" 2>/dev/null || true)"
+    _is_pos_int "${NNODES:-}" || NNODES=1
+fi
 GPU_SRC="GPUS_PER_NODE env"
 GPUS_PER_NODE="${GPUS_PER_NODE:-}"
 
@@ -210,7 +205,6 @@ echo "  wall   : ${SLURM_JOB_END_TIME:+ends $(date -d @"$SLURM_JOB_END_TIME" 2>/
 echo "  repo   : $REPO_DIR"
 echo "  env    : $CONDA_PREFIX"
 echo "  config : $CONFIG"
-echo "  data   : $DATA_PATH"
 echo "  gpus   : $GPUS_PER_NODE per node x $NNODES node(s) = $WORLD rank(s)  [from $GPU_SRC]"
 echo "=================================================================="
 python -c "import torch; print(f'  torch  : {torch.__version__}, CUDA {torch.version.cuda}, {torch.cuda.device_count()} GPU(s) visible')"
@@ -248,13 +242,16 @@ export SMILIFY_2D_RESUME="$RESUME_FROM"
 # --- pre-flight: everything that can silently no-op --------------------------
 # Cheap, runs before the GPUs are touched, and every check below corresponds to
 # a way this job can "succeed" while producing a result that answers no question.
-python - "$CONFIG" "$LAMBDA" "$WORLD" "$RESUME_FROM" <<'PY' || exit $?
-import json, math, os, pickle, sys
+IS_DRYRUN=0
+[[ -z "${SLURM_JOB_ID:-}" || "${SLURM_JOB_ID}" == "000000" ]] && IS_DRYRUN=1
+
+python - "$CONFIG" "$LAMBDA" "$WORLD" "$RESUME_FROM" "$IS_DRYRUN" <<'PY' || exit $?
+import glob, json, math, os, pickle, sys
 import numpy as np
 import torch
 
 cfg_path, expected_lambda, world = sys.argv[1], float(sys.argv[2]), int(sys.argv[3])
-resume_from = sys.argv[4]
+resume_from, is_dryrun = sys.argv[4], sys.argv[5] == "1"
 cfg = json.load(open(cfg_path))
 
 DROP_3D = ("keypoint_3d", "global_rot", "joint_rot", "betas", "trans",
@@ -441,6 +438,100 @@ bs = tr.get("batch_size")
 print(f"  batch_size {bs} per rank x {world} rank(s) -> effective {bs * world if bs else '?'}")
 print(f"  STUDY INVARIANT   : effective batch {bs * world if bs else '?'} — every arm MUST match.")
 
+# 7a. the allocation this config was BUILT for --------------------------------
+# prepare_2d_only_sweep.sh divides the reference's effective batch by the rank
+# count it was told to target, so the per-rank batch_size below is only correct
+# at that rank count. Running it at another one silently changes both the
+# effective batch and the steps per epoch (in opposite directions), and nothing
+# downstream would show it.
+study = cfg.get("_study") or {}
+intended = study.get("intended_world_size")
+if intended is not None and int(intended) != world:
+    sys.exit(
+        f"ERROR: ALLOCATION MISMATCH. This config was built for {intended} rank(s) but this job "
+        f"has {world}.\n"
+        f"       batch_size is PER PROCESS, so at {world} ranks the effective batch is "
+        f"{bs * world if bs else '?'} rather than the intended "
+        f"{study.get('intended_effective_batch', '?')}, and the optimizer steps per epoch change by "
+        f"{intended}/{world}.\n"
+        f"       Submit at the intended shape (for {intended} ranks on 4-GPU nodes: "
+        f"--nodes={max(1, int(intended) // 4)}), or rebuild the configs for this one:\n"
+        f"         WORLD={world} REF_EFFECTIVE_BATCH=<sv_ref's> bash "
+        f"scripts/prior_study/prepare_2d_only_sweep.sh"
+    )
+if intended is not None:
+    print(f"  allocation        : matches the {intended}-rank shape this config was built for  OK")
+
+# 7b. the shape must not drift across chain links or between arms -------------
+# These arms run as a chain of dependent jobs over several days. Nothing in
+# SLURM stops one link being resubmitted with a different --nodes, which would
+# split a single arm across two optimisation regimes at an invisible boundary.
+# Record the shape on the first real launch and refuse to differ from it after.
+out_cfg = cfg.get("output", {}) or {}
+run_dir = os.path.dirname(out_cfg.get("checkpoint_dir") or "")
+shape = {"world_size": world, "batch_size": bs, "num_epochs": int(num_epochs),
+         "effective_batch": (bs * world) if bs else None}
+alloc_path = os.path.join(run_dir, "allocation.json") if run_dir else ""
+
+# Order matters: check this arm's own history, then the siblings, and only WRITE
+# once everything has passed. Recording the shape before the sibling check would
+# leave a rejected job's shape on disk as this arm's official one, and the next
+# link would then measure drift against a run that never happened.
+existing = None
+if alloc_path and os.path.isfile(alloc_path):
+    try:
+        existing = json.load(open(alloc_path))
+    except Exception as exc:
+        print(f"  (allocation.json unreadable, not enforced: {exc})")
+
+if existing:
+    drift = {k: (existing.get(k), shape[k]) for k in shape if existing.get(k) != shape[k]}
+    if drift:
+        sys.exit(
+            "ERROR: ALLOCATION DRIFT within this arm. An earlier job in this run dir used a\n"
+            "       different shape:\n"
+            + "\n".join(f"         {k}: was {was!r}, now {now!r}" for k, (was, now) in drift.items())
+            + f"\n       Continuing would train the second half of this arm under a different\n"
+            f"       effective batch than the first, at a boundary nothing records.\n"
+            f"       Re-submit at the original shape, or start the arm over in a fresh run dir.\n"
+            f"       (Deliberate change? Delete {alloc_path} and note it in the writeup.)"
+        )
+    print("  shape unchanged since this arm's first job  OK")
+
+# Cross-arm: the sweep invariant nothing else can see. preflight_2d_only.py
+# compares the per-arm CONFIGS, but world_size is a property of the ALLOCATION,
+# not the config, so only the running jobs know it.
+if run_dir:
+    n_sib = 0
+    for sib in sorted(glob.glob(os.path.join(os.path.dirname(run_dir), "singleview_2d_lam*", "allocation.json"))):
+        if alloc_path and os.path.abspath(sib) == os.path.abspath(alloc_path):
+            continue
+        try:
+            other = json.load(open(sib))
+        except Exception:
+            continue
+        n_sib += 1
+        bad = {k: (other.get(k), shape[k]) for k in ("world_size", "batch_size", "num_epochs")
+               if other.get(k) is not None and other.get(k) != shape[k]}
+        if bad:
+            sys.exit(
+                f"ERROR: SWEEP INVARIANT BROKEN across arms. {sib} recorded:\n"
+                + "\n".join(f"         {k}: {was!r} there, {now!r} here" for k, (was, now) in bad.items())
+                + "\n       The arms would differ by lambda AND by their optimisation regime, so the\n"
+                "       comparison measures both at once. Submit every arm at the same shape."
+            )
+    if n_sib:
+        print(f"  {n_sib} sibling arm(s) agree on the allocation shape  OK")
+
+if alloc_path and existing is None:
+    if is_dryrun:
+        print(f"  (dry run: not writing {alloc_path})")
+    else:
+        os.makedirs(run_dir, exist_ok=True)
+        with open(alloc_path, "w") as f:
+            json.dump(shape, f, indent=2)
+        print(f"  recorded the allocation shape -> {alloc_path}")
+
 # 8. output paths and quota -------------------------------------------------
 # Every output path is written by rank 0 mid-epoch, hours after the GPUs were
 # allocated, and a quota error arrives as an unhandled OSError inside
@@ -579,6 +670,6 @@ RESUME_ARGS=()
     --rdzv-endpoint="$RDZV_ENDPOINT" \
     --nnodes="$NNODES" \
     --nproc_per_node="$GPUS_PER_NODE" \
-    -m "$TRAIN_MODULE" --config "$CONFIG" --data_path "$DATA_PATH" "${RESUME_ARGS[@]}"
+    -m "$TRAIN_MODULE" --config "$CONFIG" "${RESUME_ARGS[@]}"
 
 echo "Done (2D-only, $MODE, lambda=$LAMBDA, $WORLD rank(s)) — $(date)"
