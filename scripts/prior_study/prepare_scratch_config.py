@@ -257,6 +257,27 @@ def main() -> int:
         help="Keep this 3D supervision term at its reference weight (repeatable). "
         "Escape hatch for a narrower ablation; the default drops all of them.",
     )
+    p.add_argument(
+        "--positive-depth",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="depth.positive_depth. 'auto' (default) turns it ON whenever both 'trans' and "
+        "'keypoint_3d' are dropped: without 3D supervision the 2D loss cannot tell the animal "
+        "from its mirror image behind the camera (docs/ISSUE_2d_only_depth_flip.md).",
+    )
+    p.add_argument(
+        "--init-depth",
+        type=float,
+        default=0.25,
+        help="depth.init_depth: predicted depth at initialisation (default 0.25, the sv_reference range).",
+    )
+    p.add_argument(
+        "--init-mesh-scale",
+        type=float,
+        default=0.04,
+        help="mesh_scaling.init_mesh_scale when positive_depth is on (default 0.04, the sv_reference "
+        "range). Starting at 1.0 puts the mesh ~25x too large for init_depth.",
+    )
     p.add_argument("--no-validate", action="store_true", help="Skip the load_config round-trip check")
     p.add_argument(
         "--allow-missing-stb-plumbing",
@@ -412,6 +433,29 @@ def main() -> int:
         else:
             raise SystemExit(msg)
 
+    # ---- depth sign / initial placement -------------------------------------
+    # (x, y, z) and (-x, -y, -z) reproject to the same pixel, so once the 3D terms
+    # are gone the network can (and did) converge behind the camera. The fix is a
+    # parametrisation, not supervision: depth = init_depth * exp(.) > 0.
+    no_3d_placement = "trans" in dropped and "keypoint_3d" in dropped
+    positive_depth = args.positive_depth == "on" or (args.positive_depth == "auto" and no_3d_placement)
+    if positive_depth:
+        if (cfg.get("dataset") or {}).get("frame_convention") != "camera_centric":
+            raise SystemExit("ERROR: --positive-depth needs dataset.frame_convention='camera_centric'")
+        cfg["depth"] = {"positive_depth": True, "init_depth": float(args.init_depth)}
+        mesh = cfg.setdefault("mesh_scaling", {})
+        if mesh.get("allow_mesh_scaling", bc.MeshScalingConfig().allow_mesh_scaling):
+            mesh["init_mesh_scale"] = float(args.init_mesh_scale)
+        print(
+            f"[prepare] depth.positive_depth = true (init_depth={args.init_depth:g}, "
+            f"init_mesh_scale={mesh.get('init_mesh_scale')}) — prevents the behind-camera solution"
+        )
+    elif no_3d_placement:
+        print(
+            "[prepare] WARNING: positive_depth is OFF with no 3D supervision. The run can converge to the\n"
+            "          mirror solution behind the camera (docs/ISSUE_2d_only_depth_flip.md)."
+        )
+
     # ---- output dirs -------------------------------------------------------
     set_output_dirs(cfg, run_dir)
 
@@ -424,6 +468,7 @@ def main() -> int:
         "dropped_3d_supervision": dropped,
         "kept_3d_supervision": kept_3d,
         "keypoint_2d_scale": float(args.keypoint_2d_scale),
+        "positive_depth": bool(positive_depth),
     }
 
     out_path = Path(args.out)

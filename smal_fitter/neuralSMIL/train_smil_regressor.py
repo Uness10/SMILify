@@ -1483,6 +1483,13 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
     mesh_scaling_cfg = training_config.get("mesh_scaling", {})
     allow_mesh_scaling = bool(mesh_scaling_cfg.get("allow_mesh_scaling", False))
     mesh_scale_init = float(mesh_scaling_cfg.get("init_mesh_scale", 1.0))
+    # Positive-depth parametrisation (camera_centric only). Off unless the JSON
+    # config sets depth.positive_depth — see DepthConfig for why 2D-only runs need it.
+    depth_cfg = training_config.get("depth", {}) or {}
+    positive_depth = bool(depth_cfg.get("positive_depth", False))
+    init_depth = float(depth_cfg.get("init_depth", 1.0))
+    if positive_depth and not camera_centric:
+        raise ValueError("depth.positive_depth=true requires dataset.frame_convention='camera_centric'")
 
     # Build config to save in checkpoints so run_inference can load without training_config
     checkpoint_config = {
@@ -1510,6 +1517,10 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
         # mesh renders at native size — ~35x too large vs the metric 3D).
         "allow_mesh_scaling": allow_mesh_scaling,
         "init_mesh_scale": mesh_scale_init,
+        # Persist so benchmark/inference rebuild the same depth parametrisation;
+        # without it a positive_depth checkpoint would output the raw depth.
+        "positive_depth": positive_depth,
+        "init_depth": init_depth,
     }
 
     # Use checkpoint from config if not provided as argument
@@ -1900,12 +1911,15 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
         # Max curriculum weight of the issue-#56 penalty; > 0 triggers fail-fast
         # validation of the model's joint_limits at construction (see above).
         joint_limit_regularization=joint_limit_reg_weight,
+        positive_depth=positive_depth,
+        init_depth=init_depth,
     ).to(device)
 
     # Print model configuration
     if not is_distributed or rank == 0:
         print(f"Model created with head type: {model.head_type}")
         print(f"Scale/Translation mode: {TrainingConfig.get_scale_trans_mode()}")
+        print(f"Positive depth: {positive_depth} (init_depth={init_depth}), init_mesh_scale={mesh_scale_init}")
         if model.head_type == "transformer_decoder":
             print(f"Transformer decoder config: {model.transformer_config}")
             if "trans_scale_factor" in model.transformer_config:

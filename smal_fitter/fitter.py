@@ -490,13 +490,19 @@ class SMALFitter(nn.Module):
                     render_texture=True,
                 )
 
-                verts_mean = verts - torch.mean(verts, dim=1, keepdim=True)
-                joints_mean = canonical_joints - torch.mean(verts, dim=1, keepdim=True)
+                # Rotate the mesh 180 deg about its OWN centroid and leave it where it
+                # is. Rotating about the world origin put the camera inside the mesh
+                # for camera_centric (identity camera at the origin).
+                centroid = torch.mean(verts, dim=1, keepdim=True)
+                verts_mean = verts - centroid
+                joints_mean = canonical_joints - centroid
+                rev_verts = (rot_matrix @ verts_mean.unsqueeze(-1)).squeeze(-1) + centroid
+                rev_joints_3d = (rot_matrix @ joints_mean.unsqueeze(-1)).squeeze(-1) + centroid
 
-                # render image with camera rotated 180 degrees to provide a separate view
+                # render image with the mesh rotated 180 degrees to provide a separate view
                 _, rev_joints, rev_images = self.renderer(
-                    (rot_matrix @ verts_mean.unsqueeze(-1)).squeeze(-1).float(),
-                    (rot_matrix @ joints_mean.unsqueeze(-1)).squeeze(-1).float(),
+                    rev_verts.float(),
+                    rev_joints_3d.float(),
                     self.smal_model.faces.unsqueeze(0).expand(verts.shape[0], -1, -1),
                     render_texture=True,
                 )

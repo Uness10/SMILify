@@ -68,6 +68,7 @@ INVARIANT_SECTIONS = (
     "augmentation",
     "smal_model",
     "mesh_scaling",
+    "depth",
     "joint_importance",
     "ignored_joints",
     "ignored_joint_locations",

@@ -397,6 +397,20 @@ class MeshScalingConfig:
 
 
 @dataclass
+class DepthConfig:
+    """Root depth parametrisation (single-view, camera_centric only).
+
+    positive_depth=True forces the predicted depth to be in front of the fixed
+    camera (log-depth: z = init_depth * exp(raw)). Needed whenever there is no 3D supervision: the 2D
+    reprojection loss is identical for the animal and its point-mirror behind
+    the camera. init_depth is the depth predicted at initialisation.
+    """
+
+    positive_depth: bool = False
+    init_depth: float = 1.0
+
+
+@dataclass
 class AugmentationConfig:
     """Image augmentation for training data.
 
@@ -565,6 +579,7 @@ class BaseTrainingConfig:
     loss_curriculum: LossCurriculumConfig = field(default_factory=LossCurriculumConfig)
     scale_trans_beta: ScaleTransBetaConfig = field(default_factory=ScaleTransBetaConfig)
     mesh_scaling: MeshScalingConfig = field(default_factory=MeshScalingConfig)
+    depth: DepthConfig = field(default_factory=DepthConfig)
     augmentation: AugmentationConfig = field(default_factory=AugmentationConfig)
     joint_importance: JointImportanceConfig = field(default_factory=JointImportanceConfig)
     ignored_joint_locations: IgnoredJointLocationsConfig = field(default_factory=IgnoredJointLocationsConfig)
@@ -709,6 +724,10 @@ class BaseTrainingConfig:
             "mesh_scaling": {
                 "allow_mesh_scaling": self.mesh_scaling.allow_mesh_scaling,
                 "init_mesh_scale": self.mesh_scaling.init_mesh_scale,
+            },
+            "depth": {
+                "positive_depth": self.depth.positive_depth,
+                "init_depth": self.depth.init_depth,
             },
             "joint_importance": {
                 "enabled": self.joint_importance.enabled,

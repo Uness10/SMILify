@@ -128,6 +128,8 @@ class SMILImageRegressor(SMALFitter):
         mesh_scale_init=1.0,
         fixed_camera=False,
         joint_limit_regularization=0.0,
+        positive_depth=False,
+        init_depth=1.0,
     ):
         """
         Initialize the SMIL Image Regressor.
@@ -155,6 +157,14 @@ class SMILImageRegressor(SMALFitter):
                 set is validated here at construction time and a broken/missing set
                 raises immediately (fail-fast), instead of raising per-batch inside
                 the trainers' exception handlers where it would be swallowed.
+            positive_depth: If True, the depth component of the predicted root
+                translation (trans[:, 2], camera-space z for the fixed camera_centric
+                camera) is treated as a log-depth, z = init_depth * exp(raw), so it is
+                always in front of the camera. Without it a 2D-only objective cannot distinguish the animal
+                from its mirror image behind the camera ((x,y,z) and (-x,-y,-z)
+                project to the same pixel). Default False keeps old behaviour.
+            init_depth: Depth predicted when the head outputs 0 (the initial
+                depth). Only used when positive_depth=True.
         """
         # For rgb_only=True, SMALFitter expects data_batch to be just the RGB tensor
         if rgb_only and isinstance(data_batch, tuple):
@@ -187,6 +197,17 @@ class SMILImageRegressor(SMALFitter):
         self.fixed_camera = fixed_camera
         if self.fixed_camera and self.use_ue_scaling:
             raise ValueError("fixed_camera (camera_centric) requires use_ue_scaling=False")
+
+        # Positive-depth parametrisation (see docstring). Only meaningful when the
+        # camera is the fixed identity, where trans z IS the camera-space depth.
+        self.positive_depth = bool(positive_depth)
+        self.init_depth = float(init_depth)
+        if self.positive_depth:
+            if not self.fixed_camera:
+                raise ValueError("positive_depth requires fixed_camera (frame_convention='camera_centric')")
+            if self.init_depth <= 0.0:
+                raise ValueError(f"init_depth must be > 0, got {self.init_depth}")
+            self._log_init_depth = float(np.log(self.init_depth))
 
         # Enable scaling propagation for SMIL models (matches Unreal2Pytorch3D behavior)
         self.propagate_scaling = True
@@ -672,11 +693,31 @@ class SMILImageRegressor(SMALFitter):
         batch_size = images.size(0)
 
         if self.head_type == "mlp":
-            return self._forward_mlp(images, batch_size)
+            params = self._forward_mlp(images, batch_size)
         elif self.head_type == "transformer_decoder":
-            return self._forward_transformer_decoder(images, batch_size)
+            params = self._forward_transformer_decoder(images, batch_size)
         else:
             raise ValueError(f"Unsupported head_type: {self.head_type}")
+
+        if getattr(self, "positive_depth", False) and "trans" in params:
+            params["trans"] = self._apply_positive_depth(params["trans"])
+        return params
+
+    # Bound on the raw log-depth offset (exp(12) ~ 1.6e5 x init_depth), only to
+    # keep a diverging head finite; normal training never gets near it.
+    MAX_LOG_DEPTH_OFFSET = 12.0
+
+    def _apply_positive_depth(self, trans: torch.Tensor) -> torch.Tensor:
+        """Map the raw depth output to z = init_depth * exp(raw) > 0.
+
+        Log-depth, like the log mesh_scale: the gradient never vanishes (a
+        softplus would saturate if the raw value ever went strongly negative),
+        and it is natural for the scale/depth ambiguity. x/y are untouched.
+        Not in-place, so autograd sees the transform.
+        """
+        raw = torch.clamp(trans[:, 2:3], -self.MAX_LOG_DEPTH_OFFSET, self.MAX_LOG_DEPTH_OFFSET)
+        z = torch.exp(raw + self._log_init_depth)
+        return torch.cat([trans[:, :2], z, trans[:, 3:]], dim=1)
 
     def _forward_mlp(self, images: torch.Tensor, batch_size: int) -> Dict[str, torch.Tensor]:
         """Forward pass for MLP regression head."""

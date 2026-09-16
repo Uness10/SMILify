@@ -414,6 +414,8 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
         _has_mesh_scale_head = any("mesh_scale_head" in k for k in checkpoint.get("model_state_dict", {}))
         allow_mesh_scaling = bool(ckpt_config.get("allow_mesh_scaling", _has_mesh_scale_head))
         mesh_scale_init = float(ckpt_config.get("init_mesh_scale", 1.0))
+        positive_depth = bool(ckpt_config.get("positive_depth", False))
+        init_depth = float(ckpt_config.get("init_depth", 1.0))
         model_config["frame_convention"] = frame_convention
         model_config["fixed_camera"] = fixed_camera
 
@@ -526,6 +528,8 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
             fixed_camera=fixed_camera,  # camera-centric: pin camera to identity
             allow_mesh_scaling=allow_mesh_scaling,  # rebuild the mesh_scale head
             mesh_scale_init=mesh_scale_init,
+            positive_depth=positive_depth,  # must match training or depth is raw
+            init_depth=init_depth,
         ).to(device)
 
         # Load model state, handling batch size differences
@@ -589,6 +593,28 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
 
     except Exception as e:
         raise RuntimeError(f"Failed to load checkpoint: {e}")
+
+
+def _apply_joint_scales_and_trans(model, temp_fitter, predicted_params, device) -> None:
+    """Load predicted per-joint scales/translations into a SMALFitter.
+
+    Mirrors train_smil_regressor.visualize_training_progress: in 'separate' mode
+    with use_pca_transformation=True the heads output PCA weights (B, n_betas),
+    which must be mapped to per-joint values (B, J, 3) before LBS.
+    """
+    if "log_beta_scales" not in predicted_params or "betas_trans" not in predicted_params:
+        if "log_beta_scales" in predicted_params:
+            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
+        if "betas_trans" in predicted_params:
+            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
+        return
+    scale_pred = predicted_params["log_beta_scales"].to(device)
+    trans_pred = predicted_params["betas_trans"].to(device)
+    if getattr(model, "scale_trans_mode", None) == "separate" and scale_pred.dim() == 2:
+        # 2D output == PCA weights (per-joint values are always (B, J, 3))
+        scale_pred, trans_pred = model._transform_separate_pca_weights_to_joint_values(scale_pred, trans_pred)
+    temp_fitter.log_beta_scales.data = scale_pred
+    temp_fitter.betas_trans.data = trans_pred
 
 
 def find_image_files(input_folder: str, supported_extensions: List[str] = None) -> List[str]:
@@ -843,10 +869,7 @@ def render_model_only(
         temp_fitter.fov.data = predicted_params["fov"].to(device)
 
         # Set joint scales and translations if available
-        if "log_beta_scales" in predicted_params:
-            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
-        if "betas_trans" in predicted_params:
-            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
+        _apply_joint_scales_and_trans(model, temp_fitter, predicted_params, device)
 
         # Set camera parameters
         if "cam_rot" in predicted_params and "cam_trans" in predicted_params:
@@ -982,10 +1005,7 @@ def render_prediction_on_frame(
         temp_fitter.fov.data = predicted_params["fov"].to(device)
 
         # Set joint scales and translations if available
-        if "log_beta_scales" in predicted_params:
-            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
-        if "betas_trans" in predicted_params:
-            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
+        _apply_joint_scales_and_trans(model, temp_fitter, predicted_params, device)
 
         # Set camera parameters
         if "cam_rot" in predicted_params and "cam_trans" in predicted_params:
@@ -1157,10 +1177,7 @@ def generate_visualization(
         temp_fitter.fov.data = predicted_params["fov"].to(device)
 
         # Set joint scales and translations if available
-        if "log_beta_scales" in predicted_params:
-            temp_fitter.log_beta_scales.data = predicted_params["log_beta_scales"].to(device)
-        if "betas_trans" in predicted_params:
-            temp_fitter.betas_trans.data = predicted_params["betas_trans"].to(device)
+        _apply_joint_scales_and_trans(model, temp_fitter, predicted_params, device)
 
         # Set camera parameters using predicted values
         if "cam_rot" in predicted_params and "cam_trans" in predicted_params:

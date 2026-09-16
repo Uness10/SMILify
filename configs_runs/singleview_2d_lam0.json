@@ -110,8 +110,12 @@
   },
   "mesh_scaling": {
     "allow_mesh_scaling": true,
-    "init_mesh_scale": 1.0,
+    "init_mesh_scale": 0.04,
     "use_log_scale": true
+  },
+  "depth": {
+    "positive_depth": true,
+    "init_depth": 0.25
   },
   "augmentation": {
     "enabled": true,
@@ -190,6 +194,7 @@
       "betas_trans"
     ],
     "kept_3d_supervision": [],
-    "keypoint_2d_scale": 1.0
+    "keypoint_2d_scale": 1.0,
+    "positive_depth": true
   }
 }

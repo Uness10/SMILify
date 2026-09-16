@@ -705,6 +705,8 @@ def _create_singleview_model(
     _has_mesh_scale_head = any("mesh_scale_head" in k for k in checkpoint.get("model_state_dict", {}))
     allow_mesh_scaling = bool(ckpt_config.get("allow_mesh_scaling", _has_mesh_scale_head))
     mesh_scale_init = float(ckpt_config.get("init_mesh_scale", 1.0))
+    positive_depth = bool(ckpt_config.get("positive_depth", False))
+    init_depth = float(ckpt_config.get("init_depth", 1.0))
 
     # CLI overrides
     smal_file = smal_file_override or ckpt_config.get("smal_file")
@@ -760,6 +762,8 @@ def _create_singleview_model(
         fixed_camera=fixed_camera,
         allow_mesh_scaling=allow_mesh_scaling,  # rebuild the mesh_scale head
         mesh_scale_init=mesh_scale_init,
+        positive_depth=positive_depth,  # must match training or depth is raw
+        init_depth=init_depth,
     ).to(device)
 
     # Load weights (filter out SMAL optimization params, same as inference script)

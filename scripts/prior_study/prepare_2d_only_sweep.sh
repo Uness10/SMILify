@@ -38,6 +38,10 @@
 #   VIZ_EVERY        generate_visualizations_every        (default: 10)
 #   PLOT_EVERY       plot_history_every                   (default: 10)
 #   KP2D_SCALE       multiply every keypoint_2d weight    (default: 1)
+#   POSITIVE_DEPTH   auto|on|off — depth > 0 parametrisation (default: auto =
+#                    on, since 3D is dropped; see docs/ISSUE_2d_only_depth_flip.md)
+#   INIT_DEPTH       initial predicted depth              (default: 0.25)
+#   INIT_MESH_SCALE  initial mesh scale                   (default: 0.04)
 #
 # On BATCH_SIZE: batch_size is PER PROCESS under DDP. On 4 GPUs a config written
 # for a single process runs at 4x the effective batch. Pass BATCH_SIZE=<orig/4>
@@ -62,7 +66,7 @@ cd "$REPO_ROOT"
 
 read -r -a LAMBDA_ARR <<< "${LAMBDAS:-0 1e-4 1e-1}"
 SMAL_FILE="${SMAL_FILE:-3D_model_prep/SMILy_STICK_limits_authored.pkl}"
-DATASET="${DATASET:-$DATA_ROOT/SMILySTICKS_centred_reprojected_FIXED.h5}
+DATASET="${DATASET:-${DATA_ROOT:+$DATA_ROOT/}SMILySTICKS_centred_reprojected_FIXED.h5}"
 SAVE_EVERY="${SAVE_EVERY:-2}"
 VIZ_EVERY="${VIZ_EVERY:-10}"
 PLOT_EVERY="${PLOT_EVERY:-10}"
@@ -130,8 +134,11 @@ for LAMBDA in "${LAMBDA_ARR[@]}"; do
         --data-path "$DATASET"
         --run-dir "$RUNS_ROOT/${MODE}_${TAG}"
         --keypoint-2d-scale "$KP2D_SCALE"
+        --positive-depth "${POSITIVE_DEPTH:-auto}"
         --out "$OUT"
     )
+    [[ -n "${INIT_DEPTH:-}" ]]      && ARGS+=(--init-depth "$INIT_DEPTH")
+    [[ -n "${INIT_MESH_SCALE:-}" ]] && ARGS+=(--init-mesh-scale "$INIT_MESH_SCALE")
     [[ -n "${BATCH_SIZE:-}" ]]  && ARGS+=(--batch-size "$BATCH_SIZE")
     [[ -n "${NUM_WORKERS:-}" ]] && ARGS+=(--num-workers "$NUM_WORKERS")
     [[ -n "${NUM_EPOCHS:-}" ]]  && ARGS+=(--num-epochs "$NUM_EPOCHS")
