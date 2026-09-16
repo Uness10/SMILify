@@ -96,8 +96,8 @@ This report gives:
         measured against an epoch-matched $\lam = 0$ control, which is the
         most accurate arm on every accuracy metric
         (\Cref{sec:res-plaus,sec:res-acc});
-  \item a range-of-motion analysis showing that the multi-view starting
-        checkpoint is already substantially more plausible than the
+  \item a range-of-motion analysis showing that the multi-view model without
+        the prior is already substantially more plausible than the
         single-view one, and that
         the same learned-margin over-regularisation nevertheless appears
         (\Cref{sec:res-rom});
@@ -225,7 +225,7 @@ resolution, since PCK@$N$\,px is resolution-dependent.
 For each bounded axis, ROM is the observed angular range
 $\max_t \theta_a(t) - \min_t \theta_a(t)$ over the test set. To separate
 ``removing violations'' from ``shrinking motion'' we reuse the \emph{clipping
-bound}: the ROM the starting checkpoint \armbase{} would retain if its
+bound}: the ROM the epoch-matched control \armref{} would retain if its
 trajectory were merely clipped into the authored box,
 \begin{equation}
   \mathrm{ROM}^{\text{clip}}_a
@@ -254,9 +254,8 @@ Lower is better for violation, overshoot, MPJPE and 2D error; higher is better
 for PCK. \armbase{} is set apart: it did not receive the $24$ additional
 epochs. The epoch-matched \armref{} achieves the best 2D and 3D accuracy, while
 stronger joint-limit regularisation substantially improves anatomical
-plausibility. The plausibility columns of \armref{} were computed on the
-cluster (\texttt{prior\_study\_results\_matched/\allowbreak mv\_reference/\allowbreak analysis/}) but
-are not yet included; plausibility comparisons below use \armbase{}.}
+plausibility. Mean overshoot is averaged over the axes that violate at least
+once.}
 \label{tab:main}
 \begin{tabular}{l c c *{9}{r}}
 \toprule
@@ -277,7 +276,7 @@ nat. & 224 & (px) \\
                  & 0.9639 & 0.8382
                  & 0.3350 & 0.9915 & 8.725 \\
 \midrule
-\armref{}        & 0         & 369 & --- & --- & --- & ---
+\armref{}        & 0         & 369 & 79 & 13.9409 & 2.626 & 59.10
                  & \best{0.9042} & \best{0.7805}
                  & \best{0.3633} & \best{0.9914} & \best{8.203} \\
 \textsc{mv-1e-4} & $10^{-4}$ & 369 & 75 & 4.6005 & 0.442 & 43.44
@@ -300,10 +299,9 @@ nat. & 224 & (px) \\
 Violation rate is the mean fraction of frames outside the authored range over
 the $162$ authored axes (log scale). As in the single-view sweep neither curve
 has an interior optimum, and the MPJPE curve rises monotonically from the
-reference. The open marker joined by a dashed segment is \armbase{}, which did
-not receive the $24$ additional epochs; the figure predates the epoch-matched
-control, whose MPJPE (\SI{0.9042}{\milli\metre}) lies below every point
-shown.}
+epoch-matched control (filled square, $\lam = 0$, epoch $369$). The open
+circle is \armbase{} (epoch $345$): continued training without the prior
+improves MPJPE but leaves plausibility where it was.}
 \label{fig:tradeoff}
 \end{figure}
 
@@ -311,19 +309,23 @@ shown.}
 \label{sec:res-plaus}
 
 The prior is effective on the quantity it penalises (\Cref{tab:main},
-\Cref{fig:tradeoff}). Relative to the starting checkpoint \armbase{}, the mean
-violation rate falls
-by a factor of $3.0$ at $\lam = 10^{-4}$, by $26$ at $10^{-3}$, by $270$ at
-$10^{-2}$ and by $\approx\!1900$ at $10^{-1}$. Mean overshoot on violating axes
-falls from \SI{2.65}{\degree} to below \SI{0.001}{\degree}.
+\Cref{fig:tradeoff}). Relative to the epoch-matched control \armref{}, the
+mean violation rate falls by a factor of $3.0$ at $\lam = 10^{-4}$, by $26$ at
+$10^{-3}$, by $270$ at $10^{-2}$ and by $\approx\!1900$ at $10^{-1}$. Mean
+overshoot on violating axes falls from \SI{2.63}{\degree} to below
+\SI{0.001}{\degree}. Continued training without the prior contributes nothing
+to this: from \armbase{} to \armref{} the violation rate is unchanged
+(\SI{13.96}{\percent} to \SI{13.94}{\percent}), the number of violating axes
+rises from $76$ to $79$ and the maximum overshoot from \SI{56.6}{\degree} to
+\SI{59.1}{\degree}.
 
 As in the single-view study, the number of axes violating \emph{at least once}
-is a poor summary: it falls only from $76$ to $21$ while the rate falls by more
+is a poor summary: it falls only from $79$ to $21$ while the rate falls by more
 than three orders of magnitude, because it is a binary indicator over
 \num{10126} frames that a single marginal frame is enough to trip. The
 informative quantity is again the maximum overshoot, which measures how badly
 the worst predicted pose fails:
-$56.6 \rightarrow 43.4 \rightarrow 17.6 \rightarrow 4.9 \rightarrow
+$59.1 \rightarrow 43.4 \rightarrow 17.6 \rightarrow 4.9 \rightarrow
 \SI{4.0}{\degree}$. A requirement of the form ``no anatomically impossible pose
 ever'' is met from $\lam = 10^{-2}$ upwards; at $\lam = 10^{-4}$ the model still
 produces a \SI{43.4}{\degree} violation somewhere in the test set.
@@ -331,7 +333,7 @@ produces a \SI{43.4}{\degree} violation somewhere in the test set.
 Two features distinguish the multi-view reduction curve from its single-view
 counterpart. First, the reduction is \emph{slower} per decade at the low end:
 $\lam = 10^{-4}$ divides the violation rate by $3.0$ in multi-view against
-$5.4$ in single-view, and leaves $\SI{4.60}{\percent}$ of frames violating
+$5.5$ in single-view, and leaves $\SI{4.60}{\percent}$ of frames violating
 against $\SI{2.73}{\percent}$. Second, it \emph{saturates} earlier at the high
 end: the last decade buys only \SI{4.9}{\degree} $\rightarrow$
 \SI{4.0}{\degree} of maximum overshoot, against $7.2 \rightarrow
@@ -341,9 +343,10 @@ in both regimes.
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.92\textwidth]{fig_mv_worst_axes.pdf}
-\caption{The twelve axes most frequently violated by \armbase{}, and their violation rate under each $\lam$ (log scale; bars below
+\caption{The twelve axes most frequently violated by the epoch-matched control
+\armref{}, and their violation rate under each $\lam$ (log scale; bars below
 \SI{0.002}{\percent} are drawn at the axis floor). All twelve are leg axes, as
-in the single-view case, but the distribution is more extreme: \armbase{}
+in the single-view case, but the distribution is more extreme: \armref{}
 violates \texttt{l\_3\_tr\_l.z} on \emph{every} test frame and
 \texttt{l\_3\_tr\_r.z} on \SI{99.6}{\percent} of them. At $\lam = 10^{-1}$ both
 axes are clean on every frame.}
@@ -409,19 +412,19 @@ every further decade.
 \centering
 \includegraphics[width=\textwidth]{fig_mv_pck.pdf}
 \caption{PCK curves on the multi-view test split at both reporting resolutions.
-The five arms are ordered by $\lam$ at every threshold on both curves, with the
-reference uppermost throughout. The ordering is strict: no constrained arm
-crosses the reference anywhere, at any threshold, on either curve. The
-reference drawn is \armbase{}; the epoch-matched \armref{} is not yet drawn,
-it lies above \armbase{} at every native threshold from $1$ to $30\,$px and
-within $0.0001$ of it beyond.}
+The epoch-matched control \armref{} (black) and the four constrained arms are
+ordered by $\lam$ at every threshold on both curves, with \armref{} uppermost
+throughout; at the input resolution the curves coincide from $10\,$px upward.
+No constrained arm crosses \armref{} at any threshold. The dotted curve is
+\armbase{}.}
 \label{fig:pck}
 \end{figure}
 
 \Cref{fig:pck} confirms that this is not an artefact of a single threshold.
-On both PCK curves the five arms are ordered by $\lam$ at every point, and
-\armbase{} dominates all four constrained arms everywhere, despite their $24$
-additional epochs. In the original single-view comparison \armbase{} was
+On both PCK curves the five epoch-matched arms are ordered by $\lam$ at every
+point, and \armref{} is never below a constrained arm. Even \armbase{} lies
+above all four constrained arms at every native threshold, despite their $24$
+additional epochs. In the original single-view comparison \svbase{} was
 beaten at almost every threshold by the three weakest constrained arms; with
 epoch-matched controls the two modes now agree in direction, and the
 multi-view model was the one in which the cost of the prior was visible even
@@ -430,13 +433,12 @@ without a control.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_mv_mpjpe_quantiles.pdf}
-\caption{Left: MPJPE quantile functions. Right: change relative to \armbase{}
-at each percentile. The penalty raises the error across the whole distribution
---- for $\lam = 10^{-1}$, $+\SI{26.7}{\percent}$ at P50 against
-$+\SI{22.0}{\percent}$ at P99 --- rather than concentrating in the tail where
-the implausible poses live. Against the epoch-matched \armref{}
-(P50 \SI{0.7805}{\milli\metre}, P99 \SI{3.0420}{\milli\metre}) the same arm is
-$+\SI{36.1}{\percent}$ at P50 and $+\SI{22.2}{\percent}$ at P99.}
+\caption{Left: MPJPE quantile functions. Right: change relative to the
+epoch-matched control \armref{} at each percentile. The penalty raises the
+error across the whole distribution, and most at the median --- for
+$\lam = 10^{-1}$, $+\SI{36.1}{\percent}$ at P50 against $+\SI{22.2}{\percent}$
+at P99 --- rather than concentrating in the tail where the implausible poses
+live.}
 \label{fig:quant}
 \end{figure}
 
@@ -444,13 +446,12 @@ $+\SI{36.1}{\percent}$ at P50 and $+\SI{22.2}{\percent}$ at P99.}
 degradation is diagnostic. If the prior were mainly suppressing rare,
 grossly implausible predictions, the cost --- and any benefit --- should
 concentrate in the upper tail. Instead the relative penalty is largest at the
-median and smallest at P99. Against the epoch-matched \armref{} the contrast is
-sharper: $+\SI{36.1}{\percent}$ at P50 against $+\SI{22.2}{\percent}$ at P99
+median and smallest at P99: $+\SI{36.1}{\percent}$ at P50 against $+\SI{22.2}{\percent}$ at P99
 for $\lam = 10^{-1}$, and $+\SI{10.4}{\percent}$ against $+\SI{4.0}{\percent}$
-for $\lam = 10^{-4}$. Continued training improved the median
-(\SI{-6.9}{\percent}) but left P99 essentially unchanged
-($3.0479 \rightarrow \SI{3.0420}{\milli\metre}$), so the extra cost revealed
-by the control sits at the median. The prior therefore acts as a tax on the
+for $\lam = 10^{-4}$. Against \armbase{} the contrast was weaker
+($+\SI{26.7}{\percent}$ vs.\ $+\SI{22.0}{\percent}$ at $10^{-1}$), because
+continued training improved the median (\SI{-6.9}{\percent}) but left P99
+essentially unchanged ($3.0479 \rightarrow \SI{3.0420}{\milli\metre}$). The prior therefore acts as a tax on the
 typical prediction. That is the profile of a term competing with the data on
 ordinary frames, not of a term correcting outliers.
 
@@ -462,95 +463,101 @@ ordinary frames, not of a term correcting outliers.
 \small
 \caption{Mean range of motion per bounded axis (deg), by joint group, over the
 $129$ axes with a finite authored range. The clipping bound (\Cref{eq:clip}) is
-the ROM \armbase{} would retain if its trajectory were merely clipped
-into the authored box. The \svbase{} figure from \cite{sv} is given
-in the last column for scale.}
+the ROM the epoch-matched control \armref{} would retain if its trajectory were
+merely clipped into the authored box. \armbase{} is given for comparison, and
+the single-view control \svref{} from \cite{sv} in the last column for scale.}
 \label{tab:rom}
-\begin{tabular}{l r *{5}{r} r}
+\setlength{\tabcolsep}{4.2pt}
+\begin{tabular}{l r r *{5}{r} r}
 \toprule
-Joint group & axes & \armbase{} & $10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ & \svbase{} \\
+Joint group & axes & \armbase{} & $\lam{=}0$ & $10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ & \svref{} \\
 \midrule
-Coxa            & 18 & 70.0 & 69.1 & 61.9 & 55.7 & 51.6 & 78.1 \\
-Trochanter      & 18 & 39.0 & 34.7 & 30.9 & 28.7 & 26.3 & 74.2 \\
-Femur           & 18 & 59.8 & 44.0 & 24.9 & 18.6 & 16.5 & 71.6 \\
-Tibia           & 18 & 39.5 & 33.2 & 29.0 & 24.7 & 21.4 & 88.9 \\
-Tarsus          & 18 & 61.1 & 48.4 & 41.3 & 37.2 & 32.7 & 96.3 \\
-Antenna         & 18 & 36.2 & 32.7 & 31.4 & 30.5 & 29.5 & 40.9 \\
-Head / wings    & 21 & 21.0 & 17.4 & 15.1 & 13.2 & 12.4 & 20.2 \\
+Coxa            & 18 & 70.0 & 72.1 & 69.1 & 61.9 & 55.7 & 51.6 & 77.8 \\
+Trochanter      & 18 & 39.0 & 39.0 & 34.7 & 30.9 & 28.7 & 26.3 & 71.9 \\
+Femur           & 18 & 59.8 & 59.4 & 44.0 & 24.9 & 18.6 & 16.5 & 70.5 \\
+Tibia           & 18 & 39.5 & 39.2 & 33.2 & 29.0 & 24.7 & 21.4 & 83.6 \\
+Tarsus          & 18 & 61.1 & 60.3 & 48.4 & 41.3 & 37.2 & 32.7 & 92.0 \\
+Antenna         & 18 & 36.2 & 36.4 & 32.7 & 31.4 & 30.5 & 29.5 & 40.2 \\
+Head / wings    & 21 & 21.0 & 20.4 & 17.4 & 15.1 & 13.2 & 12.4 & 19.6 \\
 \midrule
-\textbf{All}    & \textbf{129} & \textbf{46.1} & \textbf{39.4} & \textbf{33.1} & \textbf{29.4} & \textbf{26.9} & \textbf{66.1} \\
+\textbf{All}    & \textbf{129} & \textbf{46.1} & \textbf{46.1} & \textbf{39.4} & \textbf{33.1} & \textbf{29.4} & \textbf{26.9} & \textbf{64.0} \\
 \midrule
-\multicolumn{2}{l}{\emph{Clipping bound}} & \multicolumn{5}{c}{$30.5$ (mean over all $129$ axes)} & $37.0$ \\
-\multicolumn{2}{l}{\emph{Mean authored range}} & \multicolumn{5}{c}{$51.6$} & $51.6$ \\
+\multicolumn{3}{l}{\emph{Clipping bound} (of \armref{})} & \multicolumn{5}{c}{$30.5$ (mean over all $129$ axes)} & $36.3$ \\
+\multicolumn{3}{l}{\emph{Mean authored range}} & \multicolumn{5}{c}{$51.6$} & $51.6$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-All ROM figures in this section are relative to the starting checkpoints
-\armbase{} and \svbase{}. The pose analysis of the epoch-matched controls has
-been computed on the cluster but not yet merged into these tables; until it is,
-the ROM changes below combine the prior with $24$ epochs of continued training,
-as the original design did.
+Continued training without the prior leaves the range of motion unchanged:
+the mean ROM is \SI{46.1}{\degree} for both \armbase{} and \armref{}, and no
+joint group moves by more than \SI{3}{\percent} (\Cref{tab:rom}). The ROM
+changes below are therefore effects of the prior.
 
-\armbase{} is already markedly more conservative than \svbase{}. It moves through a mean ROM of \SI{46.1}{\degree} per bounded
-axis against \SI{66.1}{\degree} in single-view, for the same mean authored
-range of \SI{51.6}{\degree}: a ratio of means of $0.89\times$ against
-$1.28\times$. Per axis the picture is the same --- mean ratio $1.34$ against
-$1.95$, median $0.91$ against $1.18$, and $56$ of $129$ axes exceeding their
-authored range against $79$ (\Cref{fig:ratio}). Multi-view geometry, without
+The multi-view control is already markedly more conservative than the
+single-view one. \armref{} moves through a mean ROM of \SI{46.1}{\degree} per
+bounded axis against \SI{64.0}{\degree} for \svref{}, for the same mean
+authored range of \SI{51.6}{\degree}: a ratio of means of $0.89\times$ against
+$1.24\times$. Per axis the picture is the same --- mean ratio $1.34$ against
+$1.89$, median $0.88$ against $1.19$, and $56$ of $129$ axes exceeding their
+authored range against $77$ (\Cref{fig:ratio}). Multi-view geometry, without
 any anatomical supervision, already places the typical joint inside its
 authored envelope; what remains is a smaller number of axes that are outside it
 badly and persistently.
 
-Clipping the \armbase{} trajectory into the box would leave
-\SI{30.5}{\degree}. The trained arms give $39.4$, $33.1$, $29.4$ and
-\SI{26.9}{\degree} for $\lam = 10^{-4} \ldots 10^{-1}$ (\Cref{tab:rom}). From
-$\lam = 10^{-2}$ upward, therefore, the model again withdraws into the interior
-of the feasible set, ending at $\lam = 10^{-1}$ some \SI{12}{\percent} below
-the clipping bound. Since \Cref{eq:penalty} has zero gradient there, this is
-not a direct response to the penalty, and the learned-margin explanation of
-\cite{sv} carries over unchanged: predicting conservatively is the cheapest way
-to keep the expected hinge loss at zero when one's own predictions carry noise.
+Clipping the \armref{} trajectory into the box would leave \SI{30.5}{\degree}.
+The constrained arms give $39.4$, $33.1$, $29.4$ and \SI{26.9}{\degree} for
+$\lam = 10^{-4} \ldots 10^{-1}$ (\Cref{tab:rom}). From $\lam = 10^{-2}$ upward,
+therefore, the model again withdraws into the interior of the feasible set,
+ending $\SI{3.7}{\percent}$ below the clipping bound at $10^{-2}$ and
+$\SI{12.0}{\percent}$ below it at $10^{-1}$ (against $9.5$ and
+\SI{16.5}{\percent} in single-view). Since \Cref{eq:penalty} has zero gradient
+there, this is not a direct response to the penalty, and the learned-margin
+explanation of \cite{sv} carries over unchanged: predicting conservatively is
+the cheapest way to keep the expected hinge loss at zero when one's own
+predictions carry noise.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.86\textwidth]{fig_mv_rom_retention.pdf}
-\caption{ROM retained relative to \armbase{}, with axes grouped
-by \armbase{}'s own violation rate on that axis. The dashed rule in each
-group is the clipping bound of \Cref{eq:clip}. Axes that never violated retain
-\SIrange{92.4}{98.4}{\percent} of their range at every $\lam$. On chronically
-violating axes, $\lam = 10^{-1}$ lands on the clipping bound
-(\SI{40.3}{\percent} vs.\ \SI{40.4}{\percent}) --- one decade higher than in
-single-view, where $\lam = 10^{-2}$ already reached it.}
+\caption{ROM retained relative to the epoch-matched control \armref{}, with
+axes grouped by \armref{}'s own violation rate on that axis (mean of per-axis
+ratios). The dashed rule in each group is the clipping bound of
+\Cref{eq:clip}. Axes that never violated retain \SIrange{93.2}{98.4}{\percent}
+of their range at every $\lam$. On chronically violating axes,
+$\lam = 10^{-1}$ lands on the clipping bound (\SI{40.6}{\percent} vs.\
+\SI{40.1}{\percent}); in single-view the chronic axes had already passed just
+below their bound at $10^{-1}$.}
 \label{fig:retention}
 \end{figure}
 
 \Cref{fig:retention} resolves the effect by axis severity. Three readings
-follow. First, the prior is \emph{well targeted}: the $53$ axes that never
-violated in \armbase{} retain \SIrange{92.4}{98.4}{\percent} of their range
-at every $\lam$, so the penalty is not indiscriminately damping the whole pose;
-targeting is in fact slightly better than in single-view, where the same bucket
-retained \SIrange{93.6}{95.8}{\percent} from a much smaller set of $33$ axes.
-Second, it \emph{overshoots on marginal axes}, exactly as before: on axes that
-violated on less than \SI{1}{\percent} of frames, $\lam = 10^{-1}$ retains
-\SI{69.3}{\percent} of the \armbase{} range where clipping would retain
-\SI{85.8}{\percent} --- $17$ percentage points of motion removed for which no
-violation can account. Third, the alignment between the sweep and the clipping
-bound is shifted by one decade: chronic axes reach the bound at
-$\lam = 10^{-1}$ here and at $\lam = 10^{-2}$ in single-view, which is a direct
-consequence of the multi-view data term resisting the same penalty more
-strongly.
+follow. First, the prior is \emph{well targeted}: the $50$ axes that never
+violated in \armref{} retain \SIrange{93.2}{98.4}{\percent} of their range at
+every $\lam$, so the penalty is not indiscriminately damping the whole pose.
+Targeting appears better than in single-view, where the $35$ never-violating
+axes retained \SIrange{86.4}{92.1}{\percent}, although the two reports
+aggregate this bucket slightly differently (\Cref{fig:retention} averages
+per-axis ratios; \cite{sv} pools ROM over the bucket). Second, it
+\emph{overshoots on marginal axes}, exactly as before: on axes that violated on
+less than \SI{1}{\percent} of frames, $\lam = 10^{-1}$ retains
+\SI{68.8}{\percent} of the \armref{} range where clipping would retain
+\SI{86.3}{\percent} --- $17$ percentage points of motion removed for which no
+violation can account. Third, the sweep reaches the clipping bound later: at
+$\lam = 10^{-1}$ the chronic axes in multi-view are still on the bound, while
+in single-view they are already just below it. This is consistent with the
+multi-view data term resisting the same penalty more strongly.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_mv_rom_scatter.pdf}
-\caption{Per-axis ROM before and after regularisation (log--log). Marker colour
-encodes the \armbase{} violation rate; horizontal ticks mark the clipping bound
-for each axis. At $\lam = 10^{-4}$ most axes sit near or above their clipping
-bound and the low-ROM axes are essentially untouched. At $\lam = 10^{-1}$ a
-dense band has collapsed to roughly \SIrange{12}{20}{\degree} regardless of its
-starting ROM or of whether it ever violated --- the same visual signature of a
-learned margin reported in the single-view study, at a slightly lower plateau.}
+\caption{Per-axis ROM of \armref{} against the constrained arms (log--log).
+Marker colour encodes the \armref{} violation rate; horizontal ticks mark the
+clipping bound for each axis. At $\lam = 10^{-4}$ most axes sit near or above
+their clipping bound and the low-ROM axes are essentially untouched. At
+$\lam = 10^{-1}$ a dense band has collapsed to roughly
+\SIrange{12}{20}{\degree} regardless of its starting ROM --- the same visual
+signature of a learned margin reported in the single-view study, at a slightly
+lower plateau.}
 \label{fig:scatter}
 \end{figure}
 
@@ -558,38 +565,47 @@ learned margin reported in the single-view study, at a slightly lower plateau.}
 \centering
 \includegraphics[width=0.86\textwidth]{fig_mv_rom_ratio.pdf}
 \caption{Distribution over the $129$ bounded axes of the ratio between observed
-ROM and authored range. \armbase{} (mean $1.34$, median $0.91$;
-$56$ axes above $1.0$) already sits close to the authored envelope, unlike the
-\svbase{} (mean $1.95$, median $1.18$; $79$ axes). By
-$\lam = 10^{-1}$ only $6$ axes reach the envelope and the mean ratio is $0.62$:
-the typical joint uses well under two-thirds of the range it is permitted.}
+ROM and authored range (ratios above $4$ are collected in the last bin).
+\armref{} (mean $1.34$, median $0.88$; $56$ axes above $1.0$) already sits
+close to the authored envelope, unlike \svref{} (mean $1.89$, median $1.19$;
+$77$ axes). By $\lam = 10^{-1}$ only $6$ axes reach the envelope and the mean
+ratio is $0.62$: the typical joint uses well under two-thirds of the range it
+is permitted.}
 \label{fig:ratio}
 \end{figure}
 
 \Cref{fig:scatter,fig:ratio} display the same phenomenon per axis and in
-distribution, and \Cref{tab:rom} shows where it is paid for. Femur ROM falls
-from \SI{59.8}{\degree} to \SI{16.5}{\degree} ($-\SI{72}{\percent}$), tarsus by
-\SI{46}{\percent} and tibia by \SI{46}{\percent}, while coxa loses only
-\SI{26}{\percent} and antennae \SI{19}{\percent}. The femur--tibia complex is
-the principal locomotor degree of freedom of the stick insect; as in the
-single-view case, a model whose femora sweep through less than
-\SI{17}{\degree} will render a visibly stiff gait irrespective of its MPJPE.
-The concern is sharper here, because \armbase{} had a defensible
-femoral range to begin with and the regularisation removes most of it.
+distribution, and \Cref{tab:rom} shows where it is paid for. Relative to
+\armref{}, femur ROM falls from \SI{59.4}{\degree} to \SI{16.5}{\degree}
+($-\SI{72}{\percent}$), tarsus by \SI{46}{\percent} and tibia by
+\SI{45}{\percent}, while coxa loses only \SI{28}{\percent} and antennae
+\SI{19}{\percent}. The femur--tibia complex is the principal locomotor degree
+of freedom of the stick insect; as in the single-view case, a model whose
+femora sweep through less than \SI{17}{\degree} will render a visibly stiff
+gait irrespective of its MPJPE. The concern is sharper here, because
+\armref{} had a defensible femoral range to begin with and the regularisation
+removes most of it.
 
 \subsection{Spread versus centre}
 \label{sec:res-centre}
 
-The mean absolute shift of the per-axis mean angle relative to \armbase{} is
-$3.61$, $4.38$, $4.61$ and \SI{4.75}{\degree} for
-$\lam = 10^{-4} \ldots 10^{-1}$. As in single-view, most of this shift is
-already present at the weakest setting and grows only slowly thereafter
-($+\SI{32}{\percent}$ across three further decades, against
-$+\SI{12}{\percent}$ in single-view), so the \emph{centre} of the pose
-distribution is largely set by the $24$ epochs of continued training while the
-penalty acts on the \emph{spread}. The residual growth with $\lam$ is somewhat
-larger than in single-view, consistent with the stronger inward pull documented
-in \Cref{sec:res-rom}.
+The original analysis measured the mean absolute shift of the per-axis mean
+angle relative to \armbase{} ($3.61$, $4.38$, $4.61$ and \SI{4.75}{\degree}
+for $\lam = 10^{-4} \ldots 10^{-1}$) and attributed the part already present at
+the weakest setting to the $24$ epochs of continued training. The
+epoch-matched control rules that out: \armref{} moves the centre by only
+\SI{0.71}{\degree} relative to \armbase{}. Relative to \armref{}, the
+constrained arms are shifted by $3.68$, $4.43$, $4.66$ and \SI{4.87}{\degree}.
+
+As in single-view (\cite{sv}), the centre shift is therefore caused by the
+prior, and most of it appears as soon as the prior is switched on. It grows by
+\SI{32}{\percent} across the following three decades, against
+\SI{11}{\percent} in single-view, so the multi-view shift is less concentrated
+at switch-on. This matches the accuracy results, where the step at switch-on
+is worth $1.2$ decades of slope in multi-view against $2.7$ in single-view
+(\Cref{sec:res-acc}). The prior thus acts in two ways: a centre shift that
+appears largely at switch-on, and a contraction of the spread that grows with
+$\lam$ (\Cref{sec:res-rom}).
 
 %==============================================================================
 \section{Single-view versus multi-view}
@@ -598,15 +614,13 @@ in \Cref{sec:res-rom}.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_mv_sv_compare.pdf}
-\caption{The two sweeps side by side. Left: mean violation rate; the two modes
-start from a nearly identical rate and the multi-view arm reduces it slightly
-more slowly at every $\lam$. Centre: absolute MPJPE; \armbase{} is more
-accurate than \svbase{}, which is the least accurate point of either sweep.
-Right: MPJPE relative to each mode's starting checkpoint --- the single-view
-curve stays below zero throughout while the multi-view curve rises
-immediately. The figure predates the epoch-matched controls: relative to
-\svref{} and \armref{} both curves lie above zero at every $\lam$
-(\Cref{tab:global}).}
+\caption{The two sweeps side by side, with each mode's epoch-matched control
+at $\lam = 0$. Left: mean violation rate; the two controls start from a
+similar rate and the multi-view arms reduce it more slowly at every $\lam$.
+Centre: absolute MPJPE; the two controls are equally accurate
+($0.9054$ vs.\ \SI{0.9042}{\milli\metre}), and the multi-view curve rises
+faster. Right: MPJPE relative to each mode's own control; both curves are
+above zero at every $\lam$, and the multi-view curve is about twice as high.}
 \label{fig:compare}
 \end{figure}
 
@@ -625,11 +639,10 @@ single-view the lower median (\SI{0.744}{} vs.\ \SI{0.781}{\milli\metre}) and
 much higher native PCK@5\,px ($0.511$ vs.\ $0.363$). The two controls were
 continued for different budgets ($47$ and $24$ epochs), so this is a comparison
 of each mode at its own matched point, not an equal-compute comparison. On
-plausibility, measured on the starting checkpoints, \armbase{} violates on
-fewer axes ($76$ vs.\ $96$) and has a lower worst-case overshoot
-(\SI{56.6}{\degree} vs.\ \SI{77.7}{\degree}). Yet its \emph{mean} violation
-rate is barely lower (\SI{13.96}{\percent} vs.\
-\SI{14.76}{\percent}). Multi-view geometry concentrates the implausibility onto
+plausibility, \armref{} violates on fewer axes ($79$ vs.\ $94$) and has a
+lower worst-case overshoot (\SI{59.1}{\degree} vs.\ \SI{83.2}{\degree}). Yet
+its \emph{mean} violation rate is only slightly lower (\SI{13.94}{\percent}
+vs.\ \SI{15.11}{\percent}). Multi-view geometry concentrates the implausibility onto
 fewer axes and makes it less extreme, but it does not make it rarer. The
 hypothesis of \cite{sv} --- that multi-view should have less to fix --- is
 therefore only half confirmed: less to fix in \emph{severity} and in
@@ -637,11 +650,11 @@ therefore only half confirmed: less to fix in \emph{severity} and in
 
 \paragraph{On range of motion, multi-view is much closer to anatomy from the
 start.}
-Mean ROM per bounded axis is \SI{46.1}{\degree} against \SI{66.1}{\degree}, the
-per-axis ROM/authored ratio is $1.34$ against $1.95$, and the median axis is
-inside its authored range ($0.91$) rather than outside it ($1.18$). Under the
-under-articulation measure recommended in \cite{sv}, \armbase{}
-would be scored as the more anatomically credible model by a wide margin ---
+Comparing the two controls, mean ROM per bounded axis is \SI{46.1}{\degree}
+against \SI{64.0}{\degree}, the per-axis ROM/authored ratio is $1.34$ against
+$1.89$, and the median axis is inside its authored range ($0.88$) rather than
+outside it ($1.19$). Under the under-articulation measure recommended in
+\cite{sv}, \armref{} would be scored as the more anatomically credible model by a wide margin ---
 which the violation rate alone does not reveal.
 
 \paragraph{With matched controls, the prior costs accuracy in both modes, and
@@ -671,12 +684,11 @@ single-view control shows, not zero --- marginal cost.
 \centering
 \small
 \setlength{\tabcolsep}{2.2pt}
-\caption{Global comparison of the two sweeps. Accuracy rows: absolute values
-for the epoch-matched controls \svref{} and \armref{}, and for the constrained
-arms the change relative to that mode's control. Plausibility and ROM rows:
-the reference columns and all changes refer to the starting checkpoints
-\svbase{} and \armbase{} ($\dagger$), because the pose analysis of the controls
-is not yet merged. Positive is worse for MPJPE, 2D error, violation rate and
+\caption{Global comparison of the two sweeps. Reference columns: absolute
+values for the epoch-matched controls \svref{} and \armref{}. Constrained
+columns: change relative to that mode's control, or absolute value where no
+sign or $\div$ is shown. Retention is the mean of per-axis ratios in both
+modes. Positive is worse for MPJPE, 2D error, violation rate and
 overshoot; positive is better for PCK. Single-view figures are from \cite{sv};
 all rows are scored on the same test split against the same authored ranges.}
 \label{tab:global}
@@ -689,28 +701,28 @@ all rows are scored on the same test split against the same authored ranges.}
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
 Quantity & SV & MV & SV & MV & SV & MV & SV & MV \\
 \midrule
-\multicolumn{9}{l}{\emph{Anatomical plausibility} ($\dagger$)}\\
-Violating axes (of 162)      & 96 & 76 & $-7$ & $-1$ & $-11$ & $-3$ & $-55$ & $-55$ \\
-Mean violation rate (\%)     & 14.76 & 13.96 & $\div 5.4$ & $\div 3.0$ & $\div 57$ & $\div 26$ & $\div 4400$ & $\div 1900$ \\
-Max overshoot (deg)          & 77.70 & 56.57 & 50.84 & 43.44 & 25.64 & 17.65 & 2.53 & 3.96 \\
+\multicolumn{9}{l}{\emph{Anatomical plausibility}}\\
+Violating axes (of 162)      & 94 & 79 & $-5$ & $-4$ & $-9$ & $-6$ & $-53$ & $-58$ \\
+Mean violation rate (\%)     & 15.11 & 13.94 & $\div 5.5$ & $\div 3.0$ & $\div 59$ & $\div 26$ & $\div 4500$ & $\div 1900$ \\
+Max overshoot (deg)          & 83.18 & 59.10 & 50.84 & 43.44 & 25.64 & 17.65 & 2.53 & 3.96 \\
 \midrule
 \multicolumn{9}{l}{\emph{Accuracy, relative to the epoch-matched control}}\\
 MPJPE (mm)                   & 0.9054 & 0.9042 & $+7.3\%$ & $+9.7\%$ & $+11.3\%$ & $+18.9\%$ & $+15.7\%$ & $+33.9\%$ \\
 PCK@5\,px (native)           & 0.5110 & 0.3633 & $-15.8\%$ & $-10.3\%$ & $-21.3\%$ & $-21.2\%$ & $-26.7\%$ & $-35.2\%$ \\
 Mean 2D error (px)           & 6.369 & 8.203 & $+13.6\%$ & $+9.5\%$ & $+19.5\%$ & $+18.5\%$ & $+26.2\%$ & $+33.4\%$ \\
 \midrule
-\multicolumn{9}{l}{\emph{Range of motion, $129$ bounded axes} ($\dagger$)}\\
-Mean ROM (deg)               & 66.1 & 46.1 & 44.0 & 39.4 & 37.3 & 33.1 & 30.3 & 26.9 \\
-ROM retained (\% of ref.)    & --- & --- & 71.0 & 88.8 & 63.4 & 79.4 & 56.1 & 68.1 \\
-Mean ROM / authored range    & 1.95 & 1.34 & --- & 1.08 & --- & 0.81 & 0.66 & 0.62 \\
-Axes above authored range    & 79 & 56 & --- & 52 & --- & 43 & 15 & 6 \\
+\multicolumn{9}{l}{\emph{Range of motion, $129$ bounded axes}}\\
+Mean ROM (deg)               & 64.0 & 46.1 & 44.0 & 39.4 & 37.3 & 33.1 & 30.3 & 26.9 \\
+ROM retained (\% of control) & --- & --- & 72.7 & 88.8 & 64.9 & 79.4 & 57.2 & 68.1 \\
+Mean ROM / authored range    & 1.89 & 1.34 & 1.13 & 1.08 & 0.86 & 0.81 & 0.66 & 0.62 \\
+Axes above authored range    & 77 & 56 & 61 & 52 & 56 & 43 & 15 & 6 \\
 \midrule
 \multicolumn{9}{l}{\emph{Derived}}\\
-Clipping bound (deg)         & \multicolumn{2}{c}{$37.0$ \quad / \quad $30.5$} & \multicolumn{6}{c}{} \\
+Clipping bound (deg)         & \multicolumn{2}{c}{$36.3$ \quad / \quad $30.5$} & \multicolumn{6}{c}{} \\
 MPJPE slope (mm/decade)      & \multicolumn{2}{c}{$0.0244$ \quad / \quad $0.0724$} & \multicolumn{6}{c}{$R^2 = 0.98$ \quad / \quad $R^2 = 0.998$} \\
 Slope rel.\ to control       & \multicolumn{2}{c}{$2.7\%$ \quad / \quad $8.0\%$} & \multicolumn{6}{c}{} \\
 Step $0 \to 10^{-4}$ (mm)     & \multicolumn{2}{c}{$0.066$ \quad / \quad $0.088$} & \multicolumn{6}{c}{$=2.7$ \quad / \quad $1.2$ decades of slope} \\
-$\lam$ reaching clip.\ bound & \multicolumn{2}{c}{$10^{-2}$ \quad / \quad $10^{-1}$} & \multicolumn{6}{c}{on chronically violating axes} \\
+$\lam$ at clip.\ bound       & \multicolumn{8}{l}{chronic axes: SV between $10^{-2}$ and $10^{-1}$, MV at $10^{-1}$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -742,7 +754,7 @@ prior against the correct baseline, and in both the prior costs accuracy.
 \subsection{Why the multi-view model resists the prior}
 \label{sec:disc-mechanism}
 
-Three observations point at the same mechanism. \armbase{} is already
+Three observations point at the same mechanism. \armref{} is already
 inside the authored envelope on the typical axis
 (\Cref{fig:ratio}); the penalty's cost per decade is three times larger
 (\Cref{sec:res-acc}); and the cost is spread uniformly over the error
@@ -799,7 +811,7 @@ the sweep exploiting exactly that degree of freedom, so a plausibility claim
 resting on the violation rate alone is not sound in either mode. Pairing it
 with the per-axis ratio of observed ROM to authored range (\Cref{fig:ratio})
 is what makes the comparison of \Cref{sec:compare} informative: under that
-measure \armbase{}, with a median ratio of $0.91$, is already the
+measure \armref{}, with a median ratio of $0.88$, is already the
 more plausible model, and the $\lam = 10^{-1}$ arm, with a mean ratio of
 $0.62$, has over-corrected.
 
@@ -837,17 +849,14 @@ setting is free. The recommendation depends on what the model is for:
 
 \subsection{Threats to validity}
 
-Four caveats bound the conclusions. First, the epoch-matched controls are
-matched on accuracy but not yet on plausibility: their violation and ROM
-figures have been computed but are not included, so the plausibility and ROM
-comparisons still use the starting checkpoints. Second, the multi-view
+Three caveats bound the conclusions. First, the multi-view
 fine-tune is $24$ epochs against the single-view study's $49$, so the two
 sweeps are not matched on continuation budget. Each control is matched within
 its own mode, so the within-mode deltas are clean, but cross-mode comparisons
-of the controls themselves (\Cref{sec:compare}) are not equal-compute. Third,
+of the controls themselves (\Cref{sec:compare}) are not equal-compute. Second,
 the single-view control is scored at its validation-best epoch ($433$) and the
 single-view constrained arms at epoch $435$; in multi-view all five arms are
-scored at epoch $369$. Fourth, ROM as defined here is a min--max
+scored at epoch $369$. Third, ROM as defined here is a min--max
 statistic over the test set and is therefore sensitive to outliers; the
 distributional view of \Cref{fig:ratio} and the per-axis view of
 \Cref{fig:scatter} are provided so that the aggregate is not read in isolation.
@@ -861,7 +870,8 @@ Returning to the question of \Cref{sec:intro}:
 \begin{description}[leftmargin=1.4em,style=nextline]
 \item[The prior still works on what it penalises --- yes.]
   Across four decades it reduces the mean violation rate by between $3.0\times$
-  and $1900\times$ and the worst overshoot from \SI{56.6}{\degree} to
+  and $1900\times$ relative to the epoch-matched control, and the worst
+  overshoot from \SI{59.1}{\degree} to
   \SI{4.0}{\degree}, acting on precisely the trochanter, coxa and femur axes
   that dominate locomotion.
 \item[Is it worthwhile in multi-view --- on this evidence, no.]
@@ -873,10 +883,11 @@ Returning to the question of \Cref{sec:intro}:
   beats every constrained arm.
 \item[Was the hypothesis of \cite{sv} confirmed --- partially.]
   Multi-view does have less to fix, but in severity and breadth rather than in
-  frequency: fewer violating axes ($76$ vs.\ $96$), a lower worst overshoot
-  (\SI{56.6}{\degree} vs.\ \SI{77.7}{\degree}) and a far more anatomical range
-  of motion (ROM/authored ratio $1.34$ vs.\ $1.95$), but a nearly identical
-  mean violation rate.
+  frequency: fewer violating axes ($79$ vs.\ $94$), a lower worst overshoot
+  (\SI{59.1}{\degree} vs.\ \SI{83.2}{\degree}) and a far more anatomical range
+  of motion (ROM/authored ratio $1.34$ vs.\ $1.89$), but only a slightly lower
+  mean violation rate ($13.94$ vs.\ \SI{15.11}{\percent}). In both modes,
+  continued training without the prior leaves plausibility unchanged.
 \end{description}
 
 The two studies together support a single statement that neither supports
@@ -898,10 +909,6 @@ about the authored limits than as a defect of the model.
 
 \begin{enumerate}[leftmargin=1.9em,itemsep=0.45em]
 
-\item Merge the pose analysis of the epoch-matched controls
-      (\texttt{prior\_study\_results\_matched/\allowbreak \{sv,mv\}\_reference/\allowbreak analysis/})
-      into \Cref{tab:main,tab:rom,tab:global}, and regenerate the figures
-      with \armref{} and \svref{} as the references.
 \item Audit the authored ranges on the axes of \Cref{fig:worst}, starting with
       \texttt{l\_3\_tr\_\{l,r\}.z} and \texttt{l\_2\_co\_r.x}, against the
       multi-view reconstruction. An axis violated on \SI{100}{\percent} of
@@ -922,6 +929,7 @@ about the authored limits than as a defect of the model.
 
 %==============================================================================
 \appendix
+\sloppy
 \section{Data provenance}
 \label{app:prov}
 
@@ -930,13 +938,17 @@ about the authored limits than as a defect of the model.
   Aggregated sweep metrics for both modes; source of the violation and MPJPE
   columns of \Cref{tab:main,tab:global}.
 \item[prior\_study\_results/*/mv\_constrained/analysis/]
-  Together with the matching \texttt{mv\_reference} directory: per-arm
-  \texttt{limit\_violations.csv}, \texttt{per\_axis\_stats.csv},
-  \texttt{magnitude\_stats.csv} and \texttt{baseline\_summary.md}; source of
-  all ROM, retention and centre-shift analyses.
+  Per-arm files for the constrained arms; the files for \armbase{} and
+  \armref{} are in \texttt{mv\_reference/analysis/} under
+  \texttt{prior\_study\_results/} and
+  \texttt{prior\_study\_results\_matched/} respectively. Files: \texttt{limit\_violations.csv},
+  \texttt{per\_axis\_stats.csv}, \texttt{magnitude\_stats.csv} and
+  \texttt{baseline\_summary.md}; source of the plausibility columns and of all
+  ROM, retention and centre-shift analyses.
 \item[prior\_study\_results/*/sv\_constrained/analysis/]
-  The single-view counterparts, used only for the comparison of
-  \Cref{sec:compare}.
+  The single-view counterparts (with
+  \texttt{prior\_study\_results\_matched/\allowbreak sv\_reference/}), used
+  only for the comparison of \Cref{sec:compare}.
 \item[benchmark\_multiview\_*/benchmark\_report.txt]
   Per-arm PCK curves, 2D errors and MPJPE percentiles, one directory per arm
   on the \texttt{\dots FIXED} benchmark run; source of
@@ -949,8 +961,10 @@ about the authored limits than as a defect of the model.
 \item[3D\_model\_prep/SMILy\_STICK\_limits\_authored.pkl]
   Authored per-joint rotation limits (\texttt{joint\_limits}), against which all
   arms in both studies are scored.
-\item[report\_joint\_limit\_prior/make\_mv\_figures.py]
-  Script regenerating every figure in this report from the sources above.
+\item[report\_joint\_limit\_prior/make\_matched\_figures.py]
+  Script regenerating every figure in this report, with the epoch-matched
+  controls as references, from the sources above. It supersedes
+  \texttt{make\_mv\_figures.py}.
 \end{description}
 
 \noindent
