@@ -34,6 +34,7 @@
 \newcommand{\lam}{\lambda}
 \newcommand{\best}[1]{\textbf{#1}}
 \newcommand{\armref}{\textsc{sv-ref}}
+\newcommand{\armbase}{\textsc{sv-base}}
 
 \title{\textbf{Effect of an Authored Joint-Limit Prior on\\
 Single-View 3D Pose Regression of the Stick Insect}\\[0.4em]
@@ -44,7 +45,7 @@ Single-View 3D Pose Regression of the Stick Insect}\\[0.4em]
   \small Forschungszentrum J\"ulich --- SMILify project
 }
 
-\date{3 September 2026}
+\date{3 September 2026 \\ \small revised 16 September 2026 with the epoch-matched $\lam = 0$ control}
 
 %==============================================================================
 \begin{document}
@@ -80,8 +81,9 @@ or no accuracy cost. This report analyses the completed sweep and gives:
 \begin{enumerate}[nosep,leftmargin=1.6em]
   \item the plausibility/accuracy trade-off over four decades of $\lam$
         (\Cref{sec:res-plaus,sec:res-acc});
-  \item a confound that invalidates the headline accuracy claim, with an
-        estimate of its magnitude (\Cref{sec:disc-confound});
+  \item an epoch-matched $\lam = 0$ control, which removes the fine-tuning
+        confound of the original design and measures the accuracy cost of the
+        prior directly (\Cref{sec:res-acc,sec:disc-confound});
   \item a range-of-motion analysis showing that the prior does more than remove
         violations, and a diagnostic --- the \emph{clipping bound} --- that
         separates the two effects (\Cref{sec:res-rom}).
@@ -138,16 +140,20 @@ feasible set; this property is what makes the range-of-motion result of
 \begin{table}[t]
 \centering
 \small
-\caption{The five scored arms. Each constrained arm continues the reference
-checkpoint for $49$ additional epochs with the penalty of \Cref{eq:penalty}
-enabled. The reference received no additional epochs, which is the confound
-discussed in \Cref{sec:disc-confound}.}
+\caption{The six scored arms. \armbase{} is the starting checkpoint. Each
+constrained arm continues it for $49$ additional epochs with the penalty of
+\Cref{eq:penalty} enabled; \armref{} continues it for the same budget with
+$\lam = 0$ (constant learning rate $10^{-5}$, effective batch $64$, as required
+by the sweep invariants) and is the control against which the prior is
+measured.}
 \label{tab:arms}
 \begin{tabular}{llccl}
 \toprule
 Arm & Mode & $\lam$ & Epoch & Checkpoint \\
 \midrule
-\armref{}            & single-view & $0$       & 386 & \texttt{best\_model.pth} \\
+\armbase{}           & single-view & ---       & 386 & \texttt{best\_model.pth} \\
+\midrule
+\armref{}            & single-view & $0$       & 433 & \texttt{singleview\_refcont/best\_model.pth} \\
 \textsc{sv-1e-4}     & single-view & $10^{-4}$ & 435 & \texttt{singleview\_lam1e-4/\dots\_0435.pth} \\
 \textsc{sv-1e-3}     & single-view & $10^{-3}$ & 435 & \texttt{singleview\_lam1e-3/\dots\_0435.pth} \\
 \textsc{sv-1e-2}     & single-view & $10^{-2}$ & 435 & \texttt{singleview\_lam1e-2/\dots\_0435.pth} \\
@@ -156,11 +162,15 @@ Arm & Mode & $\lam$ & Epoch & Checkpoint \\
 \end{tabular}
 \end{table}
 
-\Cref{tab:arms} lists the five scored arms. The four constrained arms share a
-common starting point, epoch count and schedule, and differ only in $\lam$;
-comparisons \emph{between} them are therefore clean. The reference did not receive the additional epochs, so any
-comparison against it mixes the effect of the prior with the effect of
-continued training.
+\Cref{tab:arms} lists the scored arms. The four constrained arms and \armref{}
+share a common starting point, schedule and batch size, and differ only in
+$\lam$; comparisons between all five are therefore clean. The original design
+compared the constrained arms against \armbase{}, which did not receive the
+additional epochs and so mixed the effect of the prior with the effect of
+continued training (\Cref{sec:disc-confound}); \armref{} was trained
+afterwards to remove that confound. Its run covered epochs $387$--$436$ and
+the checkpoint with the lowest validation loss, epoch $433$, was scored;
+the constrained arms are scored at epoch $435$.
 
 \subsection{Metrics}
 \label{sec:metrics}
@@ -184,8 +194,8 @@ input resolution, since PCK@$N$\,px is resolution-dependent.
 For each bounded axis, ROM is the observed angular range
 $\max_t \theta_a(t) - \min_t \theta_a(t)$ over the test set. To separate
 ``removing violations'' from ``shrinking motion'', we define the
-\emph{clipping bound}: the ROM the reference arm would have if its trajectory
-were simply clipped into the authored box,
+\emph{clipping bound}: the ROM the starting checkpoint \armbase{} would have if
+its trajectory were simply clipped into the authored box,
 \begin{equation}
   \mathrm{ROM}^{\text{clip}}_a
   = \max\!\Big(
@@ -208,9 +218,13 @@ motion inside the feasible set, where the penalty exerts no force.
 \small
 \setlength{\tabcolsep}{4.5pt}
 \caption{Main results on the test split. Bold marks the best value among the
-four epoch-matched arms. Lower is better for violation, overshoot, MPJPE and 2D
-error; higher is better for PCK. The reference row is set apart: it did not
-receive the $49$ additional epochs.}
+five epoch-matched arms (\armref{} and the four constrained arms). Lower is
+better for violation, overshoot, MPJPE and 2D error; higher is better for PCK.
+\armbase{} is set apart: it did not receive the additional epochs. The
+plausibility columns of \armref{} were computed on the cluster
+(\texttt{prior\_study\_results\_matched/\allowbreak sv\_reference/\allowbreak analysis/}) but are not
+yet included here; plausibility comparisons below are therefore made against
+\armbase{}.}
 \label{tab:main}
 \begin{tabular}{l c c *{9}{r}}
 \toprule
@@ -225,9 +239,10 @@ axes & (\%) & (deg) & (deg) &
 (mm) & (mm) &
 nat. & 224 & (px) \\
 \midrule
-\armref{}        & 0         & 386 & 96 & 14.7605 & 2.531 & 77.70 & 1.0920 & 0.9227 & 0.3762 & 0.9935 & 7.827 \\
+\armbase{}       & ---       & 386 & 96 & 14.7605 & 2.531 & 77.70 & 1.0920 & 0.9227 & 0.3762 & 0.9935 & 7.827 \\
 \midrule
-\textsc{sv-1e-4} & $10^{-4}$ & 435 & 89 & 2.7271 & 0.140 & 50.84 & \best{0.9718} & \best{0.8184} & \best{0.4301} & \best{0.9939} & \best{7.234} \\
+\armref{}        & 0         & 433 & --- & --- & --- & --- & \best{0.9054} & \best{0.7439} & \best{0.5110} & \best{0.9943} & \best{6.369} \\
+\textsc{sv-1e-4} & $10^{-4}$ & 435 & 89 & 2.7271 & 0.140 & 50.84 & 0.9718 & 0.8184 & 0.4301 & 0.9939 & 7.234 \\
 \textsc{sv-1e-3} & $10^{-3}$ & 435 & 85 & 0.2567 & 0.004 & 25.64 & 1.0075 & 0.8540 & 0.4024 & 0.9934 & 7.614 \\
 \textsc{sv-1e-2} & $10^{-2}$ & 435 & 73 & 0.0197 & 0.000 & 7.15  & 1.0232 & 0.8703 & 0.3915 & 0.9930 & 7.777 \\
 \textsc{sv-1e-1} & $10^{-1}$ & 435 & \best{41} & \best{0.0034} & \best{0.000} & \best{2.53} & 1.0479 & 0.8924 & 0.3745 & 0.9924 & 8.038 \\
@@ -241,9 +256,10 @@ nat. & 224 & (px) \\
 \caption{The plausibility/accuracy trade-off across four decades of $\lam$.
 Violation rate is the mean fraction of frames outside the authored range over
 the $162$ authored axes (log scale). Neither curve has an interior optimum:
-plausibility improves and accuracy degrades with every decade. The reference
-arm is drawn as an open marker joined by a dashed segment because it did not
-receive the $49$ additional epochs.}
+plausibility improves and accuracy degrades with every decade. The open marker
+joined by a dashed segment is \armbase{}, which did not receive the $49$
+additional epochs; the figure predates the epoch-matched control, whose MPJPE
+(\SI{0.9054}{\milli\metre}) lies below every point shown.}
 \label{fig:tradeoff}
 \end{figure}
 
@@ -251,7 +267,8 @@ receive the $49$ additional epochs.}
 \label{sec:res-plaus}
 
 The prior is effective on the quantity it penalises (\Cref{tab:main},
-\Cref{fig:tradeoff}). Relative to the reference, the mean violation rate falls
+\Cref{fig:tradeoff}). Relative to the starting checkpoint \armbase{}, the mean
+violation rate falls
 by a factor of $5.4$ at $\lam = 10^{-4}$, by $57$ at $10^{-3}$, by $750$ at
 $10^{-2}$ and by $\approx\!4400$ at $10^{-1}$. Mean overshoot on violating axes
 falls from \SI{2.53}{\degree} to below \SI{0.001}{\degree}.
@@ -270,10 +287,10 @@ pose ever'' is met only from $\lam = 10^{-2}$ upwards.
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.92\textwidth]{fig_worst_axes.pdf}
-\caption{The twelve axes most frequently violated by the reference arm, and
+\caption{The twelve axes most frequently violated by \armbase{}, and
 their violation rate under each $\lam$ (log scale; bars below
 \SI{0.02}{\percent} are drawn at the axis floor). All twelve are leg axes,
-predominantly coxa and femur flexion. The reference violates
+predominantly coxa and femur flexion. \armbase{} violates
 \texttt{l\_2\_co\_r.x} on \SI{96.0}{\percent} of frames; at $\lam = 10^{-1}$
 the same axis violates on \SI{0.18}{\percent}.}
 \label{fig:worst}
@@ -288,60 +305,86 @@ incidental ones.
 \subsection{Accuracy}
 \label{sec:res-acc}
 
-Read column-wise in \Cref{tab:main}, the prior appears to be free: all four
-constrained arms beat the reference on MPJPE, median MPJPE, PCK and mean 2D
-error. Read across the epoch-matched arms, the controlled comparison, accuracy
-degrades monotonically with $\lam$:
+Compared with \armbase{}, the prior appears to be free: all four constrained
+arms beat the starting checkpoint on MPJPE, median MPJPE, PCK and mean 2D
+error. The epoch-matched control shows that this was entirely the effect of
+continued training. \armref{} is the most accurate arm on every accuracy
+metric in \Cref{tab:main}, and accuracy degrades monotonically with $\lam$
+from $\lam = 0$ onward:
 \begin{center}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \toprule
- & $\lam=10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ \\
+ & $\lam=0$ & $10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ \\
 \midrule
-MPJPE (mm)            & 0.9718 & 1.0075 & 1.0232 & 1.0479 \\
-PCK@5\,px (native)    & 0.4301 & 0.4024 & 0.3915 & 0.3745 \\
-Mean 2D error (px)    & 7.234  & 7.614  & 7.777  & 8.038  \\
+MPJPE (mm)            & 0.9054 & 0.9718 & 1.0075 & 1.0232 & 1.0479 \\
+\quad vs.\ \armref{}  & ---    & $+\SI{7.3}{\percent}$ & $+\SI{11.3}{\percent}$ & $+\SI{13.0}{\percent}$ & $+\SI{15.7}{\percent}$ \\
+PCK@5\,px (native)    & 0.5110 & 0.4301 & 0.4024 & 0.3915 & 0.3745 \\
+\quad vs.\ \armref{}  & ---    & $-\SI{15.8}{\percent}$ & $-\SI{21.3}{\percent}$ & $-\SI{23.4}{\percent}$ & $-\SI{26.7}{\percent}$ \\
+Mean 2D error (px)    & 6.369  & 7.234  & 7.614  & 7.777  & 8.038  \\
+\quad vs.\ \armref{}  & ---    & $+\SI{13.6}{\percent}$ & $+\SI{19.5}{\percent}$ & $+\SI{22.1}{\percent}$ & $+\SI{26.2}{\percent}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
-A least-squares fit of MPJPE against $\log_{10}\lam$ over these four points
-gives a slope of $\SI{0.0244}{\milli\metre}$ per decade ($R^2 = 0.98$): a cost
-that is small per decade but consistent in sign across all four arms and all
-five accuracy metrics.
+Continued training alone improves on \armbase{} by \SI{17.1}{\percent} in
+MPJPE ($1.0920 \rightarrow \SI{0.9054}{\milli\metre}$), by \SI{35.8}{\percent}
+in native PCK@5\,px ($0.3762 \rightarrow 0.5110$) and by \SI{18.6}{\percent} in
+mean 2D error. The prior consumes part of that gain: \SI{36}{\percent} of the
+MPJPE gain at $\lam = 10^{-4}$ and \SI{76}{\percent} at $10^{-1}$. On native
+PCK@5\,px it consumes \SI{60}{\percent} at $10^{-4}$ and all of it
+(\SI{101}{\percent}) at $10^{-1}$.
+
+A least-squares fit of MPJPE against $\log_{10}\lam$ over the four constrained
+arms gives a slope of $\SI{0.0244}{\milli\metre}$ per decade ($R^2 = 0.98$),
+i.e.\ \SI{2.7}{\percent} of \armref{} per decade. The cost is, however,
+\emph{front-loaded}: the step from $\lam = 0$ to $10^{-4}$
+(\SI{+0.066}{\milli\metre}) is worth $2.7$ decades of that slope. Switching the
+prior on at all is the largest single cost in the sweep; strengthening it
+afterwards is comparatively cheap.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_pck.pdf}
 \caption{PCK curves on the test split at both reporting resolutions. The four
 constrained arms are ordered by $\lam$ at every threshold on both curves:
-weaker regularisation is uniformly more accurate. At the native resolution the
-$\lam = 10^{-1}$ curve falls below the unregularised reference for thresholds of
-$5\,$px and above, despite $49$ additional epochs of training.}
+weaker regularisation is uniformly more accurate. The reference curve drawn is
+\armbase{}; at the native resolution the $\lam = 10^{-1}$ curve falls below it
+for thresholds of $5\,$px and above, despite $49$ additional epochs of
+training. The epoch-matched \armref{} (native PCK@5\,px $0.5110$) is not yet
+drawn.}
 \label{fig:pck}
 \end{figure}
 
-This is not an artefact of a single threshold: in \Cref{fig:pck} the arms are
-ordered by $\lam$ at every point of both PCK curves. The $\lam = 10^{-1}$ arm
-reaches PCK@5\,px $=0.3745$ at native resolution against the reference's
-$0.3762$ --- after $49$ additional epochs of training, it is \emph{worse} at
-placing keypoints in the image than the checkpoint it started from.
+This is not an artefact of a single threshold: in \Cref{fig:pck} the
+constrained arms are ordered by $\lam$ at every point of both PCK curves, and
+\armref{} lies above all of them at the $5\,$px threshold on both resolutions
+($0.5110$ native, $0.9943$ at $224\,$px). The $\lam = 10^{-1}$ arm reaches
+PCK@5\,px $=0.3745$ at native resolution against \armbase{}'s $0.3762$ ---
+after $49$ additional epochs of training, it is \emph{worse} at placing
+keypoints in the image than the checkpoint it started from, while the same
+$49$ epochs at $\lam = 0$ raise that figure to $0.5110$.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_mpjpe_quantiles.pdf}
-\caption{Left: MPJPE quantile functions. Right: change relative to the
-reference arm at each percentile. The accuracy ordering is preserved across the
-whole error distribution, and the gain of the constrained arms over the
-reference shrinks towards the tail (for $\lam = 10^{-4}$: $-\SI{11.3}{\percent}$
-at P50 against $-\SI{4.3}{\percent}$ at P99).}
+\caption{Left: MPJPE quantile functions. Right: change relative to \armbase{}
+at each percentile. The accuracy ordering is preserved across the whole error
+distribution, and the gain of the constrained arms over \armbase{} shrinks
+towards the tail (for $\lam = 10^{-4}$: $-\SI{11.3}{\percent}$ at P50 against
+$-\SI{4.3}{\percent}$ at P99). Against the epoch-matched \armref{}
+(P50 \SI{0.7439}{\milli\metre}, P99 \SI{3.3970}{\milli\metre}), the same arm
+is $+\SI{10.0}{\percent}$ at P50.}
 \label{fig:quant}
 \end{figure}
 
 \Cref{fig:quant} decomposes the 3D error by percentile. The ordering by $\lam$
 holds across the entire error distribution, and the advantage of the
-constrained arms over the reference is largest at the median and smallest in
-the tail. That is the signature of general fine-tuning: if the prior were the
+constrained arms over \armbase{} is largest at the median and smallest in the
+tail. That is the signature of general fine-tuning: if the prior were the
 cause of the improvement, the gain should concentrate in the tail, where the
-implausible poses live.
+implausible poses live. The epoch-matched control confirms this reading: at
+the median, \armref{} is \SI{19.4}{\percent} better than \armbase{}, and every
+constrained arm is worse than \armref{} (median MPJPE $+\SI{10.0}{\percent}$ at
+$\lam = 10^{-4}$ to $+\SI{20.0}{\percent}$ at $10^{-1}$).
 
 \subsection{Range of motion}
 \label{sec:res-rom}
@@ -351,12 +394,13 @@ implausible poses live.
 \small
 \caption{Mean range of motion per bounded axis (deg), by joint group, over the
 $129$ axes with a finite authored range. The clipping bound (\Cref{eq:clip}) is
-the ROM the reference arm would retain if its trajectory were merely clipped
-into the authored box.}
+the ROM \armbase{} would retain if its trajectory were merely clipped
+into the authored box. The ROM of the epoch-matched \armref{} is not yet
+included (see \Cref{sec:res-rom}).}
 \label{tab:rom}
 \begin{tabular}{l r *{5}{r}}
 \toprule
-Joint group & axes & $\lam{=}0$ & $10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ \\
+Joint group & axes & \armbase{} & $10^{-4}$ & $10^{-3}$ & $10^{-2}$ & $10^{-1}$ \\
 \midrule
 Coxa            & 18 & 78.1 & 65.1 & 61.6 & 58.0 & 55.0 \\
 Trochanter      & 18 & 74.2 & 52.1 & 44.7 & 39.1 & 36.9 \\
@@ -374,13 +418,21 @@ Head / wings    & 21 & 20.2 & 13.6 & 10.9 &  9.3 &  8.9 \\
 \end{tabular}
 \end{table}
 
-The reference arm moves through a mean ROM of \SI{66.1}{\degree} per bounded
+All ROM figures in this section are relative to the starting checkpoint
+\armbase{}. The pose analysis of the epoch-matched \armref{} has been computed
+on the cluster but not yet merged into these tables; until it is, the ROM
+changes below combine the prior with $49$ epochs of continued training, as the
+original design did. \Cref{sec:res-centre} gives reasons to expect the
+continuation to act mainly on the centre of the pose distribution rather than
+its spread, but this should be checked against \armref{}.
+
+\armbase{} moves through a mean ROM of \SI{66.1}{\degree} per bounded
 axis, against a mean authored range of \SI{51.6}{\degree} --- a ratio of means
 of $1.28\times$. Averaged per axis instead, the exceedance is larger,
 $1.95\times$ (\Cref{fig:ratio}), since axes with small authored ranges
 contribute disproportionately large ratios; both figures describe the same
 overshoot from different weightings and are not in conflict. Clipping the
-reference trajectory into the box would leave \SI{37.0}{\degree}. The trained
+\armbase{} trajectory into the box would leave \SI{37.0}{\degree}. The trained
 arms give $44.0$, $37.3$, $32.9$ and \SI{30.3}{\degree} for
 $\lam = 10^{-4} \ldots 10^{-1}$ (\Cref{tab:rom}).
 
@@ -396,8 +448,8 @@ the expected hinge loss at zero.
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.86\textwidth]{fig_rom_retention.pdf}
-\caption{ROM retained relative to the reference arm, with axes grouped by the
-reference's own violation rate on that axis. The dashed rule in each group is
+\caption{ROM retained relative to \armbase{}, with axes grouped by
+\armbase{}'s own violation rate on that axis. The dashed rule in each group is
 the clipping bound of \Cref{eq:clip} --- the retention that pure violation
 removal would produce. Axes that never violated retain
 \SIrange{93.6}{95.8}{\percent} of their range at every $\lam$; on chronically
@@ -409,11 +461,11 @@ below it.}
 
 \Cref{fig:retention} resolves the effect by axis severity, with two results of
 opposite sign. The prior is \emph{well targeted}: axes that never violated in
-the reference retain \SIrange{93.6}{95.8}{\percent} of their range at every
+\armbase{} retain \SIrange{93.6}{95.8}{\percent} of their range at every
 $\lam$, so the penalty is not indiscriminately damping the whole pose. But it
 \emph{overshoots on marginal axes}: on axes that violated on less than
 \SI{1}{\percent} of frames, $\lam = 10^{-1}$ retains only
-\SI{62.3}{\percent} of the reference range where clipping would retain
+\SI{62.3}{\percent} of the \armbase{} range where clipping would retain
 \SI{86.1}{\percent} --- $24$ percentage points of motion removed for which no
 violation can account.
 
@@ -421,7 +473,7 @@ violation can account.
 \centering
 \includegraphics[width=\textwidth]{fig_rom_scatter.pdf}
 \caption{Per-axis ROM before and after regularisation (log--log). Marker colour
-encodes the reference violation rate; horizontal ticks mark the clipping bound
+encodes the \armbase{} violation rate; horizontal ticks mark the clipping bound
 for each axis. At $\lam = 10^{-4}$ most axes sit near or above their clipping
 bound. At $\lam = 10^{-1}$ a dense band of axes has collapsed to roughly
 \SIrange{15}{25}{\degree} regardless of its starting ROM or of whether it ever
@@ -433,7 +485,7 @@ violated, which is the visual signature of the learned margin.}
 \centering
 \includegraphics[width=0.86\textwidth]{fig_rom_ratio.pdf}
 \caption{Distribution over the $129$ bounded axes of the ratio between observed
-ROM and authored range. The reference (mean $1.95$, median $1.18$; $79$ axes
+ROM and authored range. \armbase{} (mean $1.95$, median $1.18$; $79$ axes
 above $1.0$) systematically exceeds the authored envelope. By $\lam = 10^{-1}$
 only $15$ axes reach it and the mean ratio is $0.66$, i.e.\ the typical joint
 uses barely two-thirds of the range it is permitted.}
@@ -452,14 +504,16 @@ of freedom of the stick insect; a model whose femora sweep through less than
 \subsection{Spread versus centre}
 \label{sec:res-centre}
 
-The mean absolute shift of the per-axis mean angle relative to the reference is
+The mean absolute shift of the per-axis mean angle relative to \armbase{} is
 $4.20$, $4.38$, $4.50$ and \SI{4.69}{\degree} for
 $\lam = 10^{-4} \ldots 10^{-1}$ --- essentially constant across four decades.
 The \emph{centre} of the pose distribution therefore moved by the same amount
 in all four arms, implicating the $49$ epochs of continued training rather than
 the penalty; the penalty acts almost exclusively on the \emph{spread}. The two
-effects are therefore separable in principle, which supports the estimate in
-\Cref{sec:disc-confound}.
+effects are therefore separable in principle. The epoch-matched \armref{}
+allows this to be tested directly: if the reading is right, its centre shift
+relative to \armbase{} should be close to \SI{4.2}{\degree} and its ROM close
+to that of \armbase{}.
 
 %==============================================================================
 \section{Discussion}
@@ -468,27 +522,30 @@ effects are therefore separable in principle, which supports the estimate in
 \subsection{The fine-tuning confound}
 \label{sec:disc-confound}
 
-Every ``constrained beats reference'' comparison in this study contrasts
-\emph{prior plus $49$ epochs} against \emph{neither}. The correct control ---
-$\lam = 0$ continued for the same $49$ epochs --- was excluded from the design,
-and its absence limits what can be claimed.
+In the original design every ``constrained beats reference'' comparison
+contrasted \emph{prior plus $49$ epochs} against \emph{neither}: the correct
+control --- $\lam = 0$ continued for the same epochs --- was missing. Three
+observations indicated that the accuracy gain belonged to the fine-tune rather
+than the prior: (i) within the constrained arms every accuracy metric degrades
+monotonically with $\lam$; (ii) linear extrapolation of MPJPE in
+$\log_{10}\lam$ placed a hypothetical $\lam = 10^{-5}$ arm at
+$\approx\SI{0.95}{\milli\metre}$, below every constrained arm; (iii) the
+$\lam = 10^{-1}$ arm already fell below \armbase{} on native PCK@5\,px despite
+$49$ additional epochs.
 
-Three observations indicate that the accuracy gain belongs to the fine-tune
-rather than the prior. (i) Within the epoch-matched arms, every accuracy metric
-degrades monotonically with $\lam$ (\Cref{sec:res-acc}); the prior can only be
-credited with the improvement if its effect reverses sign between $\lam = 0$
-and $\lam = 10^{-4}$. (ii) Linear extrapolation of MPJPE in $\log_{10}\lam$
-places a hypothetical $\lam = 10^{-5}$ arm at $\approx\SI{0.95}{\milli\metre}$,
-below every constrained arm. (iii) The strongest arm, $\lam = 10^{-1}$, already
-falls below the reference on PCK@5\,px at native resolution \emph{without} any
-extrapolation, despite $49$ additional epochs --- the penalty has consumed the
-entire fine-tuning benefit and gone into deficit.
+The control has now been run, and it confirms all three. \armref{} reaches
+\SI{0.9054}{\milli\metre} MPJPE --- lower even than the extrapolated
+$\lam = 10^{-5}$ estimate --- and is the most accurate arm on every metric in
+\Cref{tab:main}. The whole of the apparent improvement over \armbase{} is due
+to continued training (\SI{-17.1}{\percent} MPJPE at $\lam = 0$), and the prior
+subtracts from it at every $\lam$ (\Cref{sec:res-acc}). That the measured value
+lies below the extrapolation is itself informative: the cost of the prior is
+not linear in $\log_{10}\lam$ all the way down, but has a step at switch-on.
 
-What can be stated at present is: \emph{the prior buys a large plausibility
-gain at a small but systematic accuracy cost, the magnitude of which is not yet
-measured}. One single-view run at $\lam = 0$ to epoch $435$ (approximately
-\SI{4}{\hour} wall clock, inside the \SI{24}{\hour} queue limit) would measure
-every delta in \Cref{tab:main}.
+What can now be stated is: \emph{the prior buys a large plausibility gain at a
+measured accuracy cost of $+\SI{7.3}{\percent}$ to $+\SI{15.7}{\percent}$
+MPJPE and $-\SI{15.8}{\percent}$ to $-\SI{26.7}{\percent}$ native PCK@5\,px
+over the four decades tested.}
 
 \subsection{Over-regularisation and the learned margin}
 
@@ -517,22 +574,33 @@ The clipping-bound analysis (\Cref{fig:retention}) favours $\lam = 10^{-2}$: it
 is the only setting at which chronically violating axes land on the bound
 rather than above or below it, while violations are effectively eliminated
 (max.\ overshoot \SI{7.2}{\degree}) at an MPJPE cost of
-\SI{0.05}{\milli\metre} relative to the best arm. We recommend it as the
-default, since the stated objective is plausibility and $\lam = 10^{-4}$ still
-admits \SI{50.8}{\degree} overshoots.
+\SI{0.118}{\milli\metre} ($+\SI{13.0}{\percent}$) and a native PCK@5\,px cost
+of $-\SI{23.4}{\percent}$ relative to the epoch-matched \armref{}. We recommend
+it as the default when plausibility is an explicit requirement, since
+$\lam = 10^{-4}$ still admits \SI{50.8}{\degree} overshoots.
 
 Where 3D accuracy is the priority, $\lam = 10^{-3}$ is the better compromise:
-violation rate \SI{0.26}{\percent}, MPJPE \SI{1.0075}{\milli\metre}, and ROM
-close to the clipping bound on chronic axes. $\lam = 10^{-1}$ is not
-recommended at any operating point: its marginal plausibility gain over
-$10^{-2}$ is small (\SI{7.2}{\degree} to \SI{2.5}{\degree} of maximum
-overshoot) and it costs \SI{74}{\percent} of femur range and a net loss on 2D
-accuracy.
+violation rate \SI{0.26}{\percent}, MPJPE \SI{1.0075}{\milli\metre}
+($+\SI{11.3}{\percent}$), and ROM close to the clipping bound on chronic axes.
+Because most of the cost is paid at switch-on, the difference between
+$10^{-3}$ and $10^{-2}$ is small (\SI{0.016}{\milli\metre}); if plausibility is
+not required at all, the unregularised \armref{} is the most accurate
+single-view model measured. $\lam = 10^{-1}$ is not recommended at any
+operating point: its marginal plausibility gain over $10^{-2}$ is small
+(\SI{7.2}{\degree} to \SI{2.5}{\degree} of maximum overshoot) and it costs
+\SI{74}{\percent} of femur range, $+\SI{15.7}{\percent}$ MPJPE and
+$+\SI{26.2}{\percent}$ mean 2D error relative to \armref{}.
 
 \subsection{Threats to validity}
 
-Two caveats bound the conclusions. First, the missing $\lam = 0$ control
-(\Cref{sec:disc-confound}). Second, ROM as defined here is a min--max statistic
+Three caveats bound the conclusions. First, the epoch-matched control is
+matched on accuracy but not yet on plausibility: its violation and ROM figures
+have been computed but are not included, so the plausibility and ROM
+comparisons still use \armbase{}. Second, \armref{} is scored at the
+validation-best epoch $433$, whereas the constrained arms are scored at the
+fixed epoch $435$; selection on validation loss gives \armref{} a small
+advantage that is unlikely to account for a gap of \SI{0.066}{\milli\metre} or
+more, but the arms are not selected identically. Third, ROM as defined here is a min--max statistic
 over the test set and is therefore sensitive to outliers; the distributional
 view in \Cref{fig:ratio} and the per-axis view in \Cref{fig:scatter} are
 provided so that the aggregate is not read in isolation.
@@ -549,10 +617,13 @@ Returning to the question of \Cref{sec:intro}:
   between $5.4\times$ and $4400\times$ and the worst overshoot from
   \SI{77.7}{\degree} to \SI{2.5}{\degree}, acting on precisely the leg axes
   that dominate locomotion.
-\item[Without losing accuracy --- not established, and probably false.]
-  The apparent gain over the reference is confounded with $49$ epochs of
-  continued training, and within the controlled comparison every accuracy
-  metric degrades monotonically with $\lam$.
+\item[Without losing accuracy --- no.]
+  The apparent gain over the starting checkpoint came from $49$ epochs of
+  continued training. Against the epoch-matched $\lam = 0$ control, every
+  constrained arm is less accurate: $+\SI{7.3}{\percent}$ to
+  $+\SI{15.7}{\percent}$ MPJPE and $-\SI{15.8}{\percent}$ to
+  $-\SI{26.7}{\percent}$ native PCK@5\,px, with most of the cost incurred as
+  soon as the prior is switched on.
 \end{description}
 
 A third finding was not anticipated by the study design: the prior does more
@@ -568,6 +639,13 @@ the authored box but also of using it.
 
 \begin{enumerate}[leftmargin=1.9em,itemsep=0.45em]
 
+\item Merge the pose analysis of the epoch-matched control
+      (\texttt{prior\_study\_results\_matched/\allowbreak sv\_reference/\allowbreak analysis/}) into
+      \Cref{tab:main,tab:rom}, and regenerate the figures with \armref{} as
+      the reference.
+\item Given the step cost at switch-on, test weaker settings
+      ($10^{-6}$, $10^{-5}$) to see whether any part of the plausibility gain
+      can be had at a smaller accuracy cost.
 \item Sweep additional magnitudes of $\lam$: $5{\times}10^{-2}$,
       $5{\times}10^{-1}$, $1$, $5$, $10$.
 \item Apply the same pipeline to the multi-view case: find a solution for the compute wall.
@@ -589,6 +667,9 @@ the authored box but also of using it.
 \item[benchmark\_*\_on\_SMILySTICKS\_centred\_reprojected\_FIXED/benchmark\_report.txt]
   Per-arm PCK curves, 2D errors and MPJPE percentiles;
   source of \Cref{fig:pck,fig:quant}.
+\item[logs/jl\_train\_3961264\_8.out, logs/jl\_eval\_4097171\_10.out]
+  Training and evaluation of the epoch-matched control \armref{}; source of
+  its row in \Cref{tab:main} and of all accuracy deltas against it.
 \item[3D\_model\_prep/SMILy\_STICK\_limits\_authored.pkl]
   Authored per-joint rotation limits (\texttt{joint\_limits}), against which all
   arms are scored.
