@@ -1,6 +1,6 @@
 # Joint-limit prior — single-view vs multi-view
 
-fine-tune: **+25 epochs**
+fine-tune: **+50 epochs**
 
 Each `*_constrained` arm is its `*_reference` checkpoint continued for the same number of epochs with the limit penalty enabled. **All four arms are scored against the same authored ranges**, so the reference rows are the honest "before" number.
 
