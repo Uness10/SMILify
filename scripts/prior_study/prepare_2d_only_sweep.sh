@@ -42,6 +42,9 @@
 #                    on, since 3D is dropped; see docs/ISSUE_2d_only_depth_flip.md)
 #   INIT_DEPTH       initial predicted depth              (default: 0.25)
 #   INIT_MESH_SCALE  initial mesh scale                   (default: 0.04)
+#   MIN_DEPTH        lower bound on predicted depth       (default: 0.05)
+#   MAX_DEPTH        upper bound on predicted depth       (default: 1.0)
+#                    Derive both from the data: scripts/prior_study/gt_depth_range.py
 #
 # On BATCH_SIZE: batch_size is PER PROCESS under DDP. On 4 GPUs a config written
 # for a single process runs at 4x the effective batch. Pass BATCH_SIZE=<orig/4>
@@ -139,6 +142,8 @@ for LAMBDA in "${LAMBDA_ARR[@]}"; do
     )
     [[ -n "${INIT_DEPTH:-}" ]]      && ARGS+=(--init-depth "$INIT_DEPTH")
     [[ -n "${INIT_MESH_SCALE:-}" ]] && ARGS+=(--init-mesh-scale "$INIT_MESH_SCALE")
+    [[ -n "${MIN_DEPTH:-}" ]]       && ARGS+=(--min-depth "$MIN_DEPTH")
+    [[ -n "${MAX_DEPTH:-}" ]]       && ARGS+=(--max-depth "$MAX_DEPTH")
     [[ -n "${BATCH_SIZE:-}" ]]  && ARGS+=(--batch-size "$BATCH_SIZE")
     [[ -n "${NUM_WORKERS:-}" ]] && ARGS+=(--num-workers "$NUM_WORKERS")
     [[ -n "${NUM_EPOCHS:-}" ]]  && ARGS+=(--num-epochs "$NUM_EPOCHS")
