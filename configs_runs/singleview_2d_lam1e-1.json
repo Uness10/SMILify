@@ -5,7 +5,7 @@
     "shape_family": -1
   },
   "dataset": {
-    "data_path": "SMILySTICKS_centred_reprojected_FIXED.h5",
+    "data_path": "/home/mkd34160/test/SMILify/SMILySTICKS_centred_reprojected_FIXED.h5",
     "train_ratio": 0.85,
     "val_ratio": 0.05,
     "test_ratio": 0.1,
@@ -113,10 +113,6 @@
     "init_mesh_scale": 0.04,
     "use_log_scale": true
   },
-  "depth": {
-    "positive_depth": true,
-    "init_depth": 0.25
-  },
   "augmentation": {
     "enabled": true,
     "geometric_enabled": false,
@@ -167,7 +163,7 @@
     "num_visualization_samples": 5
   },
   "training": {
-    "batch_size": 8,
+    "batch_size": 16,
     "num_epochs": 1000,
     "seed": 42,
     "rotation_representation": "6d",
@@ -178,6 +174,10 @@
     "use_gt_camera_init": false,
     "use_mixed_precision": false,
     "gradient_accumulation_steps": 1
+  },
+  "depth": {
+    "positive_depth": true,
+    "init_depth": 0.25
   },
   "_study": {
     "name": "2d_only_from_scratch",
