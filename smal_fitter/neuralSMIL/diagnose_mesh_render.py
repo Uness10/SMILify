@@ -111,7 +111,8 @@ def main():
         f"\nscale_trans_mode={model.scale_trans_mode}  fixed_camera={model.fixed_camera}  "
         f"allow_mesh_scaling={getattr(model, 'allow_mesh_scaling', False)}  "
         f"use_ue_scaling={model.use_ue_scaling}  propagate_scaling={model.propagate_scaling}  "
-        f"positive_depth={getattr(model, 'positive_depth', False)}"
+        f"positive_depth={getattr(model, 'positive_depth', False)} "
+        f"depth_bounds={getattr(model, 'min_depth', None)}..{getattr(model, 'max_depth', None)}"
     )
 
     kw = {}

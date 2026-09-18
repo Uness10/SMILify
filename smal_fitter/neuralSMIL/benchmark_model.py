@@ -707,6 +707,7 @@ def _create_singleview_model(
     mesh_scale_init = float(ckpt_config.get("init_mesh_scale", 1.0))
     positive_depth = bool(ckpt_config.get("positive_depth", False))
     init_depth = float(ckpt_config.get("init_depth", 1.0))
+    _min_d, _max_d = ckpt_config.get("min_depth"), ckpt_config.get("max_depth")
 
     # CLI overrides
     smal_file = smal_file_override or ckpt_config.get("smal_file")
@@ -764,6 +765,8 @@ def _create_singleview_model(
         mesh_scale_init=mesh_scale_init,
         positive_depth=positive_depth,  # must match training or depth is raw
         init_depth=init_depth,
+        min_depth=_min_d,  # depth bounds must match training
+        max_depth=_max_d,
     ).to(device)
 
     # Load weights (filter out SMAL optimization params, same as inference script)

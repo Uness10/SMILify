@@ -272,6 +272,20 @@ def main() -> int:
         help="depth.init_depth: predicted depth at initialisation (default 0.25, the sv_reference range).",
     )
     p.add_argument(
+        "--min-depth",
+        type=float,
+        default=0.05,
+        help="depth.min_depth: lower bound on the predicted depth (default 0.05). Bounding the depth "
+        "also bounds the mesh size, since the image only fixes their ratio. Check the range against "
+        "your data with scripts/prior_study/gt_depth_range.py. Pass 0 to disable the bounds.",
+    )
+    p.add_argument(
+        "--max-depth",
+        type=float,
+        default=1.0,
+        help="depth.max_depth: upper bound on the predicted depth (default 1.0).",
+    )
+    p.add_argument(
         "--init-mesh-scale",
         type=float,
         default=0.04,
@@ -443,11 +457,25 @@ def main() -> int:
         if (cfg.get("dataset") or {}).get("frame_convention") != "camera_centric":
             raise SystemExit("ERROR: --positive-depth needs dataset.frame_convention='camera_centric'")
         cfg["depth"] = {"positive_depth": True, "init_depth": float(args.init_depth)}
+        if args.min_depth > 0 and args.max_depth > 0:
+            if not args.min_depth < args.init_depth < args.max_depth:
+                raise SystemExit(
+                    f"ERROR: --init-depth {args.init_depth} must lie inside "
+                    f"[{args.min_depth}, {args.max_depth}]"
+                )
+            cfg["depth"]["min_depth"] = float(args.min_depth)
+            cfg["depth"]["max_depth"] = float(args.max_depth)
+        else:
+            print(
+                "[prepare] WARNING: depth bounds disabled. Depth is positive but free, so the\n"
+                "          scale/depth degeneracy can still collapse the animal onto the camera."
+            )
         mesh = cfg.setdefault("mesh_scaling", {})
         if mesh.get("allow_mesh_scaling", bc.MeshScalingConfig().allow_mesh_scaling):
             mesh["init_mesh_scale"] = float(args.init_mesh_scale)
         print(
             f"[prepare] depth.positive_depth = true (init_depth={args.init_depth:g}, "
+            f"bounds={cfg['depth'].get('min_depth')}..{cfg['depth'].get('max_depth')}, "
             f"init_mesh_scale={mesh.get('init_mesh_scale')}) — prevents the behind-camera solution"
         )
     elif no_3d_placement:
@@ -527,6 +555,12 @@ def main() -> int:
             "          3D supervision. Set mesh_scaling.allow_mesh_scaling=false in the base config,\n"
             "          for EVERY arm, if you decide to remove the degeneracy instead."
         )
+        if (cfg.get("depth") or {}).get("min_depth") is not None:
+            print(
+                f"          MITIGATED: depth is bounded to "
+                f"[{cfg['depth']['min_depth']}, {cfg['depth']['max_depth']}], and since the image fixes\n"
+                f"          the size/distance RATIO, bounding the depth also bounds the mesh size."
+            )
 
     if float(args.joint_limit_weight) > 0:
         print(

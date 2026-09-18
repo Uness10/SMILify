@@ -401,13 +401,21 @@ class DepthConfig:
     """Root depth parametrisation (single-view, camera_centric only).
 
     positive_depth=True forces the predicted depth to be in front of the fixed
-    camera (log-depth: z = init_depth * exp(raw)). Needed whenever there is no 3D supervision: the 2D
-    reprojection loss is identical for the animal and its point-mirror behind
-    the camera. init_depth is the depth predicted at initialisation.
+    camera. Needed whenever there is no 3D supervision: the 2D reprojection loss
+    is identical for the animal and its point-mirror behind the camera.
+    init_depth is the depth predicted at initialisation; min_depth/max_depth
+    additionally bound it.
     """
 
     positive_depth: bool = False
     init_depth: float = 1.0
+    # Optional bounds (metres). Both or neither. With them the depth is squashed
+    # into [min_depth, max_depth] instead of being a free log-depth, which also
+    # stops the scale/depth degeneracy from collapsing the animal onto the camera
+    # (depth -> 0 while mesh_scale inflates). Derive them from the dataset's GT
+    # depths: scripts/prior_study/gt_depth_range.py
+    min_depth: float | None = None
+    max_depth: float | None = None
 
 
 @dataclass
@@ -728,6 +736,8 @@ class BaseTrainingConfig:
             "depth": {
                 "positive_depth": self.depth.positive_depth,
                 "init_depth": self.depth.init_depth,
+                "min_depth": self.depth.min_depth,
+                "max_depth": self.depth.max_depth,
             },
             "joint_importance": {
                 "enabled": self.joint_importance.enabled,

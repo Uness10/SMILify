@@ -416,6 +416,7 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
         mesh_scale_init = float(ckpt_config.get("init_mesh_scale", 1.0))
         positive_depth = bool(ckpt_config.get("positive_depth", False))
         init_depth = float(ckpt_config.get("init_depth", 1.0))
+        _min_d, _max_d = ckpt_config.get("min_depth"), ckpt_config.get("max_depth")
         model_config["frame_convention"] = frame_convention
         model_config["fixed_camera"] = fixed_camera
 
@@ -530,6 +531,8 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str) -> Tuple[SMILI
             mesh_scale_init=mesh_scale_init,
             positive_depth=positive_depth,  # must match training or depth is raw
             init_depth=init_depth,
+            min_depth=_min_d,  # depth bounds must match training
+            max_depth=_max_d,
         ).to(device)
 
         # Load model state, handling batch size differences

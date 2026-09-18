@@ -1488,6 +1488,10 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
     depth_cfg = training_config.get("depth", {}) or {}
     positive_depth = bool(depth_cfg.get("positive_depth", False))
     init_depth = float(depth_cfg.get("init_depth", 1.0))
+    min_depth = depth_cfg.get("min_depth")
+    max_depth = depth_cfg.get("max_depth")
+    min_depth = None if min_depth is None else float(min_depth)
+    max_depth = None if max_depth is None else float(max_depth)
     if positive_depth and not camera_centric:
         raise ValueError("depth.positive_depth=true requires dataset.frame_convention='camera_centric'")
 
@@ -1521,6 +1525,8 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
         # without it a positive_depth checkpoint would output the raw depth.
         "positive_depth": positive_depth,
         "init_depth": init_depth,
+        "min_depth": min_depth,
+        "max_depth": max_depth,
     }
 
     # Use checkpoint from config if not provided as argument
@@ -1913,13 +1919,18 @@ def main(dataset_name=None, checkpoint_path=None, config_override=None):
         joint_limit_regularization=joint_limit_reg_weight,
         positive_depth=positive_depth,
         init_depth=init_depth,
+        min_depth=min_depth,
+        max_depth=max_depth,
     ).to(device)
 
     # Print model configuration
     if not is_distributed or rank == 0:
         print(f"Model created with head type: {model.head_type}")
         print(f"Scale/Translation mode: {TrainingConfig.get_scale_trans_mode()}")
-        print(f"Positive depth: {positive_depth} (init_depth={init_depth}), init_mesh_scale={mesh_scale_init}")
+        print(
+            f"Positive depth: {positive_depth} (init_depth={init_depth}, "
+            f"bounds={min_depth}..{max_depth}), init_mesh_scale={mesh_scale_init}"
+        )
         if model.head_type == "transformer_decoder":
             print(f"Transformer decoder config: {model.transformer_config}")
             if "trans_scale_factor" in model.transformer_config:

@@ -130,6 +130,8 @@ class SMILImageRegressor(SMALFitter):
         joint_limit_regularization=0.0,
         positive_depth=False,
         init_depth=1.0,
+        min_depth=None,
+        max_depth=None,
     ):
         """
         Initialize the SMIL Image Regressor.
@@ -165,6 +167,14 @@ class SMILImageRegressor(SMALFitter):
                 project to the same pixel). Default False keeps old behaviour.
             init_depth: Depth predicted when the head outputs 0 (the initial
                 depth). Only used when positive_depth=True.
+            min_depth / max_depth: Optional bounds (metres) on the predicted depth.
+                When both are given, depth is squashed into [min_depth, max_depth]
+                instead of being an unbounded log-depth. This also removes the
+                scale/depth degeneracy's escape route: with no 3D supervision the
+                image only fixes the RATIO of mesh size to distance, so an
+                unbounded depth can collapse towards the camera while mesh_scale
+                inflates (observed: depth 3e-5 with mesh_scale 3.8, half the mesh
+                behind the camera). Bounding the depth bounds the size too.
         """
         # For rgb_only=True, SMALFitter expects data_batch to be just the RGB tensor
         if rgb_only and isinstance(data_batch, tuple):
@@ -208,6 +218,21 @@ class SMILImageRegressor(SMALFitter):
             if self.init_depth <= 0.0:
                 raise ValueError(f"init_depth must be > 0, got {self.init_depth}")
             self._log_init_depth = float(np.log(self.init_depth))
+            self.min_depth = None if min_depth is None else float(min_depth)
+            self.max_depth = None if max_depth is None else float(max_depth)
+            if (self.min_depth is None) != (self.max_depth is None):
+                raise ValueError("min_depth and max_depth must be given together")
+            if self.min_depth is not None:
+                if not 0.0 < self.min_depth < self.max_depth:
+                    raise ValueError(f"need 0 < min_depth < max_depth, got {self.min_depth}, {self.max_depth}")
+                if not self.min_depth < self.init_depth < self.max_depth:
+                    raise ValueError(
+                        f"init_depth {self.init_depth} must lie strictly inside "
+                        f"[{self.min_depth}, {self.max_depth}]"
+                    )
+                # inverse sigmoid, so a head output of 0 gives exactly init_depth
+                frac = (self.init_depth - self.min_depth) / (self.max_depth - self.min_depth)
+                self._depth_logit_offset = float(np.log(frac / (1.0 - frac)))
 
         # Enable scaling propagation for SMIL models (matches Unreal2Pytorch3D behavior)
         self.propagate_scaling = True
@@ -708,15 +733,21 @@ class SMILImageRegressor(SMALFitter):
     MAX_LOG_DEPTH_OFFSET = 12.0
 
     def _apply_positive_depth(self, trans: torch.Tensor) -> torch.Tensor:
-        """Map the raw depth output to z = init_depth * exp(raw) > 0.
+        """Constrain the predicted depth (trans[:, 2]) to be in front of the camera.
 
-        Log-depth, like the log mesh_scale: the gradient never vanishes (a
-        softplus would saturate if the raw value ever went strongly negative),
-        and it is natural for the scale/depth ambiguity. x/y are untouched.
-        Not in-place, so autograd sees the transform.
+        With min/max depth: z = min + (max - min) * sigmoid(raw + offset), so the
+        depth stays inside the plausible range taken from the data. Otherwise:
+        z = init_depth * exp(raw) — positive, but free to drift along the
+        scale/depth degeneracy.
+
+        The offset is set so a head output of 0 gives exactly init_depth. x/y are
+        untouched, and the transform is out-of-place so autograd sees it.
         """
         raw = torch.clamp(trans[:, 2:3], -self.MAX_LOG_DEPTH_OFFSET, self.MAX_LOG_DEPTH_OFFSET)
-        z = torch.exp(raw + self._log_init_depth)
+        if getattr(self, "min_depth", None) is not None:
+            z = self.min_depth + (self.max_depth - self.min_depth) * torch.sigmoid(raw + self._depth_logit_offset)
+        else:
+            z = torch.exp(raw + self._log_init_depth)
         return torch.cat([trans[:, :2], z, trans[:, 3:]], dim=1)
 
     def _forward_mlp(self, images: torch.Tensor, batch_size: int) -> Dict[str, torch.Tensor]:
