@@ -1,0 +1,1814 @@
+==================================================================
+Job 4223697 task 0 on n23g0009.hpc.itc.rwth-aachen.de — Sat Sep 19 07:19:45 CEST 2026
+  study  : 2D-ONLY, FROM SCRATCH
+  arm    : singleview / lambda=0  (CONTROL)
+  cluster: RWTH CLAIX-2023 | partition c23g | account rwth2151
+  wall   : ends Sun Sep 20 07:19:10 CEST 2026
+  repo   : /rwthfs/rz/cluster/home/mkd34160/2d/SMILify
+  env    : /hpcwork/mkd34160/conda_envs/pytorch3d
+  config : configs_runs/singleview_2d_lam0.json
+  gpus   : 4 per node x 2 node(s) = 8 rank(s)  [from SLURM_GPUS_ON_NODE]
+==================================================================
+  torch  : 2.3.1, CUDA 11.8, 4 GPU(s) visible
+  resume : none — training from randomly initialised weights
+  num_epochs (end)  : 1000
+  -> will train 1000 epoch(s) this job
+  STUDY INVARIANT   : total schedule is 1000 epochs from scratch — every arm MUST match.
+  scale/trans plumbing: the config's weights reach the trainer's resolver  OK
+  3D supervision    : all of keypoint_3d, global_rot, joint_rot, betas, trans, log_beta_scales, betas_trans are 0.0 at every epoch  OK
+  keypoint_2d       : 0.1 .. 0.1 across the schedule
+  camera terms      : fov=0, cam_rot=0, cam_trans=0
+  WARNING: every camera term is 0 as well. With a free camera and no 3D, the 2D
+           reprojection loss can be reduced by moving the CAMERA rather than posing
+           the animal. Expect the pose to be under-determined.
+  joint_limit_regularization: 0.0  (array task expects 0.0)
+  -> CONTROL arm (no joint-limit prior). This is the baseline the other arms are
+     read against; sv_reference is 3D-supervised and is NOT a baseline for them.
+  smal_file         : 3D_model_prep/SMILy_STICK_limits_authored.pkl
+  batch_size 16 per rank x 8 rank(s) -> effective 128
+  STUDY INVARIANT   : effective batch 128 — every arm MUST match.
+  recorded the allocation shape -> /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/allocation.json
+  save_checkpoint_every: 2 (bounds the epochs lost at each 24 h wall)
+  generate_visualizations_every: 10 plot_history_every: 10 samples: 5
+  checkpoints -> /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints
+  free space on /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0: 858 GB (advisory — statvfs shows the FILESYSTEM, not your quota)
+  lr over [0, 1000): 0.0001@e0 -> 5e-05@e120 -> 1e-05@e200
+  WARNING — SCALE/DEPTH DEGENERACY: mesh_scaling.allow_mesh_scaling is on and there is
+            no 3D supervision. TrainingConfig.MESH_SCALING_CONFIG states the global
+            mesh scale is trained implicitly via the 3D keypoint loss; with that gone,
+            a larger animal further away reprojects to the same pixels. Only the
+            limb_scale / limb_trans regularizers and the joint-limit prior hold it.
+            Kept ON deliberately: the study is the reference setup MINUS 3D.
+
+=== configs_runs/singleview_2d_lam0.json ===
+  from scratch: resume_checkpoint is null  OK
+  num_epochs: 1000
+  scale/trans loss weights reach the trainer's resolver  OK
+  3D supervision: all of keypoint_3d, global_rot, joint_rot, betas, trans, log_beta_scales, betas_trans are 0.0 at every epoch  OK
+  keypoint_2d: 0.1 .. 0.1 across the run  OK
+  joint_limit_regularization: 0 (constant)  OK
+
+=== configs_runs/singleview_2d_lam1e-1.json ===
+  from scratch: resume_checkpoint is null  OK
+  num_epochs: 1000
+  scale/trans loss weights reach the trainer's resolver  OK
+  3D supervision: all of keypoint_3d, global_rot, joint_rot, betas, trans, log_beta_scales, betas_trans are 0.0 at every epoch  OK
+  keypoint_2d: 0.1 .. 0.1 across the run  OK
+  joint_limit_regularization: 0.1 (constant)  OK
+
+=== configs_runs/singleview_2d_lam1e-4.json ===
+  from scratch: resume_checkpoint is null  OK
+  num_epochs: 1000
+  scale/trans loss weights reach the trainer's resolver  OK
+  3D supervision: all of keypoint_3d, global_rot, joint_rot, betas, trans, log_beta_scales, betas_trans are 0.0 at every epoch  OK
+  keypoint_2d: 0.1 .. 0.1 across the run  OK
+  joint_limit_regularization: 0.0001 (constant)  OK
+
+=== sweep invariant ===
+  lambdas distinct: ['0', '0.1', '0.0001']  OK
+  all 3 arms agree on mode, model, dataset, training, optimizer, augmentation, smal_model, mesh_scaling, depth, joint_importance, ignored_joints, ignored_joint_locations, scale_trans_beta  OK
+  checkpoint dirs distinct  OK
+
+==================================================================
+Pre-flight clean. Safe to submit.
+  launch : srun x 2 node(s), rendezvous on n23g0009:29500
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+Detected torchrun/HPC launch environment:
+  Global rank: 0
+  Local rank (GPU): 0
+  World size: 8
+  MASTER_ADDR: n23g0009.hpc.itc.rwth-aachen.de
+  MASTER_PORT: 44591
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] N_POSE=54, N_BETAS=5, joints=55
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+Loaded config from: configs_runs/singleview_2d_lam0.json
+Resolved config saved to: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints/config.json
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+============================================================
+SMIL Training Configuration Summary
+============================================================
+Dataset: RealSMILyMouseFalknerFROM3D_no_crop
+Data Path: RealSMILyMouseFalknerFROM3D_no_crop.h5
+Train/Val/Test Split: 85.0%/5.0%/10.0%
+
+Training Parameters:
+  batch_size: 16
+  num_epochs: 1000
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  seed: 42
+  rotation_representation: 6d
+  resume_checkpoint: None
+  num_workers: 8
+  pin_memory: True
+  prefetch_factor: 16
+
+Model Configuration:
+  backbone_name: vit_large_patch16_224
+  freeze_backbone: True
+  hidden_dim: 1024
+  rgb_only: False
+  use_unity_prior: False
+  head_type: transformer_decoder
+  Backbone type: Vision Transformer
+  Feature dimension: 1024
+  Regression head: transformer_decoder
+  Transformer decoder config:
+    hidden_dim: 1024
+    depth: 6
+    heads: 8
+    dim_head: 64
+    mlp_dim: 1024
+    dropout: 0.1
+    ief_iters: 3
+    trans_scale_factor: 1
+
+Loss Curriculum:
+  Base weights:
+    global_rot: 0.0
+    joint_rot: 0.0
+    betas: 0.0
+    trans: 0.0
+    fov: 0.0
+    cam_rot: 0.0
+    cam_trans: 0.0
+    log_beta_scales: 0.0
+    betas_trans: 0.0
+    keypoint_2d: 0.1
+    keypoint_3d: 0.0
+    silhouette: 0.0
+    joint_angle_regularization: 0.001
+    limb_scale_regularization: 0.1
+    limb_trans_regularization: 1
+    joint_limit_regularization: 0.0
+  Curriculum stages:
+    Epoch 20+: {'joint_angle_regularization': 0.0001}
+    Epoch 50+: {'joint_angle_regularization': 1e-05}
+    Epoch 60+: {'joint_angle_regularization': 1e-06, 'limb_scale_regularization': 0.001, 'limb_trans_regularization': 0.5}
+    Epoch 120+: {'joint_angle_regularization': 1e-06, 'limb_scale_regularization': 0.0005, 'limb_trans_regularization': 0.5}
+    Epoch 200+: {'joint_angle_regularization': 1e-06, 'limb_scale_regularization': 0.0001, 'limb_trans_regularization': 0.5}
+    Epoch 250+: {'joint_angle_regularization': 1e-06, 'limb_scale_regularization': 5e-05, 'limb_trans_regularization': 0.5}
+    Epoch 300+: {'joint_angle_regularization': 5e-07, 'limb_scale_regularization': 5e-05, 'limb_trans_regularization': 0.5}
+    Epoch 400+: {'joint_angle_regularization': 2e-07, 'limb_scale_regularization': 1e-05, 'limb_trans_regularization': 0.5}
+
+Learning Rate Curriculum:
+  Base learning rate: 0.0001
+  Learning rate stages:
+    Epoch 0+: 0.0001
+    Epoch 120+: 5e-05
+    Epoch 200+: 1e-05
+
+Output Configuration:
+  checkpoint_dir: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/checkpoints
+  plots_dir: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/plots
+  visualizations_dir: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations
+  train_visualizations_dir: /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train
+  save_checkpoint_every: 2
+  generate_visualizations_every: 10
+  plot_history_every: 10
+  num_visualization_samples: 5
+============================================================
+Random seed set to: 42
+Using device override: cuda:0
+Loading dataset...
+Using rotation representation: 6d
+Using backbone: vit_large_patch16_224
+
+======================================================================
+SINGLE DATASET TRAINING MODE (Legacy)
+======================================================================
+SLEAP dataset support: enabled
+Dataset size: 506250
+Original resolution: 512
+Target resolution: 512
+Single-view-from-multiview split (sample-grouped, seed=42): 86062/5062/10126 samples -> 430310/25310/50630 view-items
+Train set: 430310 samples
+Validation set: 25310 samples
+Test set: 50630 samples
+Data loading configuration:
+  Workers: 8
+  Pin memory: True
+  Prefetch factor: 16
+  Matplotlib backend: Agg
+Using distributed samplers for 8 GPUs
+Effective batch size per GPU: 16
+Total effective batch size: 128
+Rank 0: Train sampler size: 53789, Val sampler size: 3164
+Successfully created data loaders with 8 workers
+Memory Status Before model initialization:
+  GPU: 0.0MB / 95319.4MB (0.0%)
+  System: 25839.9MB / 515103.4MB (5.0%)
+Memory recommendations for vit_large_patch16_224:
+  backbone_name: vit_large_patch16_224
+  freeze_backbone: True
+  use_mixed_precision: True
+  use_gradient_checkpointing: True
+  target_memory_gb: 19.200000000000003
+  estimated_batch_size: 16
+  hidden_dim: 1024
+Initializing model...
+Using backbone: vit_large_patch16_224
+Using input resolution: 224x224 (backbone: vit_large_patch16_224)
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5][ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+Model created with head type: transformer_decoder
+Scale/Translation mode: separate
+Positive depth: True (init_depth=0.195, bounds=0.075..0.52), init_mesh_scale=0.04
+Transformer decoder config: {'hidden_dim': 1024, 'depth': 6, 'heads': 8, 'dim_head': 64, 'mlp_dim': 1024, 'dropout': 0.1, 'ief_iters': 3, 'trans_scale_factor': 1}
+  Trans scale factor: 1
+Memory Status After model initialization:
+  GPU: 1310.2MB / 95319.4MB (1.4%)
+  System: 28731.2MB / 515103.4MB (5.6%)
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+Model wrapped with DistributedDataParallel on 8 GPUs
+Model parameters: 329,919,097
+  Backbone parameters: 303,301,632
+  Transformer decoder parameters: 26,614,771
+Using conservative learning rate for transformer decoder: 1.0000000000000002e-06
+Optimizer parameter groups created:
+  Backbone/other groups: 2
+    -  (lr=0.0001)
+    -  (lr=0.0001)
+  Transformer groups: 0
+  Total groups: 2
+
+Optimizer configuration:
+  Type: AdamW
+  Initial learning rate: 0.0001
+  Weight decay: 0.0001
+  Number of parameter groups: 2
+  Group 0: 294 tensors, 303,301,632 total parameters, lr=0.0001
+  Group 1: 107 tensors, 26,614,771 total parameters, lr=0.0001
+Starting training...
+Training from scratch
+Learning rate updated to 1e-05 (group '') at epoch 0
+Learning rate updated to 1e-05 (group '') at epoch 0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+Joint importance: 6/6 joints matched, multiplier=10.0
+
+Epoch 0:
+  Train Loss = 0.001221, Val Loss = 0.000250, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 1.754972 / 1.948218
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.070499 / 0.008273
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.010270 / 0.001996
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000177 / 0.000073
+    limb_trans_regularization: 0.000105 / 0.000035
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000250
+
+Epoch 1:
+  Train Loss = 0.000234, Val Loss = 0.000166, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 1.691264 / 1.944813
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.008599 / 0.005758
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.001844 / 0.001394
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000056 / 0.000028
+    limb_trans_regularization: 0.000036 / 0.000018
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000166
+  Checkpoint saved at epoch 1
+
+Epoch 2:
+  Train Loss = 0.000164, Val Loss = 0.000122, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 1.765322 / 2.236012
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.008433 / 0.006133
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.001313 / 0.001027
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000031 / 0.000017
+    limb_trans_regularization: 0.000021 / 0.000011
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000122
+
+Epoch 3:
+  Train Loss = 0.000139, Val Loss = 0.000115, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 2.139055 / 2.570543
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.008773 / 0.006365
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.001140 / 0.000982
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000021 / 0.000014
+    limb_trans_regularization: 0.000015 / 0.000009
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000115
+  Checkpoint saved at epoch 3
+
+Epoch 4:
+  Train Loss = 0.000117, Val Loss = 0.000101, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 2.515818 / 2.840330
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.008932 / 0.006279
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000958 / 0.000843
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000016 / 0.000013
+    limb_trans_regularization: 0.000011 / 0.000009
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000101
+
+Epoch 5:
+  Train Loss = 0.000104, Val Loss = 0.000088, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 2.846861 / 3.180859
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.009124 / 0.006598
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000842 / 0.000733
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000014 / 0.000010
+    limb_trans_regularization: 0.000009 / 0.000007
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000088
+  Checkpoint saved at epoch 5
+
+Epoch 6:
+  Train Loss = 0.000104, Val Loss = 0.000092, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.366342 / 3.482979
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.009506 / 0.006963
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000835 / 0.000759
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000015 / 0.000013
+    limb_trans_regularization: 0.000009 / 0.000008
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 7:
+  Train Loss = 0.000091, Val Loss = 0.000069, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.701214 / 3.830056
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.009563 / 0.007087
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000735 / 0.000561
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000013 / 0.000009
+    limb_trans_regularization: 0.000007 / 0.000005
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000069
+  Checkpoint saved at epoch 7
+
+Epoch 8:
+  Train Loss = 0.000081, Val Loss = 0.000068, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.008805 / 4.129370
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.009910 / 0.007334
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000642 / 0.000551
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000011 / 0.000008
+    limb_trans_regularization: 0.000006 / 0.000005
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000068
+
+Epoch 9:
+  Train Loss = 0.000082, Val Loss = 0.000063, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.390140 / 4.398201
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.009970 / 0.007416
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000648 / 0.000498
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000011 / 0.000008
+    limb_trans_regularization: 0.000006 / 0.000005
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000063
+  Checkpoint saved at epoch 9
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 9 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_009
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 9 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_009
+
+Epoch 10:
+  Train Loss = 0.000073, Val Loss = 0.000065, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.809479 / 4.644162
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010296 / 0.007445
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000566 / 0.000523
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000010 / 0.000008
+    limb_trans_regularization: 0.000005 / 0.000004
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 11:
+  Train Loss = 0.000070, Val Loss = 0.000062, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.167027 / 4.986974
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010412 / 0.007731
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000538 / 0.000492
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000009 / 0.000007
+    limb_trans_regularization: 0.000005 / 0.000004
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000062
+  Checkpoint saved at epoch 11
+
+Epoch 12:
+  Train Loss = 0.000070, Val Loss = 0.000059, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.498400 / 5.175228
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010432 / 0.007777
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000540 / 0.000465
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000009 / 0.000007
+    limb_trans_regularization: 0.000005 / 0.000004
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000059
+
+Epoch 13:
+  Train Loss = 0.000069, Val Loss = 0.000058, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.889461 / 5.458905
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010587 / 0.007842
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000528 / 0.000449
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000009 / 0.000007
+    limb_trans_regularization: 0.000005 / 0.000004
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000058
+  Checkpoint saved at epoch 13
+
+Epoch 14:
+  Train Loss = 0.000071, Val Loss = 0.000052, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 6.277747 / 5.622375
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010614 / 0.007975
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000546 / 0.000400
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000009 / 0.000006
+    limb_trans_regularization: 0.000005 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000052
+
+Epoch 15:
+  Train Loss = 0.000063, Val Loss = 0.000052, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 6.458827 / 5.935761
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010617 / 0.008173
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000473 / 0.000396
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000008 / 0.000006
+    limb_trans_regularization: 0.000004 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000052
+  Checkpoint saved at epoch 15
+
+Epoch 16:
+  Train Loss = 0.000060, Val Loss = 0.000051, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 6.815891 / 6.102144
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010723 / 0.007855
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000446 / 0.000390
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000007 / 0.000006
+    limb_trans_regularization: 0.000004 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000051
+
+Epoch 17:
+  Train Loss = 0.000060, Val Loss = 0.000050, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 7.060354 / 6.321759
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010913 / 0.008070
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000448 / 0.000381
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000008 / 0.000006
+    limb_trans_regularization: 0.000004 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000050
+  Checkpoint saved at epoch 17
+
+Epoch 18:
+  Train Loss = 0.000060, Val Loss = 0.000051, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 7.573775 / 6.514200
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010906 / 0.008097
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000444 / 0.000387
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000007 / 0.000006
+    limb_trans_regularization: 0.000004 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 19:
+  Train Loss = 0.000058, Val Loss = 0.000049, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 7.717836 / 6.709866
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.010858 / 0.008213
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000426 / 0.000370
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000007 / 0.000006
+    limb_trans_regularization: 0.000004 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000049
+  Checkpoint saved at epoch 19
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 19 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_019
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 19 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_019
+
+Epoch 20:
+  Train Loss = 0.000041, Val Loss = 0.000042, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 7.636543 / 6.445229
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.028421 / 0.023749
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000350 / 0.000347
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000005 / 0.000005
+    limb_trans_regularization: 0.000003 / 0.000004
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000042
+
+Epoch 21:
+  Train Loss = 0.000038, Val Loss = 0.000035, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 6.887399 / 6.059775
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.033048 / 0.025114
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000322 / 0.000302
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000004
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000035
+  Checkpoint saved at epoch 21
+
+Epoch 22:
+  Train Loss = 0.000039, Val Loss = 0.000035, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 6.386739 / 5.779480
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.034636 / 0.026078
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000325 / 0.000296
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000003
+    limb_trans_regularization: 0.000003 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000035
+
+Epoch 23:
+  Train Loss = 0.000037, Val Loss = 0.000032, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 6.143081 / 5.655815
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.035671 / 0.026933
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000303 / 0.000270
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000032
+  Checkpoint saved at epoch 23
+
+Epoch 24:
+  Train Loss = 0.000036, Val Loss = 0.000030, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.858710 / 5.520149
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.036222 / 0.027571
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000300 / 0.000251
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000030
+
+Epoch 25:
+  Train Loss = 0.000034, Val Loss = 0.000030, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.627989 / 5.490520
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.037206 / 0.028086
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000282 / 0.000248
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000030
+  Checkpoint saved at epoch 25
+
+Epoch 26:
+  Train Loss = 0.000034, Val Loss = 0.000031, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.590062 / 5.356088
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.037090 / 0.027656
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000280 / 0.000265
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 27:
+  Train Loss = 0.000037, Val Loss = 0.000033, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.530418 / 5.317896
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.037572 / 0.027628
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000304 / 0.000265
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000004
+    limb_trans_regularization: 0.000002 / 0.000003
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 27
+
+Epoch 28:
+  Train Loss = 0.000033, Val Loss = 0.000030, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.377875 / 5.362889
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.038253 / 0.029446
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000271 / 0.000247
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000030
+
+Epoch 29:
+  Train Loss = 0.000033, Val Loss = 0.000028, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.297322 / 5.313538
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.038681 / 0.028950
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000265 / 0.000228
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000028
+  Checkpoint saved at epoch 29
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 29 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_029
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 29 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_029
+
+Epoch 30:
+  Train Loss = 0.000033, Val Loss = 0.000035, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.315780 / 5.271444
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.038523 / 0.028954
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000264 / 0.000297
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 31:
+  Train Loss = 0.000034, Val Loss = 0.000026, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.249663 / 5.288132
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.038616 / 0.028927
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000274 / 0.000217
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000026
+  Checkpoint saved at epoch 31
+
+Epoch 32:
+  Train Loss = 0.000030, Val Loss = 0.000027, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.304007 / 5.312397
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.038637 / 0.029084
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000244 / 0.000226
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 33:
+  Train Loss = 0.000031, Val Loss = 0.000030, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.185080 / 5.328232
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039373 / 0.029252
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000247 / 0.000241
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000003
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 33
+
+Epoch 34:
+  Train Loss = 0.000040, Val Loss = 0.000027, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.320574 / 5.371546
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039696 / 0.029584
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000320 / 0.000225
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000002
+    limb_trans_regularization: 0.000003 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 35:
+  Train Loss = 0.000030, Val Loss = 0.000026, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.363115 / 5.397387
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039625 / 0.029264
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000244 / 0.000212
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000026
+  Checkpoint saved at epoch 35
+
+Epoch 36:
+  Train Loss = 0.000029, Val Loss = 0.000025, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.298607 / 5.436954
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039324 / 0.029812
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000231 / 0.000199
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000025
+
+Epoch 37:
+  Train Loss = 0.000035, Val Loss = 0.000024, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.407784 / 5.472611
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039966 / 0.029576
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000278 / 0.000192
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000004 / 0.000002
+    limb_trans_regularization: 0.000003 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000024
+  Checkpoint saved at epoch 37
+
+Epoch 38:
+  Train Loss = 0.000028, Val Loss = 0.000025, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.366501 / 5.414719
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039787 / 0.029846
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000226 / 0.000202
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 39:
+  Train Loss = 0.000028, Val Loss = 0.000023, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.246192 / 5.456454
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039639 / 0.029496
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000220 / 0.000185
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000023
+  Checkpoint saved at epoch 39
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 39 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_039
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 39 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_039
+
+Epoch 40:
+  Train Loss = 0.000031, Val Loss = 0.000023, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.289951 / 5.515097
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039714 / 0.029863
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000244 / 0.000188
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 41:
+  Train Loss = 0.000027, Val Loss = 0.000024, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.301105 / 5.526086
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039972 / 0.029875
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000212 / 0.000192
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 41
+
+Epoch 42:
+  Train Loss = 0.000028, Val Loss = 0.000023, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.371192 / 5.492129
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039738 / 0.029631
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000220 / 0.000189
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 43:
+  Train Loss = 0.000026, Val Loss = 0.000023, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.306105 / 5.558935
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.039799 / 0.030340
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000205 / 0.000181
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000023
+  Checkpoint saved at epoch 43
+
+Epoch 44:
+  Train Loss = 0.000029, Val Loss = 0.000022, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.390410 / 5.607213
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.040019 / 0.030272
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000225 / 0.000178
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000022
+
+Epoch 45:
+  Train Loss = 0.000028, Val Loss = 0.000023, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.308587 / 5.579228
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.040229 / 0.030601
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000220 / 0.000183
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000003 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 45
+
+Epoch 46:
+  Train Loss = 0.000025, Val Loss = 0.000024, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.371247 / 5.513002
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.040277 / 0.029953
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000197 / 0.000193
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000001 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 47:
+  Train Loss = 0.000026, Val Loss = 0.000023, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.382077 / 5.636572
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.040336 / 0.030361
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000199 / 0.000181
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 47
+
+Epoch 48:
+  Train Loss = 0.000025, Val Loss = 0.000022, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.330495 / 5.658590
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.040497 / 0.030334
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000196 / 0.000176
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000022
+
+Epoch 49:
+  Train Loss = 0.000026, Val Loss = 0.000021, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.392056 / 5.690895
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.040600 / 0.031018
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000202 / 0.000168
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000021
+  Checkpoint saved at epoch 49
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 49 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_049
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 49 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_049
+
+Epoch 50:
+  Train Loss = 0.000021, Val Loss = 0.000018, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.405861 / 5.677146
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.056337 / 0.049076
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000185 / 0.000159
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000001
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000018
+
+Epoch 51:
+  Train Loss = 0.000022, Val Loss = 0.000019, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.346997 / 5.505119
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.067221 / 0.053675
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000199 / 0.000166
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 51
+
+Epoch 52:
+  Train Loss = 0.000021, Val Loss = 0.000017, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.205023 / 5.355441
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.074486 / 0.057757
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000184 / 0.000151
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000001
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000017
+
+Epoch 53:
+  Train Loss = 0.000019, Val Loss = 0.000018, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.052434 / 5.249322
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.079134 / 0.060842
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000172 / 0.000156
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000001
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 53
+
+Epoch 54:
+  Train Loss = 0.000019, Val Loss = 0.000019, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 5.009167 / 5.182750
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.083504 / 0.062626
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000168 / 0.000166
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 55:
+  Train Loss = 0.000021, Val Loss = 0.000016, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.952311 / 5.130414
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.084789 / 0.065119
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000182 / 0.000138
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000001
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000016
+  Checkpoint saved at epoch 55
+
+Epoch 56:
+  Train Loss = 0.000019, Val Loss = 0.000017, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.800665 / 5.101324
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.087955 / 0.067022
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000165 / 0.000146
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000001
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 57:
+  Train Loss = 0.000021, Val Loss = 0.000019, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.829569 / 5.027299
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.090332 / 0.067069
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000187 / 0.000167
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 57
+
+Epoch 58:
+  Train Loss = 0.000019, Val Loss = 0.000019, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.725833 / 4.971436
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.092468 / 0.070331
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000162 / 0.000163
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000002
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 59:
+  Train Loss = 0.000019, Val Loss = 0.000016, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.636943 / 4.909273
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.093902 / 0.070436
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000166 / 0.000139
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000002 / 0.000001
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 59
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 59 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_059
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 59 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_059
+
+Epoch 60:
+  Train Loss = 0.000017, Val Loss = 0.000017, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.553789 / 4.876671
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.105981 / 0.083356
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000162 / 0.000157
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000113 / 0.000148
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 61:
+  Train Loss = 0.000016, Val Loss = 0.000015, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.407910 / 4.734804
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.116810 / 0.089259
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000152 / 0.000137
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000191 / 0.000180
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000015
+  Checkpoint saved at epoch 61
+
+Epoch 62:
+  Train Loss = 0.000017, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.248641 / 4.648092
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.125935 / 0.095318
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000155 / 0.000133
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000218 / 0.000203
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000014
+
+Epoch 63:
+  Train Loss = 0.000016, Val Loss = 0.000015, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.207393 / 4.498217
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.134212 / 0.099241
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000148 / 0.000143
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000237 / 0.000211
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 63
+
+Epoch 64:
+  Train Loss = 0.000016, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 4.113385 / 4.420938
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.139691 / 0.104263
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000145 / 0.000130
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000250 / 0.000220
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000014
+
+Epoch 65:
+  Train Loss = 0.000016, Val Loss = 0.000013, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.939153 / 4.299536
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.146062 / 0.108853
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000149 / 0.000122
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000261 / 0.000231
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000013
+  Checkpoint saved at epoch 65
+
+Epoch 66:
+  Train Loss = 0.000017, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.877052 / 4.251453
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.151037 / 0.112253
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000159 / 0.000132
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000278 / 0.000232
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 67:
+  Train Loss = 0.000016, Val Loss = 0.000016, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.801422 / 4.185896
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.157116 / 0.115065
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000143 / 0.000151
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000278 / 0.000234
+    limb_trans_regularization: 0.000002 / 0.000002
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 67
+
+Epoch 68:
+  Train Loss = 0.000021, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.779227 / 4.135609
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.160478 / 0.118258
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000194 / 0.000131
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000312 / 0.000246
+    limb_trans_regularization: 0.000003 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 69:
+  Train Loss = 0.000015, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.751882 / 4.073718
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.168958 / 0.121523
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000137 / 0.000132
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000291 / 0.000245
+    limb_trans_regularization: 0.000001 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 69
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 69 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations/epoch_069
+Visualizing 5 samples from dataset: unknown
+Generated 5 visualization images for epoch 69 in /hpcwork/mkd34160/smilify_runs/singleview_2d_lam0/visualizations_train/epoch_069
+
+Epoch 70:
+  Train Loss = 0.000015, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.617527 / 4.038445
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.173912 / 0.124396
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000135 / 0.000125
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000288 / 0.000241
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+
+Epoch 71:
+  Train Loss = 0.000015, Val Loss = 0.000014, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.529489 / 3.961871
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.175062 / 0.126898
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000134 / 0.000133
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000296 / 0.000251
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  Checkpoint saved at epoch 71
+
+Epoch 72:
+  Train Loss = 0.000016, Val Loss = 0.000013, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.517986 / 3.919807
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.179774 / 0.129275
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000142 / 0.000117
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000297 / 0.000253
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000013
+
+Epoch 73:
+  Train Loss = 0.000018, Val Loss = 0.000012, LR = 1.00e-04
+  Parameter Errors (Train / Val):
+    betas          : 3.518997 / 3.949620
+    betas_trans    : 0.000000 / 0.000000
+    cam_rot        : 0.000000 / 0.000000
+    cam_trans      : 0.000000 / 0.000000
+    fov            : 0.000000 / 0.000000
+    global_rot     : 0.000000 / 0.000000
+    joint_angle_regularization: 0.184487 / 0.133269
+    joint_rot      : 0.000000 / 0.000000
+    keypoint_2d    : 0.000164 / 0.000112
+    keypoint_3d    : 0.000000 / 0.000000
+    limb_scale_regularization: 0.000317 / 0.000255
+    limb_trans_regularization: 0.000002 / 0.000001
+    log_beta_scales: 0.000000 / 0.000000
+    silhouette     : 0.000000 / 0.000000
+    trans          : 0.000000 / 0.000000
+  New best model saved with validation loss: 0.000012
+  Checkpoint saved at epoch 73
