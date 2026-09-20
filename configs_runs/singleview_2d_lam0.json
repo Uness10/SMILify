@@ -177,9 +177,9 @@
   },
   "depth": {
     "positive_depth": true,
-    "init_depth": 0.25,
-    "min_depth": 0.05,
-    "max_depth": 1.0
+    "init_depth": 0.195,
+    "min_depth": 0.075,
+    "max_depth": 0.52
   },
   "_study": {
     "name": "2d_only_from_scratch",
