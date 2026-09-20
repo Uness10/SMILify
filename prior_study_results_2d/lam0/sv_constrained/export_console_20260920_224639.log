@@ -1,0 +1,29 @@
+Device: cuda
+Checkpoint kind : singleview
+Checkpoint epoch: 190
+[config] SMAL_FILE overridden to: 3D_model_prep/SMILy_STICK_limits_authored.pkl
+[config] N_POSE=54, N_BETAS=5, joints=55
+Singleview model config:
+  backbone: vit_large_patch16_224
+  head_type: transformer_decoder
+  rotation_representation: 6d
+  scale_trans_mode: separate
+  shape_family: -1
+  input_resolution: 224
+[ViTBackbone:vit_large_patch16_224] input normalization: mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+  Missing keys (will use init): ['betas', 'log_beta_scales', 'betas_trans', 'global_rotation', 'trans']...
+Loaded singleview model (329,916,907 params)
+Dataset size: 506250  (camera_centric=True)
+  split: camera-centric sample-grouped, seed=42
+         86062/5062/10126 samples -> 50630 test view-items
+/hpcwork/mkd34160/conda_envs/pytorch3d/lib/python3.10/site-packages/torch/nn/modules/conv.py:456: UserWarning: Applied workaround for CuDNN issue, install nvrtc.so (Triggered internally at /opt/conda/conda-bld/pytorch_1716905971132/work/aten/src/ATen/native/cudnn/Conv_v8.cpp:84.)
+  return F.conv2d(input, weight, bias, self.stride,
+
+Exported 50630 frames:
+  prior_study_results_2d/lam0/sv_constrained/clip_sv_constrained.npz
+  prior_study_results_2d/lam0/sv_constrained/clip_sv_constrained.json
+
+PROBE:
+  poses shape      : (50630, 55, 3)  (F, J, 3 axis-angle)
+  finite           : True
+  |aa| deg  min/med/max: 0.00 / 14.63 / 177.24
