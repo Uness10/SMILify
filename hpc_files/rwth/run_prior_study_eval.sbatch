@@ -91,7 +91,17 @@ if [[ -z "${SLURM_JOB_ACCOUNT:-}" ]]; then
     exit 1
 fi
 
-LAMBDAS=(1e-4 1e-3 1e-2 1e-1)
+# The swept lambdas, in array-task order. Overridable so the same script can
+# score a different study: the 2D-only from-scratch arms are lambda 0 / 1e-4 /
+# 1e-1 and live in singleview_2d_lam<lambda>, e.g.
+#   LAMBDAS="0 1e-4 1e-1" SV_RUN_PREFIX=singleview_2d_lam ... --array=1-3
+# Without this the task->arm mapping silently mislabels them (task 2 called
+# "lambda=1e-3" while scoring the lambda=1e-1 checkpoint).
+read -r -a LAMBDAS <<< "${LAMBDAS:-1e-4 1e-3 1e-2 1e-1}"
+# Run-directory name prefixes, so a study with different run dirs does not need
+# a per-task SV_CON/MV_CON override.
+SV_RUN_PREFIX="${SV_RUN_PREFIX:-singleview_lam}"
+MV_RUN_PREFIX="${MV_RUN_PREFIX:-multiview_lam}"
 RESULTS_ROOT="${RESULTS_ROOT:-prior_study_results}"
 # Must match the RUNS_ROOT that prepare_lambda_sweep.sh was run with — it is what
 # decides where each arm's checkpoints were written. Relocating the run dirs to
@@ -114,8 +124,9 @@ if (( TASK == 0 )); then
     OUT_DIR="$RESULTS_ROOT/sv_reference"
 elif (( TASK >= 1 && TASK <= 4 )); then
     MODE="singleview"; LABEL="sv_constrained"
-    LAMBDA="${LAMBDAS[$((TASK - 1))]}"
-    CHECKPOINT="${SV_CON:-$RUNS_ROOT/singleview_lam${LAMBDA}/checkpoints/best_model.pth}"
+    LAMBDA="${LAMBDAS[$((TASK - 1))]:-}"
+    [[ -n "$LAMBDA" ]] || { echo "ERROR: task $TASK has no lambda; LAMBDAS=(${LAMBDAS[*]})" >&2; exit 1; }
+    CHECKPOINT="${SV_CON:-$RUNS_ROOT/${SV_RUN_PREFIX}${LAMBDA}/checkpoints/best_model.pth}"
     WHAT="single-view continuation at lambda=$LAMBDA"
     OUT_DIR="$RESULTS_ROOT/lam${LAMBDA}/sv_constrained"
 elif (( TASK == 5 )); then
@@ -125,8 +136,9 @@ elif (( TASK == 5 )); then
     OUT_DIR="$RESULTS_ROOT/mv_reference"
 elif (( TASK >= 6 && TASK <= 9 )); then
     MODE="multiview"; LABEL="mv_constrained"
-    LAMBDA="${LAMBDAS[$((TASK - 6))]}"
-    CHECKPOINT="${MV_CON:-$RUNS_ROOT/multiview_lam${LAMBDA}/checkpoints/best_model.pth}"
+    LAMBDA="${LAMBDAS[$((TASK - 6))]:-}"
+    [[ -n "$LAMBDA" ]] || { echo "ERROR: task $TASK has no lambda; LAMBDAS=(${LAMBDAS[*]})" >&2; exit 1; }
+    CHECKPOINT="${MV_CON:-$RUNS_ROOT/${MV_RUN_PREFIX}${LAMBDA}/checkpoints/best_model.pth}"
     WHAT="multi-view continuation at lambda=$LAMBDA"
     OUT_DIR="$RESULTS_ROOT/lam${LAMBDA}/mv_constrained"
 else
